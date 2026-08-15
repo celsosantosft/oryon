@@ -41,6 +41,9 @@ export const QUOTE_CONSTANTS = {
     STATUS_OPTIONS: ['Em Análise', 'Enviado ao Cliente', 'Aprovado', 'Recusado', 'Cancelado']
 };
 
+const QUOTE_CONVERTIBLE_TO_ORDER_STATUSES = new Set(['Em Análise', 'Enviado ao Cliente', 'Aprovado']);
+const canConvertQuoteToOrder = (quote) => QUOTE_CONVERTIBLE_TO_ORDER_STATUSES.has(quote?.status);
+
 export const parseDateSafe = (dateString) => {
     if (!dateString) return null;
     const parts = dateString.split('-');
@@ -838,7 +841,7 @@ const QuoteItemsSummary = ({ items = [] }) => {
     );
 };
 
-const QuoteDetailsModal = ({ isOpen, onClose, quote, onReset, onUnlockClient, API_BASE_URL, userRole }) => (
+const QuoteDetailsModal = ({ isOpen, onClose, quote, onReset, onUnlockClient, onApproveToOrder, API_BASE_URL, userRole }) => (
     <Modal isOpen={isOpen} onClose={onClose} title="Detalhes do Orçamento">
         {quote ? (
             <div style={styles.detailsContainer}>
@@ -940,6 +943,12 @@ const QuoteDetailsModal = ({ isOpen, onClose, quote, onReset, onUnlockClient, AP
 
                 {(userRole === 'admin' || userRole === 'gerente') && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap', marginTop: '24px', borderTop: '1px solid #E2E8F0', paddingTop: '16px' }}>
+                        {canConvertQuoteToOrder(quote) && (
+                            <button onClick={() => onApproveToOrder(quote)} style={styles.convertToOrderButton}>
+                                {Icons.Check}
+                                {quote.status === 'Aprovado' ? 'Gerar Pedido' : 'Aprovar e Gerar Pedido'}
+                            </button>
+                        )}
                         {quote.is_locked_by_client === 1 && (
                             <button onClick={() => onUnlockClient(quote.id)} style={{ 
                                 display: 'flex', alignItems: 'center', gap: '8px',
@@ -992,8 +1001,15 @@ const QuoteRow = React.memo(({ quote, isSelected, onCheckboxChange, onView, onEd
             <td style={{...styles.td, fontWeight:'600'}}>{formatMoney(quote.total_price)}</td>
             <td style={{...styles.td, textAlign:'right'}} onClick={(e) => e.stopPropagation()}>
                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                    {(quote.status === 'Em Análise' || quote.status === 'Enviado ao Cliente') && (
-                        <button onClick={() => onApproveToOrder(quote)} aria-label="Aprovar Orçamento" style={styles.iconButtonApprove} title="Aprovar e Enviar p/ Pedidos">{Icons.Check}</button>
+                    {canConvertQuoteToOrder(quote) && (
+                        <button
+                            onClick={() => onApproveToOrder(quote)}
+                            aria-label={quote.status === 'Aprovado' ? 'Gerar Pedido' : 'Aprovar Orçamento'}
+                            style={styles.iconButtonApprove}
+                            title={quote.status === 'Aprovado' ? 'Gerar Pedido' : 'Aprovar e Enviar p/ Pedidos'}
+                        >
+                            {Icons.Check}
+                        </button>
                     )}
                     <button onClick={() => onView(quote.tracking_code)} aria-label="Ver Detalhes" style={styles.iconButton} title="Detalhes">{Icons.Eye}</button>
                     {(userRole === 'admin' || userRole === 'gerente') && <button onClick={() => onEdit(quote)} aria-label="Editar" style={styles.iconButton} title="Editar">{Icons.Edit}</button>}
@@ -1164,9 +1180,10 @@ const Quotes = () => {
     }, [API_BASE_URL, token, selectedQuoteDetails, loadQuoteDetails, refreshQuotes]);
 
 const handleApproveToOrder = useCallback(async (quote) => {
+        const quoteAlreadyApproved = quote.status === 'Aprovado';
         const result = await Swal.fire({
-            title: 'Aprovar Orçamento?',
-            html: `<p style="color: #64748B; font-size: 1.05rem; margin-top: 12px;">O pedido de <b>${quote.client_name}</b> precisa criar a arte ou a arte já está pronta?</p>`,
+            title: quoteAlreadyApproved ? 'Gerar Pedido?' : 'Aprovar Orçamento?',
+            html: `<p style="color: #64748B; font-size: 1.05rem; margin-top: 12px;">${quoteAlreadyApproved ? 'O orçamento já está aprovado.' : `O orçamento de <b>${quote.client_name}</b> será aprovado.`} O pedido precisa criar a arte ou a arte já está pronta?</p>`,
             icon: 'question',
             width: '640px', // ⭐ A MÁGICA AQUI: Quebra o limite padrão e deixa o card largo e imponente
             padding: '32px', // ⭐ Mais respiro interno
@@ -1191,6 +1208,7 @@ const handleApproveToOrder = useCallback(async (quote) => {
             try {
                 const response = await QuoteService.convertToOrder(API_BASE_URL, token, quote.id);
                 const novoTrackingCode = response.data?.tracking_code; 
+                const alreadyExists = response.data?.already_exists === true;
 
                 if (result.isConfirmed && novoTrackingCode) {
                     await axios.post(
@@ -1203,14 +1221,16 @@ const handleApproveToOrder = useCallback(async (quote) => {
                 refreshQuotes();
                 
                 Swal.fire({
-                    title: 'Pedido Gerado!',
-                    text: result.isConfirmed ? 'Enviado direto para Produção (Arte Pronta).' : 'Enviado para a fila de Design.',
+                    title: alreadyExists ? 'Pedido Atualizado!' : 'Pedido Gerado!',
+                    text: alreadyExists
+                        ? 'O pedido existente foi sincronizado com esse orçamento.'
+                        : (result.isConfirmed ? 'Enviado direto para Produção (Arte Pronta).' : 'Enviado para a fila de Design.'),
                     icon: 'success',
                     timer: 2500,
                     showConfirmButton: false
                 });
             } catch (err) {
-                Swal.fire('Falha na aprovação', 'Houve um erro de comunicação com o servidor.', 'error');
+                Swal.fire('Falha na aprovação', err.response?.data?.error || 'Houve um erro de comunicação com o servidor.', 'error');
             }
         }
     }, [API_BASE_URL, token, refreshQuotes]);
@@ -1330,7 +1350,7 @@ const handleApproveToOrder = useCallback(async (quote) => {
             <QuoteFormModal isOpen={modals.form} onClose={() => toggleModal('form', false)} quoteToEdit={quoteToEdit} API_BASE_URL={API_BASE_URL} token={token} auxData={{dbProducts, dbFabrics, dbClients}} onQuickClientAdd={quickAddClient} onRefresh={refreshQuotes} />
             
             <StatusModal isOpen={modals.status} onClose={() => toggleModal('status', false)} quoteToUpdate={quoteToUpdateStatus} onUpdateStatus={handleUpdateStatus} />
-            <QuoteDetailsModal isOpen={modals.details} onClose={() => toggleModal('details', false)} quote={selectedQuoteDetails} onReset={handleResetQuote} onUnlockClient={handleUnlockQuote} API_BASE_URL={API_BASE_URL} userRole={user?.role} />
+            <QuoteDetailsModal isOpen={modals.details} onClose={() => toggleModal('details', false)} quote={selectedQuoteDetails} onReset={handleResetQuote} onUnlockClient={handleUnlockQuote} onApproveToOrder={handleApproveToOrder} API_BASE_URL={API_BASE_URL} userRole={user?.role} />
         </div>
     );
 };
@@ -1360,6 +1380,7 @@ const styles = {
     statusBadge: { padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', display: 'inline-block', cursor: 'pointer', letterSpacing: '0.02em' },
     iconButton: { backgroundColor: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', padding: '6px', borderRadius: '6px', transition: 'background 0.2s' },
     iconButtonApprove: { backgroundColor: '#dcfce7', border: 'none', color: '#15803d', cursor: 'pointer', padding: '6px 12px', borderRadius: '6px', transition: 'background 0.2s', display: 'flex', alignItems: 'center' },
+    convertToOrderButton: { display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC', borderRadius: '8px', padding: '10px 16px', fontSize: '0.9rem', fontWeight: '700', cursor: 'pointer' },
     checkbox: { width:'16px', height:'16px', cursor: 'pointer', accentColor: '#2563eb' },
     error: { color: '#dc2626', marginBottom: '15px', backgroundColor: '#fef2f2', padding: '12px', borderRadius: '8px', border: '1px solid #fecaca' },
     formGroup: { display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 },
