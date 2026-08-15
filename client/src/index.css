@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: #1e3a8a; /* Azul Escuro (Para Botões/Destaques) */
+  --color-secondary: #3b82f6; /* Azul Claro */
+  --color-background: #f3f4f6; /* Cinza Claro (Fundo Principal) */
+  --color-text: #1f2937; /* Preto Quase Total */
+  --color-sidebar: #1f2937; /* Fundo da Sidebar */
+  --color-success: #10b981; /* Verde (Para Sucesso) */
+  --color-danger: #ef4444; /* Vermelho (Para Erro/Deletar) */
+}
+
+html {
+  min-height: 100%;
+  background-color: #091A2D;
+  caret-color: transparent;
+}
+
+/* Reset CSS */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  
+  /* Suporte para scrollbar fina no Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+body {
+  background-color: #091A2D;
+  color: var(--color-text);
+  min-height: 100vh;
+  caret-color: transparent;
+  -webkit-font-smoothing: antialiased; /* Deixa a fonte mais suave e nítida */
+  -moz-osx-font-smoothing: grayscale;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  caret-color: auto;
+}
+
+/* Estrutura Principal do Layout */
+#root {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background-color: var(--color-background);
+}
+
+#root:empty {
+  background: linear-gradient(135deg, #091A2D 0%, #0D1F33 100%);
+}
+
+/* --- ⭐ NOVA BARRA DE ROLAGEM PREMIUM GLOBAL ⭐ --- */
+
+/* Para navegadores baseados em WebKit (Chrome, Edge, Safari, Opera) */
+::-webkit-scrollbar {
+  width: 6px;  /* Largura super fina para a barra vertical */
+  height: 6px; /* Altura super fina para a barra horizontal */
+}
+
+::-webkit-scrollbar-track {
+  background: transparent; /* Fundo invisível para não poluir o layout */
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1; /* Um cinza claro e elegante, ideal para fundos brancos/cinzas */
+  border-radius: 10px;       /* Bordas arredondadas estilo macOS */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8; /* Escurece levemente ao passar o mouse */
+}

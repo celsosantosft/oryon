@@ -1,0 +1,57 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Build outputs
+dist/
+client/dist/
+server/dist/
+
+# Runtime data
+uploads/
+server/uploads/
+server/**/*.db
+server/**/*.sqlite
+server/**/*.sqlite3
+*.db
+*.sqlite
+*.sqlite3
+
+# Local backups, deploy bundles and reports
+.backups/
+deploy_*/
+*.zip
+lighthouse-*.json
+validacao-*.png
+login-*-preview*.png
+changed-files/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.temp
+
+# Accidental shell output
+client/udo systemctl status nginx
+
+# Old nested server copy kept out of source control.
+# The active middleware file is server/middlewares/auth.js.
+server/middlewares/atos.db
+server/middlewares/uploads/
+server/middlewares/routes/
+server/middlewares/middlewares/
+server/middlewares/package.json
+server/middlewares/package-lock.json
+server/middlewares/database.js
+server/middlewares/server.js
+server/middlewares/setup_db.js
+server/middlewares/diagnose_admin.js
+server/middlewares/test_*.js
