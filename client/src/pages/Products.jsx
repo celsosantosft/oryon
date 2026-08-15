@@ -431,7 +431,7 @@ const ProductsManager = () => {
 
     return (
         <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', gap: '12px', flexWrap: 'wrap' }}>
                 <div style={styles.searchBox}><span style={{marginRight:'10px', color:'#94a3b8'}}>{Icons.Search}</span><input placeholder="Buscar produto..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} onKeyUp={e => e.key === 'Enter' && fetchProducts(searchTerm)} style={styles.searchInput} /></div>
                 <button onClick={() => { setProductToEdit(null); setIsModalOpen(true); }} style={styles.addButton}><span style={{marginRight:'8px', display:'flex'}}>{Icons.Plus}</span> Novo Produto</button>
             </div>
@@ -500,7 +500,7 @@ const Products = () => {
     return (
         <div style={styles.mainContainer}>
             <div style={styles.header}><div style={{display:'flex', alignItems:'center', gap:'15px'}}><div style={styles.iconBox}>{Icons.Box}</div><div><h2 style={styles.title}>Catálogo e Materiais</h2><p style={styles.subtitle}>Gestão de produtos e cadastro de malhas.</p></div></div></div>
-            <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', borderBottom: '1px solid #e2e8f0' }}>
+            <div style={styles.tabsBar}>
                 <button onClick={() => setActiveTab('products')} style={{ ...styles.tabButton, borderBottom: activeTab === 'products' ? '3px solid #2563eb' : '3px solid transparent', color: activeTab === 'products' ? '#2563eb' : '#64748b' }}><span style={{marginRight:'8px', display:'inline-flex', alignItems:'center'}}>{Icons.Box}</span> Produtos (Peças)</button>
                 <button onClick={() => setActiveTab('fabrics')} style={{ ...styles.tabButton, borderBottom: activeTab === 'fabrics' ? '3px solid #2563eb' : '3px solid transparent', color: activeTab === 'fabrics' ? '#2563eb' : '#64748b' }}><span style={{marginRight:'8px', display:'inline-flex', alignItems:'center'}}>{Icons.Fabric}</span> Malhas (Tecidos)</button>
             </div>
@@ -515,16 +515,17 @@ const styles = {
     title: { color: '#0f172a', fontSize: '1.5rem', fontWeight: '700', margin: 0 },
     subtitle: { margin:0, color:'#64748b', fontSize:'0.9rem' },
     iconBox: { padding:'12px', background:'#ECFDF5', borderRadius:'10px', color:'#059669', display:'flex' },
-    tabButton: { background: 'none', border: 'none', padding: '10px 20px', fontSize: '0.95rem', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s', display:'flex', alignItems:'center' },
-    addButton: { backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', display:'flex', alignItems:'center' },
+    tabsBar: { display: 'flex', gap: '16px', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', overflowX: 'auto', WebkitOverflowScrolling: 'touch' },
+    tabButton: { background: 'none', border: 'none', padding: '10px 14px', fontSize: '0.95rem', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s', display:'flex', alignItems:'center', whiteSpace: 'nowrap' },
+    addButton: { backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', display:'flex', alignItems:'center', minHeight: '44px' },
     submitButton: { padding: '12px 24px', backgroundColor: '#2563EB', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700' },
     cancelButton: { padding: '12px 24px', border: '1px solid #CBD5E1', borderRadius: '6px', backgroundColor: 'white', color: '#475569', cursor: 'pointer', fontWeight: '600' },
     input: { width: '100%', padding: '12px', border: '1px solid #CBD5E1', borderRadius: '6px', fontSize: '0.95rem', outline: 'none' },
     select: { width: '100%', padding: '12px', border: '1px solid #CBD5E1', borderRadius: '6px', fontSize: '0.95rem', backgroundColor:'white', outline: 'none' },
     secondaryButton: { padding: '12px 18px', backgroundColor: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', whiteSpace: 'nowrap' },
-    searchBox: { display: 'flex', alignItems: 'center', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0 10px', width: '300px' },
+    searchBox: { display: 'flex', alignItems: 'center', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0 10px', width: 'min(100%, 300px)', flex: '1 1 220px' },
     searchInput: { border: 'none', outline: 'none', width: '100%', padding: '10px 0', fontSize: '0.9rem' },
-    tableContainer: { backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden', border: '1px solid #e2e8f0' },
+    tableContainer: { backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', border: '1px solid #e2e8f0' },
     table: { width: '100%', borderCollapse: 'collapse', minWidth: '600px' },
     th: { backgroundColor: '#f8fafc', padding: '16px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', color: '#475569', fontWeight: '600', fontSize: '0.8rem', textTransform: 'uppercase' },
     td: { padding: '16px', borderBottom: '1px solid #e2e8f0', color: '#334155', fontSize: '0.9rem' },
@@ -546,14 +547,14 @@ const styles = {
     presetTagsWrap: { display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '10px' },
     presetTag: { padding: '10px 14px', borderRadius: '999px', border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#334155', fontWeight: '700', cursor: 'pointer', transition: 'all 0.2s ease' },
     presetTagActive: { background: '#DBEAFE', border: '1px solid #60A5FA', color: '#1D4ED8' },
-    customTagRow: { display: 'flex', gap: '10px', marginTop: '12px', alignItems: 'center' },
+    customTagRow: { display: 'flex', gap: '10px', marginTop: '12px', alignItems: 'center', flexWrap: 'wrap' },
     selectedTagsWrap: { display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px', minHeight: '28px', alignItems: 'center' },
     selectedTag: { display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#0F172A', color: '#FFFFFF', borderRadius: '999px', padding: '8px 12px', fontSize: '0.82rem', fontWeight: '700' },
     selectedTagRemove: { border: 'none', background: 'transparent', color: '#FFFFFF', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, padding: 0 },
     tableTagsWrap: { display: 'flex', flexWrap: 'wrap', gap: '6px' },
     tableTag: { display: 'inline-flex', alignItems: 'center', padding: '4px 8px', borderRadius: '999px', background: '#EFF6FF', color: '#1D4ED8', fontSize: '0.75rem', fontWeight: '700', border: '1px solid #BFDBFE' },
     sectionTitle: { margin: '20px 0 10px 0', fontSize: '1rem', color: '#0F172A', fontWeight: '800', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px' },
-    formActions: { display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #E2E8F0', paddingTop: '20px', marginTop: '10px' }
+    formActions: { display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #E2E8F0', paddingTop: '20px', marginTop: '10px', flexWrap: 'wrap' }
 };
 
 export default Products;

@@ -93,7 +93,7 @@ const Dashboard = () => {
     return (
         <div style={{ fontFamily: "'Inter', sans-serif", maxWidth: '1600px', margin: '0 auto', color: THEME.colors.text.primary, paddingBottom: '40px' }}>
             
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '24px' : '32px', gap: '16px', flexWrap: 'wrap' }}>
                 <div>
                     <h1 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.5px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <span style={{ color: '#2563EB', display: 'flex', alignItems: 'center' }}>
@@ -107,7 +107,7 @@ const Dashboard = () => {
                 </div>
             </header>
 
-            <div style={styles.topGrid}>
+            <div style={isMobile ? styles.topGridMobile : styles.topGrid}>
                 <KPICard title="Total dos Pedidos" value={`R$ ${(data.totals.active_value || 0).toFixed(2)}`} icon={<Icons.Money />} color="#3B82F6" />
                 <KPICard title="Falta Receber" value={`R$ ${Math.max(0, (data.totals.active_value || 0) - (data.totals.active_paid || 0)).toFixed(2)}`} icon={<Icons.Alert />} color="#EF4444" />
                 <KPICard title="Em Produção" value={data.totals.active_count || 0} icon={<Icons.Box />} color="#F59E0B" />
@@ -116,14 +116,14 @@ const Dashboard = () => {
 
             <section style={{ marginBottom: '40px' }}>
                 <h3 style={styles.sectionTitle}>Fluxo de Produção</h3>
-                <div style={{...styles.statusGrid, justifyContent: isMobile ? 'space-around' : 'center', gap: isMobile ? '20px' : '32px'}}>
-                    <ProductionCircle title="Criação de Arte" count={getCount('Criação de Arte')} color={THEME.colors.status.artCreation} onClick={() => goToStatus('Criação de Arte')} />
-                    <ProductionCircle title="Arte Aprovada" count={getCount('Arte Aprovada/Liberada')} color={THEME.colors.status.artApproved} onClick={() => goToStatus('Arte Aprovada/Liberada')} />
-                    <ProductionCircle title="Corte" count={getCount('Corte Iniciado')} color={THEME.colors.status.cutting} onClick={() => goToStatus('Corte Iniciado')} />
-                    <ProductionCircle title="Estampa / Sublim." count={getCount('Impressão/Estampa Iniciada')} color={THEME.colors.status.printing} onClick={() => goToStatus('Impressão/Estampa Iniciada')} />
-                    <ProductionCircle title="Costura" count={getCount('Costura Iniciada')} color={THEME.colors.status.sewing} onClick={() => goToStatus('Costura Iniciada')} />
-                    <ProductionCircle title="Controle Qualidade" count={getCount('Controle de Qualidade')} color={THEME.colors.status.quality} onClick={() => goToStatus('Controle de Qualidade')} />
-                    <ProductionCircle title="Pronto p/ Envio" count={getCount('Pronto para Envio')} color={THEME.colors.status.ready} onClick={() => goToStatus('Pronto para Envio')} />
+                <div style={{...styles.statusGrid, ...(isMobile ? styles.statusGridMobile : {}), justifyContent: isMobile ? 'space-between' : 'center', gap: isMobile ? '16px 10px' : '32px'}}>
+                    <ProductionCircle compact={isMobile} title="Criação de Arte" count={getCount('Criação de Arte')} color={THEME.colors.status.artCreation} onClick={() => goToStatus('Criação de Arte')} />
+                    <ProductionCircle compact={isMobile} title="Arte Aprovada" count={getCount('Arte Aprovada/Liberada')} color={THEME.colors.status.artApproved} onClick={() => goToStatus('Arte Aprovada/Liberada')} />
+                    <ProductionCircle compact={isMobile} title="Corte" count={getCount('Corte Iniciado')} color={THEME.colors.status.cutting} onClick={() => goToStatus('Corte Iniciado')} />
+                    <ProductionCircle compact={isMobile} title="Estampa / Sublim." count={getCount('Impressão/Estampa Iniciada')} color={THEME.colors.status.printing} onClick={() => goToStatus('Impressão/Estampa Iniciada')} />
+                    <ProductionCircle compact={isMobile} title="Costura" count={getCount('Costura Iniciada')} color={THEME.colors.status.sewing} onClick={() => goToStatus('Costura Iniciada')} />
+                    <ProductionCircle compact={isMobile} title="Controle Qualidade" count={getCount('Controle de Qualidade')} color={THEME.colors.status.quality} onClick={() => goToStatus('Controle de Qualidade')} />
+                    <ProductionCircle compact={isMobile} title="Pronto p/ Envio" count={getCount('Pronto para Envio')} color={THEME.colors.status.ready} onClick={() => goToStatus('Pronto para Envio')} />
                 </div>
             </section>
 
@@ -271,7 +271,7 @@ const KPICard = ({ title, value, icon, color }) => {
     );
 };
 
-const ProductionCircle = ({ title, count, color, onClick }) => {
+const ProductionCircle = ({ title, count, color, onClick, compact = false }) => {
     const [hover, setHover] = useState(false);
     const isZero = count === 0;
     const finalColor = isZero ? THEME.colors.status.zero : color;
@@ -290,28 +290,28 @@ const ProductionCircle = ({ title, count, color, onClick }) => {
             }}
         >
             <div style={{
-                width: '90px',
-                height: '90px',
+                width: compact ? '68px' : '90px',
+                height: compact ? '68px' : '90px',
                 borderRadius: '50%',
                 border: `2px solid ${finalColor}`,
                 backgroundColor: hover && !isZero ? `${finalColor}1A` : 'transparent', 
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                marginBottom: '12px',
+                marginBottom: compact ? '8px' : '12px',
                 transition: 'all 0.2s ease-out',
                 boxShadow: hover && !isZero ? `0 4px 12px ${finalColor}33` : 'none'
             }}>
-                <span style={{ fontSize: '2rem', fontWeight: '700', color: textColor, letterSpacing: '-0.02em' }}>
+                <span style={{ fontSize: compact ? '1.5rem' : '2rem', fontWeight: '700', color: textColor, letterSpacing: '-0.02em' }}>
                     {count}
                 </span>
             </div>
             <span style={{ 
-                fontSize: '0.75rem', 
+                fontSize: compact ? '0.68rem' : '0.75rem',
                 fontWeight: '600', 
                 color: isZero ? THEME.colors.text.disabled : THEME.colors.text.secondary,
                 textAlign: 'center',
-                maxWidth: '100px',
+                maxWidth: compact ? '76px' : '100px',
                 lineHeight: '1.2'
             }}>
                 {title}
@@ -322,13 +322,15 @@ const ProductionCircle = ({ title, count, color, onClick }) => {
 
 const styles = {
     topGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px', marginBottom: '48px' },
+    topGridMobile: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px', marginBottom: '32px' },
     statusGrid: { display: 'flex', flexWrap: 'wrap', justifyContent: 'center' }, 
+    statusGridMobile: { alignItems: 'flex-start' },
     bottomGrid: { display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '24px', alignItems: 'start' },
     bottomGridMobile: { display: 'flex', flexDirection: 'column', gap: '24px' },
     sectionTitle: { fontSize: '1rem', color: THEME.colors.text.primary, marginBottom: '24px', fontWeight: '600' },
     kpiCard: { 
         backgroundColor: THEME.colors.card, 
-        padding: '24px', 
+        padding: '20px',
         borderRadius: '8px', 
         border: `1px solid ${THEME.colors.border}`,
         boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',

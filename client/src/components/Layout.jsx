@@ -75,9 +75,9 @@ const Layout = ({ children }) => {
         position: isMobile ? 'fixed' : 'relative',
         left: 0,
         top: 0,
-        height: '100vh',
+        height: '100dvh',
         // Mágica do Desktop: Se for para esconder, largura vira 0. Se não, 280px.
-        width: isSidebarVisible ? '280px' : '0px', 
+        width: isMobile ? 'min(86vw, 320px)' : (isSidebarVisible ? '280px' : '0px'),
         overflow: 'hidden', // Importante para o conteúdo não vazar quando width for 0
         
         // Transformação apenas para mobile
@@ -85,7 +85,7 @@ const Layout = ({ children }) => {
             ? (!isMenuOpen ? 'translateX(-100%)' : 'translateX(0)') 
             : 'none',
             
-        transition: 'all 0.3s ease-out', // Anima tanto width quanto transform
+        transition: 'width 0.25s ease-out, transform 0.25s ease-out',
         zIndex: 100
     };
 
@@ -96,7 +96,7 @@ const Layout = ({ children }) => {
 
             {/* 1. SIDEBAR */}
             <div style={sidebarStyle}>
-                <Sidebar setIsMenuOpen={setIsMenuOpen} /> 
+                <Sidebar setIsMenuOpen={setIsMenuOpen} isMobile={isMobile} />
             </div>
             
             {/* 1b. Overlay em Mobile */}
@@ -108,7 +108,7 @@ const Layout = ({ children }) => {
             <main style={styles.mainContent}>
                 
                 {/* Barra de Topo */}
-                <header style={styles.topBar}>
+                <header style={{ ...styles.topBar, ...(isMobile ? styles.topBarMobile : {}) }}>
                     
                     {/* Botão Hamburguer: Aparece no Mobile OU se estiver no Modo Foco Desktop Fechado */}
                     {(isMobile || (isFocusMode && !isMenuOpen)) && (
@@ -117,15 +117,15 @@ const Layout = ({ children }) => {
                         </button>
                     )}
 
-                    <div style={{...styles.userInfo, marginLeft: 'auto'}}>
-                        <span style={styles.userRole}>{user?.role === 'admin' ? 'ADMINISTRADOR' : (user?.role === 'corte' ? 'CORTE' : 'COLABORADOR')}</span>
-                        <span style={styles.userName}>{user?.name}</span>
+                    <div style={{...styles.userInfo, ...(isMobile ? styles.userInfoMobile : {}), marginLeft: 'auto'}}>
+                        <span style={{ ...styles.userRole, ...(isMobile ? styles.userRoleMobile : {}) }}>{user?.role === 'admin' ? 'ADMINISTRADOR' : (user?.role === 'corte' ? 'CORTE' : 'COLABORADOR')}</span>
+                        <span style={{ ...styles.userName, ...(isMobile ? styles.userNameMobile : {}) }}>{user?.name}</span>
                     </div>
                 </header>
 
                 {/* Conteúdo da Página */}
                 <div style={styles.pageScrollArea}>
-                    <div style={styles.pageContent}>
+                    <div style={{ ...styles.pageContent, ...(isMobile ? styles.pageContentMobile : {}) }}>
                         {children}
                     </div>
                 </div>
@@ -138,7 +138,7 @@ const Layout = ({ children }) => {
 const styles = {
     container: {
         display: 'flex',
-        height: '100vh', 
+        height: '100dvh',
         width: '100vw',
         backgroundColor: '#f8fafc', 
         overflow: 'hidden'
@@ -169,6 +169,12 @@ const styles = {
         flexShrink: 0 
     },
 
+    topBarMobile: {
+        height: '56px',
+        padding: '0 12px',
+        boxShadow: '0 1px 0 rgba(15, 23, 42, 0.04)'
+    },
+
     menuButton: {
         background: 'none',
         border: 'none',
@@ -188,11 +194,23 @@ const styles = {
         alignItems: 'flex-end',
         lineHeight: '1.2'
     },
+
+    userInfoMobile: {
+        maxWidth: '58vw'
+    },
     
     userName: {
         fontSize: '0.9rem',
         fontWeight: '600',
         color: '#0f172a'
+    },
+
+    userNameMobile: {
+        fontSize: '0.82rem',
+        maxWidth: '100%',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
     },
     
     userRole: {
@@ -200,6 +218,11 @@ const styles = {
         fontWeight: '700',
         color: '#64748b',
         letterSpacing: '0.5px'
+    },
+
+    userRoleMobile: {
+        fontSize: '0.62rem',
+        letterSpacing: '0.3px'
     },
 
     pageScrollArea: {
@@ -213,6 +236,11 @@ const styles = {
         maxWidth: '1600px',
         margin: '0 auto',
         width: '100%'
+    },
+
+    pageContentMobile: {
+        padding: '12px',
+        paddingBottom: 'calc(24px + env(safe-area-inset-bottom))'
     },
     
     mobileOverlay: {

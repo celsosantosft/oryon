@@ -409,7 +409,7 @@ const FinanceTransactions = () => {
                     </div>
                     
                     {activeTab === 'Histórico' && (
-                        <div style={{ display: 'flex', gap: '4px', backgroundColor: '#F8FAFC', padding: '4px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                        <div style={styles.subTabsContainer}>
                             <button onClick={() => setHistoryType('Todas')} style={{...styles.subTabBtn, backgroundColor: historyType === 'Todas' ? 'white' : 'transparent', color: historyType === 'Todas' ? '#0F172A' : '#64748B', boxShadow: historyType === 'Todas' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'}}>Todas</button>
                             <button onClick={() => setHistoryType('Receitas')} style={{...styles.subTabBtn, backgroundColor: historyType === 'Receitas' ? 'white' : 'transparent', color: historyType === 'Receitas' ? '#10B981' : '#64748B', boxShadow: historyType === 'Receitas' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'}}>Receitas</button>
                             <button onClick={() => setHistoryType('Despesas')} style={{...styles.subTabBtn, backgroundColor: historyType === 'Despesas' ? 'white' : 'transparent', color: historyType === 'Despesas' ? '#EF4444' : '#64748B', boxShadow: historyType === 'Despesas' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'}}>Despesas</button>
@@ -417,7 +417,7 @@ const FinanceTransactions = () => {
                     )}
 
                     {activeTab === 'Histórico' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#F8FAFC', padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                        <div style={styles.monthFilterBox}>
                             <span style={{ fontSize: '0.85rem', fontWeight: '600', color: '#64748B' }}>Mês:</span>
                             <input type="month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', fontWeight: '700', color: '#0F172A', cursor: 'pointer' }} />
                         </div>
@@ -573,7 +573,7 @@ const FinanceTransactions = () => {
                         <input className="premium-input" type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} style={styles.input} placeholder="Ex: Conta de Luz, Fio/Linha..." required />
                     </div>
                     
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div style={styles.formGrid}>
                         <div style={styles.formGroup}>
                             <label style={styles.label}>Tipo *</label>
                             <select className="premium-input" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value, chart_of_account_id: ''})} style={styles.select}>
@@ -587,7 +587,7 @@ const FinanceTransactions = () => {
                         </div>
                     </div>
                     
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div style={styles.formGrid}>
                         <div style={styles.formGroup}>
                             <label style={styles.label}>Situação Inicial *</label>
                             <select className="premium-input" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} style={styles.select}>
@@ -662,39 +662,42 @@ const StatusBadge = ({ status }) => {
 
 const styles = {
     mainContainer: { fontFamily: "'Inter', sans-serif", maxWidth: '1400px', margin: '0 auto', paddingBottom: '40px' },
-    headerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' },
-    pageTitle: { fontSize: '1.8rem', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.5px' },
+    headerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', gap: '16px', flexWrap: 'wrap' },
+    pageTitle: { fontSize: 'clamp(1.35rem, 5vw, 1.8rem)', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '0' },
     subtitle: { margin: 0, color: '#64748b', fontSize: '0.9rem', fontWeight: '500' },
     iconBox: { padding: '14px', background: '#EFF6FF', borderRadius: '12px', color: '#2563EB', display: 'flex' },
-    btnNovo: { backgroundColor: '#6366F1', color: 'white', padding: '12px 24px', borderRadius: '30px', border: 'none', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.4)' },
+    btnNovo: { backgroundColor: '#6366F1', color: 'white', padding: '12px 20px', borderRadius: '30px', border: 'none', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.4)', minHeight: '44px' },
     
-    cardsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px', marginBottom: '24px' },
-    mobillsCard: { backgroundColor: 'white', borderRadius: '16px', padding: '24px', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #E2E8F0' },
+    cardsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '16px', marginBottom: '20px' },
+    mobillsCard: { backgroundColor: 'white', borderRadius: '16px', padding: 'clamp(16px, 4vw, 24px)', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #E2E8F0', minWidth: 0 },
     cardIconBox: { width: '48px', height: '48px', borderRadius: '50%', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' },
     cardContent: { flex: 1 },
     cardLabel: { fontSize: '0.85rem', color: '#64748B', margin: '0 0 4px 0', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' },
     cardValue: { fontSize: '1.6rem', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.5px' },
 
-    controlsCard: { backgroundColor: 'white', borderRadius: '16px', padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', border: '1px solid #E2E8F0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', flexWrap: 'wrap', gap: '20px' },
-    tabsContainer: { display: 'flex', gap: '24px' },
-    tabButton: { padding: '12px 16px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: '1rem', outline: 'none', display: 'flex', alignItems: 'center' },
+    controlsCard: { backgroundColor: 'white', borderRadius: '16px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', border: '1px solid #E2E8F0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', flexWrap: 'wrap', gap: '16px' },
+    tabsContainer: { display: 'flex', gap: '8px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%' },
+    tabButton: { padding: '12px 14px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: '0.95rem', outline: 'none', display: 'flex', alignItems: 'center', whiteSpace: 'nowrap', minHeight: '44px' },
     filtersContainer: { display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' },
-    searchBox: { display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '8px 12px', width: '280px', backgroundColor: '#F8FAFC' },
+    searchBox: { display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '8px 12px', width: 'min(100%, 280px)', flex: '1 1 220px', backgroundColor: '#F8FAFC' },
     searchInput: { border: 'none', outline: 'none', backgroundColor: 'transparent', width: '100%', fontSize: '0.9rem', color: '#0F172A' },
     
-    subTabBtn: { padding: '6px 12px', border: 'none', borderRadius: '6px', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', transition: 'all 0.2s' },
+    subTabsContainer: { display: 'flex', gap: '4px', backgroundColor: '#F8FAFC', padding: '4px', borderRadius: '8px', border: '1px solid #E2E8F0', overflowX: 'auto', maxWidth: '100%' },
+    subTabBtn: { padding: '8px 12px', border: 'none', borderRadius: '6px', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap' },
+    monthFilterBox: { display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#F8FAFC', padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', maxWidth: '100%' },
 
-    tableCard: { backgroundColor: 'white', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #E2E8F0', overflowX: 'auto' },
+    tableCard: { backgroundColor: 'white', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #E2E8F0', overflowX: 'auto', WebkitOverflowScrolling: 'touch' },
     table: { width: '100%', borderCollapse: 'collapse', minWidth: '800px' },
     th: { backgroundColor: '#F8FAFC', padding: '16px 24px', textAlign: 'left', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' },
     td: { padding: '16px 24px', borderBottom: '1px solid #F1F5F9', color: '#334155', fontSize: '0.95rem' },
     tr: { transition: 'all 0.15s ease' },
     emptyMessage: { padding: '40px', textAlign: 'center', color: '#94A3B8', fontSize: '0.95rem', fontStyle: 'italic' },
-    recurrenceGrid: { display: 'grid', gridTemplateColumns: '140px 1fr', gap: '16px' },
+    recurrenceGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '16px' },
     formHint: { display: 'block', marginTop: '10px', color: '#64748B', fontSize: '0.8rem', lineHeight: 1.5 },
     iconButton: { backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 12px', borderRadius: '6px', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', fontSize: '0.85rem' },
 
     form: { display: 'flex', flexDirection: 'column', gap: '16px' },
+    formGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' },
     formGroup: { display: 'flex', flexDirection: 'column' },
     label: { marginBottom: '6px', fontWeight: '700', fontSize: '0.85rem', color: '#334155' },
     input: { width: '100%', padding: '12px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.95rem', outline: 'none', backgroundColor: '#f8fafc', boxSizing: 'border-box' },

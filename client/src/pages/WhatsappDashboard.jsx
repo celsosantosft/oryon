@@ -517,7 +517,7 @@ const WhatsappDashboard = () => {
     };
 
     const renderConversations = () => (
-        <div className="flex-1 flex flex-row p-4 gap-4 overflow-hidden h-full">
+        <div className="flex-1 flex h-full flex-col gap-3 overflow-hidden p-3 lg:flex-row lg:gap-4 lg:p-4">
             <section className="flex-1 min-w-0 flex flex-col bg-white border border-slate-200 rounded-lg overflow-hidden h-full">
                 <div className="shrink-0 border-b border-slate-100 p-4">
                     <div className="flex items-center justify-between gap-3">
@@ -534,7 +534,7 @@ const WhatsappDashboard = () => {
                     />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 overflow-y-auto">
+                <div className="grid grid-cols-1 gap-3 overflow-y-auto p-3 sm:grid-cols-2 xl:grid-cols-3 xl:gap-4 xl:p-4">
                     {loadingConversations ? (
                         <div className="col-span-full flex h-44 items-center justify-center text-sm font-bold text-slate-500">Carregando contatos...</div>
                     ) : conversations.length ? (
@@ -600,15 +600,15 @@ const WhatsappDashboard = () => {
                 </div>
             </section>
 
-            <aside className="w-[320px] shrink-0 flex flex-col bg-white border border-slate-200 rounded-lg overflow-hidden h-full">
-                <div className="shrink-0 border-b border-slate-100 p-5">
+            <aside className="flex max-h-[42dvh] w-full shrink-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white lg:h-full lg:max-h-none lg:w-[320px]">
+                <div className="shrink-0 border-b border-slate-100 p-4 lg:p-5">
                     <h2 className="text-lg font-extrabold text-slate-950">Pedido vinculado</h2>
                     <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
                         Anexe a conversa ao pedido para manter o atendimento junto do acompanhamento.
                     </p>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4">
+                <div className="flex-1 space-y-4 overflow-y-auto p-4">
                     <div>
                         <label className="mb-2 block text-sm font-extrabold text-slate-700">Buscar pedido</label>
                         <input
@@ -995,9 +995,9 @@ const WhatsappDashboard = () => {
     };
 
     return (
-        <div className="flex h-screen w-screen bg-slate-50 overflow-hidden">
-            <aside className="flex h-full w-64 shrink-0 flex-col bg-[#0f172a] px-5 py-6 text-slate-100">
-                <div className="shrink-0 border-b border-slate-800 pb-5 text-center">
+        <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-50 lg:w-screen lg:flex-row">
+            <aside className="flex shrink-0 flex-col bg-[#0f172a] px-3 py-3 text-slate-100 lg:h-full lg:w-64 lg:px-5 lg:py-6">
+                <div className="hidden shrink-0 border-b border-slate-800 pb-5 text-center lg:block">
                         <img
                             src="/logo-white.png"
                             alt="ATOS"
@@ -1018,7 +1018,7 @@ const WhatsappDashboard = () => {
                         </div>
                 </div>
 
-                <nav className="flex-1 space-y-2 py-5">
+                <nav className="flex shrink-0 gap-2 overflow-x-auto pb-1 lg:block lg:flex-1 lg:space-y-2 lg:overflow-visible lg:py-5">
                     {navigationItems.map(item => {
                         const active = item.id === activeView;
 
@@ -1027,7 +1027,7 @@ const WhatsappDashboard = () => {
                                 key={item.id}
                                 type="button"
                                 onClick={() => setActiveView(item.id)}
-                                className={`inline-flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-extrabold transition ${active ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
+                                className={`inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-extrabold transition lg:w-full lg:gap-3 lg:px-4 lg:py-3 lg:text-sm ${active ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
                             >
                                 {item.icon}
                                 <span>{item.label}</span>
@@ -1036,7 +1036,7 @@ const WhatsappDashboard = () => {
                     })}
                 </nav>
 
-                <div className="shrink-0 border-t border-slate-800 pt-5">
+                <div className="hidden shrink-0 border-t border-slate-800 pt-5 lg:block">
                     <button
                         type="button"
                         onClick={() => navigate('/')}
@@ -1048,7 +1048,7 @@ const WhatsappDashboard = () => {
                 </div>
             </aside>
 
-            <main className="flex-1 flex flex-col h-screen min-w-0 bg-slate-50 overflow-hidden">
+            <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50 lg:h-screen">
                     {error || success ? (
                         <div className="shrink-0 space-y-3 px-5 pt-5">
                             {error ? (
@@ -1065,7 +1065,7 @@ const WhatsappDashboard = () => {
                         </div>
                     ) : null}
 
-                    <div className="min-h-0 flex-1 overflow-hidden p-5">
+                    <div className="min-h-0 flex-1 overflow-hidden p-3 lg:p-5">
                         {renderMainContent()}
                     </div>
             </main>

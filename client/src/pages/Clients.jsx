@@ -352,7 +352,7 @@ const Clients = () => {
                     
                     <h4 style={styles.sectionTitle}>Dados Principais</h4>
                     
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
                         <div style={styles.formGroup}>
                             <label style={styles.label}>Nome ou Razão Social *</label>
                             <input className="premium-input" name="name" value={formData.name} onChange={handleFormChange} style={styles.input} required placeholder="Ex: Colégio Santa Maria" />
@@ -366,7 +366,7 @@ const Clients = () => {
                         </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
                         <div style={styles.formGroup}>
                             <label style={styles.label}>CPF / CNPJ</label>
                             <input className="premium-input" name="document" value={formData.document || ''} onChange={handleFormChange} style={styles.input} placeholder="000.000.000-00" />
@@ -383,7 +383,7 @@ const Clients = () => {
 
                     <h4 style={styles.sectionTitle}>Localização</h4>
                     
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
                         <div style={styles.formGroup}>
                             <label style={styles.label}>CEP <span style={{fontSize: '0.65rem', color: '#94A3B8', fontWeight: '400'}}>(Automático)</span></label>
                             <div style={{ display: 'flex', width: '100%', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#f8fafc' }}>
@@ -400,7 +400,7 @@ const Clients = () => {
                     </div>
 
                     {/* ⭐ BOTÕES LADO A LADO PADRÃO 'APROVAR ORÇAMENTO' COM ÍCONES SVG ⭐ */}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #E2E8F0', marginTop: '16px', paddingTop: '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #E2E8F0', marginTop: '16px', paddingTop: '20px', flexWrap: 'wrap' }}>
                         <button type="button" onClick={() => setIsModalOpen(false)} className="premium-btn-outline-gray" style={{ flex: 'none' }}>
                             Cancelar
                         </button>
@@ -418,17 +418,17 @@ const Clients = () => {
 // --- ESTILOS GLOBAIS ---
 const styles = {
     mainContainer: { fontFamily: "'Inter', sans-serif", maxWidth: '1400px', margin: '0 auto', paddingBottom: '40px' },
-    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', gap: '16px', flexWrap: 'wrap' },
     title: { color: '#0f172a', fontSize: '1.75rem', fontWeight: '800', margin: '0 0 4px 0', letterSpacing: '-0.02em' },
     subtitle: { margin: 0, color: '#64748b', fontSize: '0.9rem', fontWeight: '500' },
     iconBox: { padding: '12px', background: '#EFF6FF', borderRadius: '10px', color: '#2563EB', display: 'flex' },
-    searchBox: { display: 'flex', alignItems: 'center', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px', width: '350px' },
+    searchBox: { display: 'flex', alignItems: 'center', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px', width: 'min(100%, 350px)' },
     searchInput: { border: 'none', outline: 'none', width: '100%', fontSize: '0.95rem', color: '#334155', backgroundColor: 'transparent' },
-    filterBox: { display: 'flex', alignItems: 'center', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px', minWidth: '220px' },
+    filterBox: { display: 'flex', alignItems: 'center', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px', minWidth: '220px', maxWidth: '100%' },
     filterSelect: { border: 'none', outline: 'none', width: '100%', fontSize: '0.95rem', color: '#334155', backgroundColor: 'transparent', cursor: 'pointer' },
     addButton: { backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', fontSize: '0.95rem' },
-    tableContainer: { backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden', border: '1px solid #e2e8f0' },
-    table: { width: '100%', borderCollapse: 'collapse', minWidth: '800px' },
+    tableContainer: { backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', border: '1px solid #e2e8f0' },
+    table: { width: '100%', borderCollapse: 'collapse', minWidth: '760px' },
     th: { backgroundColor: '#f8fafc', padding: '16px 24px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', color: '#475569', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' },
     td: { padding: '16px 24px', borderBottom: '1px solid #e2e8f0', color: '#334155', fontSize: '0.95rem' },
     tr: { transition: 'background-color 0.15s ease' },

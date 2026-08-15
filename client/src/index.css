@@ -77,3 +77,55 @@ textarea,
 ::-webkit-scrollbar-thumb:hover {
   background-color: #94a3b8; /* Escurece levemente ao passar o mouse */
 }
+
+@media (max-width: 760px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-width: 0;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px !important;
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .order-line-content {
+    grid-template-columns: 1fr !important;
+  }
+
+  .premium-swal-popup {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    border-radius: 18px !important;
+    padding: 20px !important;
+  }
+
+  .premium-swal-title {
+    font-size: 1.25rem !important;
+    line-height: 1.25 !important;
+  }
+
+  .premium-swal-actions {
+    flex-direction: column !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .premium-swal-actions > button,
+  .premium-btn-danger-solid,
+  .premium-btn-outline-gray,
+  .premium-btn-outline-green,
+  .premium-btn-outline-blue {
+    width: 100% !important;
+    min-height: 44px !important;
+  }
+}

@@ -26,13 +26,13 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 
     return (
         // O clique no overlay (fundo escuro) fecha o modal
-        <div style={styles.overlay} onClick={onClose}>
+        <div className="oryon-modal-overlay" style={styles.overlay} onClick={onClose}>
             {/* O clique dentro do modal NÃO fecha (stopPropagation) */}
-            <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className="oryon-modal-card" style={styles.modal} onClick={(e) => e.stopPropagation()}>
                 
                 {/* Cabeçalho */}
-                <div style={styles.header}>
-                    <h3 style={styles.title}>{title}</h3>
+                <div className="oryon-modal-header" style={styles.header}>
+                    <h3 className="oryon-modal-title" style={styles.title}>{title}</h3>
                     <button onClick={onClose} style={styles.closeButton} title="Fechar (ESC)">
                         <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
@@ -41,7 +41,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
                 </div>
 
                 {/* Conteúdo */}
-                <div style={styles.content}>
+                <div className="oryon-modal-body" style={styles.content}>
                     {children} 
                 </div>
             </div>
@@ -67,7 +67,7 @@ const styles = {
         borderRadius: '16px',          // mais moderno e “premium”
         width: '100%',
         maxWidth: '820px',             // AQUI: mais largo para formulários profissionais
-        maxHeight: '90vh',
+        maxHeight: '90dvh',
         display: 'flex',
         flexDirection: 'column',
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
@@ -102,6 +102,7 @@ const styles = {
     content: {
         padding: '24px',
         overflowY: 'auto',
+        overflowX: 'hidden',
         flex: 1
     }
 };
@@ -115,6 +116,33 @@ styleSheet.innerText = `
     @keyframes slideUp { 
         from { opacity: 0; transform: translateY(20px) scale(0.95); } 
         to { opacity: 1; transform: translateY(0) scale(1); } 
+    }
+
+    @media (max-width: 640px) {
+        .oryon-modal-overlay {
+            align-items: flex-end !important;
+            padding: 8px !important;
+            padding-bottom: env(safe-area-inset-bottom) !important;
+        }
+
+        .oryon-modal-card {
+            max-height: calc(100dvh - 16px) !important;
+            border-radius: 16px 16px 0 0 !important;
+            max-width: none !important;
+        }
+
+        .oryon-modal-header {
+            padding: 16px !important;
+        }
+
+        .oryon-modal-title {
+            font-size: 1.05rem !important;
+            line-height: 1.25 !important;
+        }
+
+        .oryon-modal-body {
+            padding: 16px !important;
+        }
     }
 `;
 document.head.appendChild(styleSheet);
