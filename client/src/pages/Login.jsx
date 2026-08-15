@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+
+const AUTH_NOTICE_KEY = 'auth_notice';
 
 const Login = () => {
     // Estados de Dados
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
     const [loading, setLoading] = useState(false);
     
     // Estados de Visual
@@ -15,6 +18,23 @@ const Login = () => {
 
     const { login, API_BASE_URL } = useAuth();
     const navigate = useNavigate();
+
+    useEffect(() => {
+        const storedNotice = sessionStorage.getItem(AUTH_NOTICE_KEY);
+        if (storedNotice) {
+            setNotice(storedNotice);
+            sessionStorage.removeItem(AUTH_NOTICE_KEY);
+        }
+    }, []);
+
+    const getLoginErrorMessage = (message) => {
+        const normalizedMessage = String(message || '').trim().toLowerCase();
+        if (!normalizedMessage || normalizedMessage === 'inválido' || normalizedMessage === 'invalido') {
+            return 'E-mail ou senha incorretos.';
+        }
+
+        return message;
+    };
 
     // --- FUNÇÃO DE AJUDA PARA LER O CARGO ---
     // Transforma cargos complexos em strings simples para o código entender
@@ -29,6 +49,7 @@ const Login = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+        setNotice('');
         setLoading(true);
 
         try {
@@ -42,7 +63,7 @@ const Login = () => {
             const data = await response.json().catch(() => ({}));
 
             if (!response.ok) {
-                throw new Error(data.message || 'Email ou senha incorretos.');
+                throw new Error(getLoginErrorMessage(data.message));
             }
 
             const { token, user } = data;
@@ -85,7 +106,7 @@ const Login = () => {
 
         } catch (err) {
             console.error("Erro no login:", err);
-            setError(err.message || 'Email ou senha incorretos.');
+            setError(getLoginErrorMessage(err.message));
         } finally {
             setLoading(false);
         }
@@ -125,6 +146,7 @@ const Login = () => {
                     <h2 id="fallback" style={styles.titleFallback}>atos ERP</h2>
                 </div>
 
+                {notice && !error && <div style={styles.notice}>{notice}</div>}
                 {error && <div style={styles.error}>{error}</div>}
 
                 <form onSubmit={handleSubmit} style={styles.form}>
@@ -192,6 +214,7 @@ const styles = {
     button: { width: '100%', padding: '14px', backgroundColor: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '0.95rem', fontWeight: '700', cursor: 'pointer', marginTop: '12px', letterSpacing: '0.5px', transition: 'all 0.2s ease', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' },
     buttonHover: { backgroundColor: '#1D4ED8', transform: 'translateY(-1px)', boxShadow: '0 10px 15px -3px rgba(37, 99, 235, 0.3)' },
     buttonDisabled: { opacity: 0.7, cursor: 'not-allowed', transform: 'none' },
+    notice: { backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '12px', borderRadius: '8px', fontSize: '0.875rem', textAlign: 'center', border: '1px solid #BFDBFE', fontWeight: '600', marginBottom: '20px' },
     error: { backgroundColor: '#FEF2F2', color: '#B91C1C', padding: '12px', borderRadius: '8px', fontSize: '0.875rem', textAlign: 'center', border: '1px solid #FECACA', fontWeight: '500', marginBottom: '20px' },
     footer: { marginTop: '40px', borderTop: '1px solid #F1F5F9', paddingTop: '24px', fontSize: '0.75rem', color: '#64748B', textAlign: 'center', fontWeight: '500' }
 };

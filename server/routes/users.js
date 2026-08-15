@@ -10,7 +10,9 @@ router.post('/login', (req, res) => {
     const { email, password } = req.body;
     db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
         if (err) return res.status(500).json({ error: err.message });
-        if (!user || !(await bcrypt.compare(password, user.password))) return res.status(401).json({ message: 'Inválido' });
+        if (!user || !(await bcrypt.compare(password, user.password))) {
+            return res.status(401).json({ message: 'E-mail ou senha incorretos.' });
+        }
         const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
         res.status(200).json({ token, user: { id: user.id, name: user.name, role: user.role } });
     });
