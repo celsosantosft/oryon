@@ -147,6 +147,8 @@ const WhatsappDashboard = () => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [evolutionInfo, setEvolutionInfo] = useState(null);
+    const [metaInfo, setMetaInfo] = useState(null);
+    const [webhookInfo, setWebhookInfo] = useState(null);
     const [conversations, setConversations] = useState([]);
     const [officialLabels, setOfficialLabels] = useState([]);
     const [selectedPhone, setSelectedPhone] = useState('');
@@ -238,12 +240,15 @@ const WhatsappDashboard = () => {
         try {
             const response = await axios.get(`${API_BASE_URL}/whatsapp/status`, authConfig);
             if (response.data?.config) setEvolutionInfo(response.data.config);
+            if (response.data?.meta) setMetaInfo(response.data.meta);
+            if (response.data?.webhook) setWebhookInfo(response.data.webhook);
             setStatus(normalizeStatus(response.data?.status));
             if (response.data?.configured === false && response.data?.error) {
                 setError(previous => previous || response.data.error);
             }
         } catch (requestError) {
             if (requestError.response?.data?.config) setEvolutionInfo(requestError.response.data.config);
+            if (requestError.response?.data?.meta) setMetaInfo(requestError.response.data.meta);
             setStatus('close');
             setError(requestError.response?.data?.error || 'Não foi possível consultar o WhatsApp agora.');
         } finally {
@@ -770,6 +775,24 @@ const WhatsappDashboard = () => {
                             <p className="text-xs font-extrabold uppercase text-slate-400">Chave</p>
                             <p className={`mt-1 text-sm font-bold ${evolutionInfo.hasApiKey ? 'text-emerald-700' : 'text-red-700'}`}>
                                 {evolutionInfo.hasApiKey ? `Carregada (${evolutionInfo.apiKeySource || 'ambiente'})` : 'Não encontrada'}
+                            </p>
+                        </div>
+                        <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
+                            <p className="text-xs font-extrabold uppercase text-slate-400">Webhook ativo</p>
+                            <p className="mt-1 text-sm font-bold text-slate-700">
+                                {webhookInfo?.lastConfiguredAt || webhookInfo?.configured_at || 'Aguardando confirmação'}
+                            </p>
+                            <p className="mt-2 text-xs font-semibold text-slate-500">
+                                {(webhookInfo?.events || []).join(', ') || 'CHATS_UPDATE, LABELS_EDIT, LABELS_ASSOCIATION'}
+                            </p>
+                        </div>
+                        <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
+                            <p className="text-xs font-extrabold uppercase text-slate-400">Etiquetas Meta</p>
+                            <p className="mt-1 text-sm font-bold text-slate-700">
+                                {(metaInfo?.qualifiedLeadLabels || []).join(', ') || 'Não carregadas'}
+                            </p>
+                            <p className={`mt-2 text-xs font-bold ${metaInfo?.hasPixelId && metaInfo?.hasAccessToken ? 'text-emerald-700' : 'text-red-700'}`}>
+                                {metaInfo?.hasPixelId && metaInfo?.hasAccessToken ? 'Pixel e token carregados' : 'Pixel ID ou token ausente'}
                             </p>
                         </div>
                     </div>

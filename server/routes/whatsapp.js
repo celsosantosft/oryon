@@ -14,7 +14,8 @@ const {
 } = require('../config/evolution');
 const {
     sendQualifiedLeadEvent,
-    isQualifiedLeadLabel
+    isQualifiedLeadLabel,
+    getMetaCapiDiagnostics
 } = require('../services/metaCapiService');
 
 const router = express.Router();
@@ -45,6 +46,10 @@ let evolutionLabelMirrorCache = {
     tagsByPhone: new Map(),
     tagsByJid: new Map()
 };
+let webhookConfigPromise = null;
+let lastWebhookConfiguredAt = 0;
+
+const WEBHOOK_CONFIG_TTL_MS = 5 * 60 * 1000;
 
 const AUDIO_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'whatsapp');
 
@@ -96,6 +101,18 @@ db.run(`
         tag_id INTEGER NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (conversation_id, tag_id)
+    )
+`);
+
+db.run(`
+    CREATE TABLE IF NOT EXISTS whatsapp_label_webhook_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_name TEXT,
+        processed_count INTEGER NOT NULL DEFAULT 0,
+        raw_payload TEXT,
+        result_payload TEXT,
+        error TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
 `);
 
@@ -257,6 +274,62 @@ async function configureInstanceWebhook() {
     const error = new Error('Não foi possível configurar webhook da Evolution API.');
     error.failures = failures;
     throw error;
+}
+
+async function fetchEvolutionWebhookConfig() {
+    const response = await evolution.get(`/webhook/find/${EVOLUTION_INSTANCE}`);
+    return response.data || null;
+}
+
+async function ensureLightweightWebhookConfigured(options = {}) {
+    if (!EVOLUTION_API_KEY || !EVOLUTION_WEBHOOK_URL) {
+        return {
+            skipped: true,
+            reason: 'missing_config'
+        };
+    }
+
+    const now = Date.now();
+    if (!options.force && lastWebhookConfiguredAt && now - lastWebhookConfiguredAt < WEBHOOK_CONFIG_TTL_MS) {
+        return {
+            skipped: true,
+            reason: 'recently_configured',
+            configured_at: new Date(lastWebhookConfiguredAt).toISOString()
+        };
+    }
+
+    if (webhookConfigPromise) return webhookConfigPromise;
+
+    webhookConfigPromise = Promise.allSettled([
+        configureInstanceWebhook(),
+        configureInstanceSettings()
+    ])
+        .then(([webhookResult, settingsResult]) => {
+            lastWebhookConfiguredAt = Date.now();
+
+            const summary = {
+                skipped: false,
+                configured_at: new Date(lastWebhookConfiguredAt).toISOString(),
+                events: EVOLUTION_WEBHOOK_EVENTS,
+                webhook: webhookResult.status === 'fulfilled' ? 'ok' : summarizeEvolutionError(webhookResult.reason),
+                settings: settingsResult.status === 'fulfilled' ? 'ok' : summarizeEvolutionError(settingsResult.reason)
+            };
+
+            if (webhookResult.status === 'rejected') {
+                console.warn('Não foi possível configurar webhook leve da Evolution:', webhookResult.reason?.failures || summarizeEvolutionError(webhookResult.reason));
+            }
+
+            if (settingsResult.status === 'rejected') {
+                console.warn('Não foi possível aplicar configuração leve da Evolution:', settingsResult.reason?.failures || summarizeEvolutionError(settingsResult.reason));
+            }
+
+            return summary;
+        })
+        .finally(() => {
+            webhookConfigPromise = null;
+        });
+
+    return webhookConfigPromise;
 }
 
 async function extractQrCode(payload) {
@@ -1027,9 +1100,7 @@ async function processWebhookMessage(messagePayload, rootPayload, options = {}) 
 }
 
 async function processIncomingWebhook(payload) {
-    const eventName = String(payload?.event || payload?.type || payload?.eventType || '')
-        .toUpperCase()
-        .replace(/[.\-\s]+/g, '_');
+    const eventName = normalizeWebhookEventName(payload);
 
     if (eventName.includes('LABELS_ASSOCIATION') || eventName.includes('LABELS_EDIT')) {
         return processLabelWebhook(payload, eventName);
@@ -1128,6 +1199,57 @@ function summarizeEvolutionError(error) {
     } catch (_) {
         return 'Erro sem detalhes legíveis';
     }
+}
+
+function normalizeWebhookEventName(payload) {
+    return String(payload?.event || payload?.type || payload?.eventType || '')
+        .toUpperCase()
+        .replace(/[.\-\s]+/g, '_');
+}
+
+function sanitizeWebhookPayload(payload, maxLength = 10000) {
+    try {
+        const json = JSON.stringify(payload, (key, value) => {
+            const normalizedKey = String(key || '').toLowerCase();
+            if (['apikey', 'api_key', 'token', 'access_token', 'authorization'].includes(normalizedKey)) {
+                return '[redacted]';
+            }
+
+            return value;
+        });
+
+        return json.length > maxLength ? `${json.slice(0, maxLength)}...[truncated]` : json;
+    } catch (error) {
+        return JSON.stringify({ error: 'payload_not_serializable' });
+    }
+}
+
+async function recordLabelWebhookAudit(eventName, payload, result = null, error = '') {
+    if (!eventName.includes('LABEL')) return;
+
+    await dbRun(
+        `INSERT INTO whatsapp_label_webhook_audit
+            (event_name, processed_count, raw_payload, result_payload, error)
+         VALUES
+            (?, ?, ?, ?, ?)`,
+        [
+            eventName,
+            Number(result?.processed || 0),
+            sanitizeWebhookPayload(payload),
+            result ? sanitizeWebhookPayload(result, 4000) : null,
+            error || null
+        ]
+    );
+
+    await dbRun(
+        `DELETE FROM whatsapp_label_webhook_audit
+         WHERE id NOT IN (
+            SELECT id
+            FROM whatsapp_label_webhook_audit
+            ORDER BY id DESC
+            LIMIT 100
+         )`
+    ).catch(() => {});
 }
 
 async function callEvolutionFallbacks(label, attempts) {
@@ -1712,6 +1834,13 @@ function addTagToTargetMaps({ tagsByPhone, tagsByJid }, target, tag) {
     addTag(tagsByJid, remoteJid);
 }
 
+function looksLikeChatIdentifier(value) {
+    const rawValue = String(value || '').trim();
+    if (!rawValue) return false;
+    if (rawValue.includes('@s.whatsapp.net') || rawValue.includes('@c.us') || rawValue.includes('@lid')) return true;
+    return isLikelyWhatsappPhone(rawValue);
+}
+
 function collectChatTargets(value, targets = []) {
     if (!value) return targets;
 
@@ -1740,12 +1869,27 @@ function collectChatTargets(value, targets = []) {
         || value.jid
         || value.chatId
         || value.chat_id
+        || value.key?.remoteJid
+        || value.contact?.id
+        || value.contactId
+        || value.contact_id
         || value.id?._serialized
         || '';
-    const phone = normalizePhone(value.phone || value.number || value.user || String(remoteJid || '').split('@')[0]);
+    const phone = normalizePhone(
+        value.phone
+        || value.number
+        || value.user
+        || value.contact?.phone
+        || value.contact?.number
+        || String(remoteJid || '').split('@')[0]
+    );
 
     if (remoteJid || phone) {
-        targets.push({ remoteJid, phone });
+        targets.push({
+            remoteJid,
+            phone,
+            pushName: value.pushName || value.name || value.profileName || value.contact?.pushName || value.contact?.name || ''
+        });
     }
 
     [
@@ -1757,8 +1901,11 @@ function collectChatTargets(value, targets = []) {
         value.remote_jids,
         value.jids,
         value.contacts,
+        value.contact,
         value.conversations,
         value.items,
+        value.message,
+        value.key,
         value.data,
         value.value
     ].forEach(nested => collectChatTargets(nested, targets));
@@ -1846,19 +1993,26 @@ function mapLabelPayloadToTargets(payload, labelsById, labelsByName) {
         if (!label.name) continue;
 
         const targets = collectChatTargets([
+            looksLikeChatIdentifier(record.id) || normalizeLabelKey(record.type) === 'chat' ? record.id : '',
             record.remoteJid,
             record.remote_jid,
             record.jid,
             record.chatId,
             record.chat_id,
+            record.key?.remoteJid,
+            record.contactId,
+            record.contact_id,
             record.chat,
             record.chats,
             record.chatIds,
             record.chat_ids,
             record.jids,
             record.contacts,
+            record.contact,
             record.conversations,
-            record.items
+            record.items,
+            record.data,
+            record.value
         ]);
 
         targets.forEach(target => linkedTags.push({ target, tag: label }));
@@ -2046,6 +2200,9 @@ async function getLabelsByKeyForWebhook(payload) {
             return [];
         });
     }
+
+    const localLabels = await getLocalWhatsappLabels().catch(() => []);
+    labels = mergeConversationTags(formatEvolutionLabels(labels), localLabels);
 
     return {
         labels,
@@ -2304,17 +2461,32 @@ router.get('/whatsapp/status', authenticateToken, async (req, res) => {
 
     try {
         const state = await fetchConnectionState();
+        let webhook = null;
+
+        if (state.status === 'open') {
+            webhook = await Promise.race([
+                ensureLightweightWebhookConfigured(),
+                wait(2000).then(() => ({
+                    skipped: true,
+                    reason: 'timeout'
+                }))
+            ]);
+        }
+
         res.json({
             status: state.status,
             configured: true,
-            config: getEvolutionDiagnostics()
+            config: getEvolutionDiagnostics(),
+            meta: getMetaCapiDiagnostics(),
+            webhook
         });
     } catch (error) {
         if (isInstanceNotFound(error)) {
             return res.json({
                 status: 'close',
                 configured: true,
-                config: getEvolutionDiagnostics()
+                config: getEvolutionDiagnostics(),
+                meta: getMetaCapiDiagnostics()
             });
         }
 
@@ -2446,11 +2618,17 @@ router.post('/whatsapp/sync', authenticateToken, authorizeRole(['admin', 'gerent
 });
 
 router.post('/whatsapp/webhook', async (req, res) => {
+    const eventName = normalizeWebhookEventName(req.body);
+
     try {
         const result = await processIncomingWebhook(req.body);
+        await recordLabelWebhookAudit(eventName || result.event || '', req.body, result).catch((auditError) => {
+            console.warn('Não foi possível auditar webhook de etiqueta:', auditError.message);
+        });
         res.json({ ok: true, ...result });
     } catch (error) {
         console.error('Erro ao processar webhook WhatsApp:', error.response?.data || error.message);
+        await recordLabelWebhookAudit(eventName, req.body, null, error.message).catch(() => {});
         res.status(200).json({ ok: false });
     }
 });
@@ -2538,6 +2716,50 @@ router.get('/whatsapp/tags', authenticateToken, async (req, res) => {
         res.json({ tags: labels, labels, warning });
     } catch (error) {
         res.status(500).json({ error: error.message, tags: [], labels: [] });
+    }
+});
+
+router.get('/whatsapp/labels/diagnostics', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+    try {
+        const [localLabels, taggedConversations, recentWebhooks, providerWebhook] = await Promise.all([
+            getLocalWhatsappLabels(),
+            dbGet(`
+                SELECT COUNT(DISTINCT wc.id) AS total
+                FROM whatsapp_conversations wc
+                JOIN whatsapp_conversation_tags wct ON wct.conversation_id = wc.id
+                JOIN whatsapp_tags wt ON wt.id = wct.tag_id
+                WHERE wt.evolution_label_id IS NOT NULL
+                  AND wt.evolution_label_id <> ''
+            `),
+            dbAll(`
+                SELECT id, event_name, processed_count, result_payload, error, created_at
+                FROM whatsapp_label_webhook_audit
+                ORDER BY id DESC
+                LIMIT 20
+            `),
+            fetchEvolutionWebhookConfig().catch(error => ({
+                error: summarizeEvolutionError(error)
+            }))
+        ]);
+
+        res.json({
+            evolution: getEvolutionDiagnostics(),
+            meta: getMetaCapiDiagnostics(),
+            webhook: {
+                events: EVOLUTION_WEBHOOK_EVENTS,
+                lastConfiguredAt: lastWebhookConfiguredAt ? new Date(lastWebhookConfiguredAt).toISOString() : null,
+                provider: providerWebhook
+            },
+            labels: localLabels,
+            tagged_conversations: Number(taggedConversations?.total || 0),
+            recent_webhooks: recentWebhooks
+        });
+    } catch (error) {
+        res.status(500).json({
+            error: error.message,
+            evolution: getEvolutionDiagnostics(),
+            meta: getMetaCapiDiagnostics()
+        });
     }
 });
 
