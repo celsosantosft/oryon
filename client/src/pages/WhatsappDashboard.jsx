@@ -813,6 +813,11 @@ const WhatsappDashboard = () => {
                             <p className="mt-1 text-sm font-bold text-slate-700">
                                 {(metaInfo?.qualifiedLeadLabels || []).join(', ') || 'Não carregadas'}
                             </p>
+                            {metaInfo?.qualifiedLeadLabelIds?.length ? (
+                                <p className="mt-1 text-xs font-semibold text-slate-500">
+                                    IDs: {metaInfo.qualifiedLeadLabelIds.join(', ')}
+                                </p>
+                            ) : null}
                             <p className={`mt-2 text-xs font-bold ${metaInfo?.hasPixelId && metaInfo?.hasAccessToken ? 'text-emerald-700' : 'text-red-700'}`}>
                                 {metaInfo?.hasPixelId && metaInfo?.hasAccessToken ? 'Pixel e token carregados' : 'Pixel ID ou token ausente'}
                             </p>

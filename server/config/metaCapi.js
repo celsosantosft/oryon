@@ -10,6 +10,7 @@ const DEFAULT_QUALIFIED_LABELS = [
     'Em Produção',
     'Em Producao'
 ];
+const DEFAULT_QUALIFIED_LABEL_IDS = [];
 
 const SERVER_ROOT = path.resolve(__dirname, '..');
 const PROJECT_ROOT = path.resolve(SERVER_ROOT, '..');
@@ -100,6 +101,7 @@ function resolveMetaCapiConfig() {
     const graphVersion = readConfigValue(['META_GRAPH_VERSION', 'FACEBOOK_GRAPH_VERSION']);
     const eventName = readConfigValue(['META_QUALIFIED_LEAD_EVENT_NAME']);
     const qualifiedLabels = readConfigValue(['META_QUALIFIED_LEAD_LABELS']);
+    const qualifiedLabelIds = readConfigValue(['META_QUALIFIED_LEAD_LABEL_IDS']);
     const defaultCountryCode = readConfigValue(['META_DEFAULT_COUNTRY_CODE']);
     const testEventCode = readConfigValue(['META_TEST_EVENT_CODE']);
 
@@ -114,6 +116,8 @@ function resolveMetaCapiConfig() {
         qualifiedLeadEventNameSource: eventName.source || 'default',
         qualifiedLeadLabels: splitConfigList(qualifiedLabels.value, DEFAULT_QUALIFIED_LABELS),
         qualifiedLeadLabelsSource: qualifiedLabels.source || 'default',
+        qualifiedLeadLabelIds: splitConfigList(qualifiedLabelIds.value, DEFAULT_QUALIFIED_LABEL_IDS),
+        qualifiedLeadLabelIdsSource: qualifiedLabelIds.source || 'default',
         defaultCountryCode: String(defaultCountryCode.value || DEFAULT_DEFAULT_COUNTRY_CODE).replace(/\D/g, '') || DEFAULT_DEFAULT_COUNTRY_CODE,
         defaultCountryCodeSource: defaultCountryCode.source || 'default',
         testEventCode: testEventCode.value,
@@ -135,6 +139,8 @@ function getMetaCapiDiagnostics() {
         qualifiedLeadEventNameSource: metaCapiConfig.qualifiedLeadEventNameSource,
         qualifiedLeadLabels: metaCapiConfig.qualifiedLeadLabels,
         qualifiedLeadLabelsSource: metaCapiConfig.qualifiedLeadLabelsSource,
+        qualifiedLeadLabelIds: metaCapiConfig.qualifiedLeadLabelIds,
+        qualifiedLeadLabelIdsSource: metaCapiConfig.qualifiedLeadLabelIdsSource,
         defaultCountryCode: metaCapiConfig.defaultCountryCode,
         defaultCountryCodeSource: metaCapiConfig.defaultCountryCodeSource,
         hasTestEventCode: Boolean(metaCapiConfig.testEventCode),

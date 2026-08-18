@@ -66,23 +66,74 @@ function normalizeComparable(value) {
         .replace(/[^a-z0-9]+/g, '');
 }
 
+function normalizeLabelId(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function uniqueNormalized(values, normalizer) {
+    return [...new Set(values.map(normalizer).filter(Boolean))];
+}
+
 function isQualifiedLeadLabel(label) {
-    const candidates = [
+    const nameCandidates = uniqueNormalized([
         label?.name,
         label?.labelName,
         label?.title,
         label?.text,
-        label?.value,
+        label?.value
+    ], normalizeComparable);
+    const idCandidates = uniqueNormalized([
         label?.id,
-        label?.evolution_label_id
-    ].map(normalizeComparable).filter(Boolean);
+        label?.evolution_label_id,
+        label?.labelId,
+        label?.label_id,
+        label?.idLabel,
+        label?.predefinedId
+    ], normalizeLabelId);
 
-    if (!candidates.length) return false;
+    if (!nameCandidates.length && !idCandidates.length) return false;
 
-    return metaCapiConfig.qualifiedLeadLabels
-        .map(normalizeComparable)
-        .filter(Boolean)
-        .some(expected => candidates.includes(expected));
+    const expectedNames = uniqueNormalized(metaCapiConfig.qualifiedLeadLabels, normalizeComparable);
+    const expectedIds = uniqueNormalized(metaCapiConfig.qualifiedLeadLabelIds || [], normalizeLabelId);
+
+    return expectedNames.some(expected => nameCandidates.includes(expected))
+        || expectedIds.some(expected => idCandidates.includes(expected));
+}
+
+function getQualifiedLeadFallbackLabelName() {
+    return metaCapiConfig.qualifiedLeadLabels[0]
+        || metaCapiConfig.qualifiedLeadEventName
+        || 'Lead Qualificado';
+}
+
+function resolveQualifiedLeadLabel(label = {}) {
+    if (!isQualifiedLeadLabel(label)) return label;
+
+    const id = String(
+        label.evolution_label_id
+        || label.id
+        || label.labelId
+        || label.label_id
+        || label.idLabel
+        || label.predefinedId
+        || ''
+    ).trim();
+    const name = String(
+        label.name
+        || label.labelName
+        || label.title
+        || label.text
+        || label.value
+        || getQualifiedLeadFallbackLabelName()
+    ).trim();
+
+    return {
+        ...label,
+        id: id || name,
+        name,
+        color: label.color || label.hexColor || label.backgroundColor || label.labelColor || '#22c55e',
+        evolution_label_id: label.evolution_label_id || id || null
+    };
 }
 
 function normalizeEmail(email) {
@@ -366,6 +417,7 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
 module.exports = {
     sendQualifiedLeadEvent,
     isQualifiedLeadLabel,
+    resolveQualifiedLeadLabel,
     normalizeEmail,
     normalizePhone,
     sha256,

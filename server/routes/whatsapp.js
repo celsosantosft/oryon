@@ -15,6 +15,7 @@ const {
 const {
     sendQualifiedLeadEvent,
     isQualifiedLeadLabel,
+    resolveQualifiedLeadLabel,
     getMetaCapiDiagnostics
 } = require('../services/metaCapiService');
 
@@ -495,6 +496,16 @@ async function findExistingConversationByPhone(phone) {
     }
 
     return samePhoneConversation;
+}
+
+async function findExistingConversationByRemoteJid(remoteJid) {
+    const normalizedRemoteJid = normalizeWhatsappJid(remoteJid);
+    if (!normalizedRemoteJid) return null;
+
+    return dbGet(
+        `SELECT * FROM whatsapp_conversations WHERE remote_jid = ? LIMIT 1`,
+        [normalizedRemoteJid]
+    );
 }
 
 function extractIncomingPayload(payload) {
@@ -1367,6 +1378,8 @@ function normalizeEvolutionLabel(label) {
         label?.id
         || label?.labelId
         || label?.label_id
+        || label?.idLabel
+        || label?.predefinedId
         || label?._id
         || label?.jid
         || label?.key
@@ -1482,6 +1495,26 @@ function formatEvolutionLabels(labels) {
     }));
 }
 
+function getConfiguredQualifiedLabelsForWebhook() {
+    const metaDiagnostics = getMetaCapiDiagnostics();
+    const ids = Array.isArray(metaDiagnostics.qualifiedLeadLabelIds)
+        ? metaDiagnostics.qualifiedLeadLabelIds
+        : [];
+    const names = Array.isArray(metaDiagnostics.qualifiedLeadLabels)
+        ? metaDiagnostics.qualifiedLeadLabels
+        : [];
+    const fallbackName = names[0] || metaDiagnostics.qualifiedLeadEventName || 'Lead Qualificado';
+
+    return ids
+        .map((id, index) => resolveQualifiedLeadLabel({
+            id: String(id || '').trim(),
+            name: names[index] || fallbackName,
+            color: '#22c55e',
+            evolution_label_id: String(id || '').trim()
+        }))
+        .filter(label => label.id && label.name);
+}
+
 function mergeConversationTags(...tagGroups) {
     const seen = new Set();
     const tags = [];
@@ -1572,7 +1605,11 @@ async function loadAvailableWhatsappLabels() {
     }
 
     const localLabels = await getLocalWhatsappLabels();
-    const labels = mergeConversationTags(formatEvolutionLabels(remoteLabels), localLabels);
+    const labels = mergeConversationTags(
+        formatEvolutionLabels(remoteLabels),
+        localLabels,
+        getConfiguredQualifiedLabelsForWebhook()
+    );
 
     return { labels, warning };
 }
@@ -1808,7 +1845,7 @@ function collectLabelRefs(value, refs = []) {
     if (typeof value !== 'object') return refs;
 
     const ref = {
-        id: String(value.id || value.labelId || value.label_id || value._id || value.jid || value.key || '').trim(),
+        id: String(value.id || value.labelId || value.label_id || value.idLabel || value.predefinedId || value._id || value.jid || value.key || '').trim(),
         name: String(value.name || value.labelName || value.title || value.text || value.value || '').trim(),
         color: value.color || value.hexColor || value.backgroundColor || value.labelColor
     };
@@ -1863,7 +1900,7 @@ function mapChatTags(chat, labelsById, labelsByName) {
             || labelsById.get(normalizeLabelKey(ref.name))
             || labelsByName.get(normalizeLabelKey(ref.id));
 
-        const tag = matchedLabel || normalizeEvolutionLabel(ref);
+        const tag = resolveQualifiedLeadLabel(matchedLabel || normalizeEvolutionLabel(ref));
         if (!tag.name) continue;
 
         const tagKey = normalizeLabelKey(tag.id || tag.name);
@@ -2061,7 +2098,7 @@ function mapLabelPayloadToTargets(payload, labelsById, labelsByName) {
             || labelsByName.get(normalizeLabelKey(normalizedLabel.name))
             || labelsById.get(normalizeLabelKey(record?.labelId || record?.label_id || record?.idLabel))
             || labelsByName.get(normalizeLabelKey(record?.labelName || record?.name));
-        const label = matchedLabel || normalizedLabel;
+        const label = resolveQualifiedLeadLabel(matchedLabel || normalizedLabel);
         if (!label.name) continue;
 
         const targets = collectChatTargets([
@@ -2280,10 +2317,12 @@ function extractLabelAssociationAction(payload) {
         [
             'action',
             'operation',
+            'type',
             'associationAction',
             'labelAction',
             'data.action',
-            'data.operation'
+            'data.operation',
+            'data.type'
         ]
     );
     const normalizedAction = normalizeLabelKey(action);
@@ -2311,7 +2350,11 @@ async function getLabelsByKeyForWebhook(payload) {
     }
 
     const localLabels = await getLocalWhatsappLabels().catch(() => []);
-    labels = mergeConversationTags(formatEvolutionLabels(labels), localLabels);
+    labels = mergeConversationTags(
+        formatEvolutionLabels(labels),
+        localLabels,
+        getConfiguredQualifiedLabelsForWebhook()
+    );
 
     return {
         labels,
@@ -2321,8 +2364,35 @@ async function getLabelsByKeyForWebhook(payload) {
 }
 
 async function persistLabelAssociationTarget(linkedTag, action, userId = null) {
-    const target = normalizeChatTarget(linkedTag.target || {});
-    if (!target) return { processed: false, reason: 'invalid_target' };
+    const rawTarget = linkedTag.target || {};
+    let target = normalizeChatTarget(rawTarget);
+
+    if (!target) {
+        const remoteJid = normalizeWhatsappJid(rawTarget.remoteJid || rawTarget.jid || rawTarget.id || rawTarget.chatId || rawTarget.chat_id || '');
+        const candidatePhone = normalizePhone(rawTarget.phone || rawTarget.number || (remoteJid.includes('@') ? remoteJid.split('@')[0] : remoteJid));
+        const existingConversation = await findExistingConversationByRemoteJid(remoteJid).catch(() => null);
+
+        if (existingConversation?.phone && isLikelyWhatsappPhone(existingConversation.phone)) {
+            target = {
+                phone: existingConversation.phone,
+                remoteJid: remoteJid || existingConversation.remote_jid,
+                pushName: rawTarget.pushName || existingConversation.push_name || ''
+            };
+        } else if (candidatePhone && isLikelyWhatsappPhone(candidatePhone)) {
+            target = {
+                phone: candidatePhone,
+                remoteJid,
+                pushName: rawTarget.pushName || ''
+            };
+        } else {
+            return {
+                processed: false,
+                reason: remoteJid.includes('@lid') ? 'lid_without_known_phone' : 'invalid_target',
+                remoteJid,
+                tag: linkedTag.tag
+            };
+        }
+    }
 
     const conversation = await ensureConversation(target.phone, {
         remoteJid: target.remoteJid,
