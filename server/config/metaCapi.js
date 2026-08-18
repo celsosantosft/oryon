@@ -6,7 +6,9 @@ const DEFAULT_EVENT_NAME = 'Lead Qualificado';
 const DEFAULT_DEFAULT_COUNTRY_CODE = '55';
 const DEFAULT_QUALIFIED_LABELS = [
     'Lead Qualificado',
-    'Lead Qualificada'
+    'Lead Qualificada',
+    'Em Produção',
+    'Em Producao'
 ];
 
 const SERVER_ROOT = path.resolve(__dirname, '..');

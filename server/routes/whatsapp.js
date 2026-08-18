@@ -27,14 +27,11 @@ try {
 }
 
 const EVOLUTION_WEBHOOK_EVENTS = [
-    'MESSAGES_SET',
-    'MESSAGES_UPSERT',
-    'MESSAGES_UPDATE',
-    'SEND_MESSAGE',
     'CHATS_UPSERT',
     'CHATS_UPDATE',
     'LABELS_EDIT',
-    'LABELS_ASSOCIATION'
+    'LABELS_ASSOCIATION',
+    'CONNECTION_UPDATE'
 ];
 const EVOLUTION_LABEL_CACHE_MS = 10000;
 
@@ -101,19 +98,6 @@ db.run(`
         PRIMARY KEY (conversation_id, tag_id)
     )
 `);
-
-[
-    ['Novo lead', '#2563eb'],
-    ['Orcamento', '#7c3aed'],
-    ['Pedido em andamento', '#16a34a'],
-    ['Urgente', '#dc2626'],
-    ['Pos-venda', '#f59e0b']
-].forEach(([name, color]) => {
-    db.run(
-        `INSERT OR IGNORE INTO whatsapp_tags (name, color) VALUES (?, ?)`,
-        [name, color]
-    );
-});
 
 const evolution = createEvolutionClient();
 
@@ -215,7 +199,7 @@ async function createInstance() {
         alwaysOnline: false,
         readMessages: false,
         readStatus: false,
-        syncFullHistory: true,
+        syncFullHistory: false,
         webhook: {
             enabled: true,
             url: EVOLUTION_WEBHOOK_URL,
@@ -234,7 +218,7 @@ async function configureInstanceSettings() {
         alwaysOnline: false,
         readMessages: false,
         readStatus: false,
-        syncFullHistory: true
+        syncFullHistory: false
     });
 }
 
@@ -1043,32 +1027,71 @@ async function processWebhookMessage(messagePayload, rootPayload, options = {}) 
 }
 
 async function processIncomingWebhook(payload) {
-    const eventName = String(payload?.event || payload?.type || payload?.eventType || '').toUpperCase();
+    const eventName = String(payload?.event || payload?.type || payload?.eventType || '')
+        .toUpperCase()
+        .replace(/[.\-\s]+/g, '_');
 
     if (eventName.includes('LABELS_ASSOCIATION') || eventName.includes('LABELS_EDIT')) {
         return processLabelWebhook(payload, eventName);
     }
 
-    const messagePayloads = collectMessagePayloads(payload);
-    const isHistorySync = eventName.includes('MESSAGES_SET');
-    const runAutomation = !isHistorySync && (!eventName || eventName.includes('MESSAGES_UPSERT'));
-
-    if (!messagePayloads.length) {
-        return { ignored: true, reason: 'no_message_payload' };
+    if (eventName.includes('CHATS_UPSERT') || eventName.includes('CHATS_UPDATE')) {
+        return processChatWebhook(payload, eventName);
     }
 
+    return {
+        ignored: true,
+        event: eventName || 'UNKNOWN',
+        reason: 'whatsapp_message_events_disabled'
+    };
+}
+
+function collectChatPayloads(payload) {
+    const candidates = [
+        payload?.data,
+        payload?.chat,
+        payload?.chats,
+        payload?.conversation,
+        payload?.message?.chat,
+        payload
+    ];
+    const chats = [];
+
+    for (const candidate of candidates) {
+        if (Array.isArray(candidate)) {
+            chats.push(...candidate.filter(item => item && typeof item === 'object'));
+        } else if (candidate && typeof candidate === 'object') {
+            chats.push(candidate);
+        }
+    }
+
+    return chats;
+}
+
+async function processChatWebhook(payload, eventName) {
     const results = [];
-    for (const messagePayload of messagePayloads) {
-        results.push(await processWebhookMessage(messagePayload, payload, {
-            countUnread: !isHistorySync,
-            runAutomation
-        }));
+    const seenPhones = new Set();
+
+    for (const chat of collectChatPayloads(payload)) {
+        const target = normalizeChatTarget(chat);
+        if (!target || seenPhones.has(target.phone)) continue;
+
+        seenPhones.add(target.phone);
+        const conversation = await ensureConversation(target.phone, {
+            remoteJid: target.remoteJid,
+            pushName: target.pushName
+        });
+
+        results.push({
+            saved: true,
+            conversation_id: conversation.id,
+            phone: target.phone
+        });
     }
 
     return {
         processed: results.length,
-        event: eventName || 'UNKNOWN',
-        historySync: isHistorySync,
+        event: eventName || 'CHAT_UPDATE',
         results
     };
 }
@@ -1216,8 +1239,6 @@ function readEvolutionLabels(payload) {
 }
 
 async function fetchEvolutionLabelPayload() {
-    console.log('Tentando buscar labels para a instância:', EVOLUTION_INSTANCE);
-
     const labelsResult = await callEvolutionFallbacks('Buscar etiquetas oficiais', [
         {
             name: 'findLabels em chat',
@@ -1247,8 +1268,6 @@ async function fetchEvolutionLabelPayload() {
             url: `/label/findLabels/${EVOLUTION_INSTANCE}`
         }
     ]);
-
-    console.log('Resposta da Evolution:', labelsResult.response.data);
 
     return labelsResult.response.data;
 }
@@ -1311,7 +1330,9 @@ async function getLocalTagsForConversations(conversationIds) {
             wt.evolution_label_id
          FROM whatsapp_conversation_tags wct
          JOIN whatsapp_tags wt ON wt.id = wct.tag_id
-         WHERE wct.conversation_id IN (${placeholders})`,
+         WHERE wct.conversation_id IN (${placeholders})
+           AND wt.evolution_label_id IS NOT NULL
+           AND wt.evolution_label_id <> ''`,
         conversationIds
     );
 
@@ -1327,6 +1348,45 @@ async function getLocalTagsForConversations(conversationIds) {
     });
 
     return tagsByConversation;
+}
+
+async function getLocalWhatsappLabels() {
+    const rows = await dbAll(
+        `SELECT DISTINCT
+            wt.id,
+            wt.name,
+            wt.color,
+            wt.evolution_label_id
+         FROM whatsapp_tags wt
+         WHERE wt.evolution_label_id IS NOT NULL
+           AND wt.evolution_label_id <> ''
+         ORDER BY wt.name COLLATE NOCASE ASC`
+    );
+
+    return rows.map(tag => ({
+        id: tag.evolution_label_id || tag.id,
+        name: tag.name,
+        color: tag.color || '#64748b',
+        evolution_label_id: tag.evolution_label_id || tag.id
+    }));
+}
+
+async function loadAvailableWhatsappLabels() {
+    let remoteLabels = [];
+    let warning = '';
+
+    try {
+        remoteLabels = await fetchEvolutionLabels();
+        if (!remoteLabels.length) remoteLabels = await fetchEvolutionLabelsFromChats();
+    } catch (error) {
+        warning = 'Não foi possível consultar etiquetas oficiais da Evolution agora.';
+        console.error('Erro ao buscar etiquetas oficiais do WhatsApp:', error.failures || summarizeEvolutionError(error));
+    }
+
+    const localLabels = await getLocalWhatsappLabels();
+    const labels = mergeConversationTags(formatEvolutionLabels(remoteLabels), localLabels);
+
+    return { labels, warning };
 }
 
 async function upsertLocalWhatsappTag(tag) {
@@ -1879,9 +1939,6 @@ async function getEvolutionLabelMirror(options = {}) {
 
     if (chatsResult.status === 'fulfilled') {
         chats = chatsResult.value;
-        if (chats[0]) {
-            console.log('Raw Chat da Evolution:', JSON.stringify(chats[0], null, 2));
-        }
     } else {
         console.warn('Não foi possível buscar conversas com etiquetas nativas:', chatsResult.reason?.failures || summarizeEvolutionError(chatsResult.reason));
     }
@@ -2067,6 +2124,7 @@ async function processLabelWebhook(payload, eventName) {
 async function persistLabelMirrorAssociations(labelMirror, userId = null) {
     const summary = {
         labels: labelMirror?.labels?.length || 0,
+        conversations: 0,
         associations: 0,
         changed: 0,
         meta_sent: 0,
@@ -2082,6 +2140,7 @@ async function persistLabelMirrorAssociations(labelMirror, userId = null) {
 
         try {
             const conversation = await ensureConversation(normalizedPhone);
+            summary.conversations += 1;
 
             for (const tag of tags) {
                 const persisted = await persistLocalConversationTag(conversation, tag, 'add');
@@ -2173,7 +2232,7 @@ async function importEvolutionMessage(messagePayload, options = {}) {
     return { saved: true, direction: 'incoming', phone: incoming.phone };
 }
 
-async function syncEvolutionChatsAndMessages() {
+async function syncEvolutionLabelsAndContacts(userId = null) {
     const warnings = [];
     const errors = [];
 
@@ -2192,140 +2251,44 @@ async function syncEvolutionChatsAndMessages() {
     } catch (error) {
         warnings.push({
             step: 'settings',
-            message: 'Não foi possível confirmar syncFullHistory antes da sincronização.',
+            message: 'Não foi possível confirmar a configuração leve da instância antes da sincronização.',
             error: summarizeEvolutionError(error)
         });
     }
 
-    let chatSource = 'evolution';
-    let chats = [];
+    let labelSync = {
+        labels: 0,
+        conversations: 0,
+        associations: 0,
+        changed: 0,
+        meta_sent: 0,
+        meta_skipped: 0,
+        errors: []
+    };
 
     try {
-        const chatsResult = await callEvolutionFallbacks('Buscar conversas', [
-            {
-                name: 'findChats completo',
-                url: `/chat/findChats/${EVOLUTION_INSTANCE}`,
-                data: { where: {}, take: 100, skip: 0, orderBy: { updatedAt: 'desc' } }
-            },
-            {
-                name: 'findChats simples',
-                url: `/chat/findChats/${EVOLUTION_INSTANCE}`,
-                data: { where: {}, take: 100, skip: 0 }
-            },
-            {
-                name: 'findChats vazio',
-                url: `/chat/findChats/${EVOLUTION_INSTANCE}`,
-                data: {}
-            },
-            {
-                name: 'findChats GET',
-                method: 'get',
-                url: `/chat/findChats/${EVOLUTION_INSTANCE}`
-            }
-        ]);
-
-        chats = asArrayResponse(chatsResult.response.data, [
-            'chats',
-            'records',
-            'data.chats',
-            'data.records',
-            'response.chats',
-            'response.records'
-        ]);
-
-        if (!chats.length) {
-            warnings.push({
-                step: 'findChats',
-                message: 'A Evolution respondeu, mas não trouxe conversas para importar.'
-            });
-        }
+        const labelMirror = await getEvolutionLabelMirror({ force: true });
+        labelSync = await persistLabelMirrorAssociations(labelMirror, userId);
     } catch (error) {
-        chatSource = 'known_contacts';
-        warnings.push({
-            step: 'findChats',
-            message: 'A Evolution não liberou a lista de conversas; tentando contatos já conhecidos no sistema.',
-            failures: error.failures || [{ error: error.message }]
+        errors.push({
+            step: 'labels',
+            message: 'Não foi possível sincronizar etiquetas do WhatsApp.',
+            error: error.failures || summarizeEvolutionError(error)
         });
-    }
-
-    if (!chats.length) {
-        chats = await getKnownConversationTargets();
-    }
-
-    let importedMessages = 0;
-    let importedChats = 0;
-    const seenPhones = new Set();
-
-    for (const chat of chats) {
-        const target = normalizeChatTarget(chat);
-        if (!target || seenPhones.has(target.phone)) continue;
-        seenPhones.add(target.phone);
-
-        importedChats += 1;
-        await ensureConversation(target.phone, {
-            remoteJid: target.remoteJid,
-            pushName: target.pushName
-        });
-
-        try {
-            const messagesResult = await callEvolutionFallbacks(`Buscar mensagens de ${target.phone}`, [
-                {
-                    name: 'findMessages por key.remoteJid',
-                    url: `/chat/findMessages/${EVOLUTION_INSTANCE}`,
-                    data: {
-                        where: { key: { remoteJid: target.remoteJid } },
-                        take: 80,
-                        skip: 0,
-                        orderBy: { messageTimestamp: 'desc' }
-                    }
-                },
-                {
-                    name: 'findMessages por remoteJid',
-                    url: `/chat/findMessages/${EVOLUTION_INSTANCE}`,
-                    data: { where: { remoteJid: target.remoteJid }, take: 80, skip: 0 }
-                },
-                {
-                    name: 'findMessages por numero',
-                    url: `/chat/findMessages/${EVOLUTION_INSTANCE}`,
-                    data: { where: { number: target.phone }, take: 80, skip: 0 }
-                },
-                {
-                    name: 'findMessages minimo',
-                    url: `/chat/findMessages/${EVOLUTION_INSTANCE}`,
-                    data: { where: { key: { remoteJid: target.remoteJid } } }
-                }
-            ]);
-
-            const messages = asArrayResponse(messagesResult.response.data, [
-                'messages',
-                'records',
-                'messages.records',
-                'data.messages',
-                'data.records',
-                'data.messages.records',
-                'response.messages',
-                'response.records',
-                'response.messages.records'
-            ]);
-
-            for (const messagePayload of messages) {
-                const result = await importEvolutionMessage(messagePayload, { countUnread: false });
-                if (result.saved) importedMessages += 1;
-            }
-        } catch (error) {
-            errors.push({
-                phone: target.phone,
-                error: error.failures || summarizeEvolutionError(error)
-            });
-        }
     }
 
     return {
-        chats: importedChats,
-        messages: importedMessages,
-        source: chatSource,
+        chats: labelSync.conversations || 0,
+        messages: 0,
+        labels: labelSync.labels,
+        label_associations: labelSync.associations,
+        label_sync: labelSync,
+        source: 'labels',
         warnings,
-        errors
+        errors: [
+            ...errors,
+            ...(Array.isArray(labelSync.errors) ? labelSync.errors : [])
+        ]
     };
 }
 
@@ -2373,7 +2336,7 @@ router.post('/whatsapp/connect', authenticateToken, authorizeRole(['admin', 'ger
                 console.warn('Não foi possível configurar webhook da Evolution:', error.response?.data || error.message);
             });
             await configureInstanceSettings().catch(error => {
-                console.warn('Não foi possível configurar syncFullHistory:', error.response?.data || error.message);
+                console.warn('Não foi possível configurar modo leve da instância:', error.response?.data || error.message);
             });
 
             return res.json({
@@ -2435,7 +2398,7 @@ router.post('/whatsapp/configure-webhook', authenticateToken, authorizeRole(['ad
         const response = await configureInstanceWebhook();
         const settings = await configureInstanceSettings().catch(error => ({
             data: {
-                warning: 'Não foi possível habilitar syncFullHistory.',
+                warning: 'Não foi possível aplicar o modo leve da instância.',
                 details: error.response?.data || error.message
             }
         }));
@@ -2456,33 +2419,14 @@ router.post('/whatsapp/sync', authenticateToken, authorizeRole(['admin', 'gerent
     if (requireEvolutionApiKey(res)) return;
 
     try {
-        const result = await syncEvolutionChatsAndMessages();
-        let labelSync = null;
-
-        try {
-            const labelMirror = await getEvolutionLabelMirror({ force: true });
-            labelSync = await persistLabelMirrorAssociations(labelMirror, req.user.id);
-        } catch (labelError) {
-            labelSync = {
-                labels: 0,
-                associations: 0,
-                changed: 0,
-                errors: [{
-                    message: 'Não foi possível sincronizar etiquetas do WhatsApp.',
-                    error: labelError.failures || summarizeEvolutionError(labelError)
-                }]
-            };
-        }
+        const result = await syncEvolutionLabelsAndContacts(req.user.id);
 
         res.json({
-            message: 'Sincronização solicitada.',
-            ...result,
-            labels: labelSync.labels,
-            label_associations: labelSync.associations,
-            label_sync: labelSync
+            message: 'Sincronização de etiquetas solicitada.',
+            ...result
         });
     } catch (error) {
-        console.error('Erro inesperado ao sincronizar conversas da Evolution:', error.response?.data || error.message);
+        console.error('Erro inesperado ao sincronizar etiquetas da Evolution:', error.response?.data || error.message);
         res.status(200).json({
             message: 'Sincronização executada com avisos.',
             chats: 0,
@@ -2490,7 +2434,7 @@ router.post('/whatsapp/sync', authenticateToken, authorizeRole(['admin', 'gerent
             source: 'none',
             warnings: [{
                 step: 'sync',
-                message: 'Não foi possível consultar o histórico da Evolution agora. Novas mensagens ainda podem chegar pelo webhook.',
+                message: 'Não foi possível consultar etiquetas da Evolution agora.',
                 error: summarizeEvolutionError(error)
             }],
             labels: 0,
@@ -2525,8 +2469,15 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
                    OR wc.client_name LIKE ?
                    OR c.name LIKE ?
                    OR wc.last_message_text LIKE ?
+                   OR EXISTS (
+                        SELECT 1
+                        FROM whatsapp_conversation_tags wct
+                        JOIN whatsapp_tags wt ON wt.id = wct.tag_id
+                        WHERE wct.conversation_id = wc.id
+                          AND wt.name LIKE ?
+                   )
             `;
-            params.push(searchLike, searchLike, searchLike, searchLike, searchLike);
+            params.push(searchLike, searchLike, searchLike, searchLike, searchLike, searchLike);
         }
 
         const conversations = await dbAll(
@@ -2544,50 +2495,17 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
 
         const visibleConversations = conversations.filter(item => isLikelyWhatsappPhone(item.phone));
         const conversationIds = visibleConversations.map(item => item.id);
-        let links = [];
-
-        if (conversationIds.length) {
-            const placeholders = conversationIds.map(() => '?').join(',');
-            links = await dbAll(
-                `SELECT
-                    wco.conversation_id,
-                    o.id,
-                    o.tracking_code,
-                    o.client_name,
-                    o.status,
-                    o.total_price,
-                    o.delivery_date,
-                    wco.created_at AS linked_at
-                 FROM whatsapp_conversation_orders wco
-                 JOIN orders o ON o.id = wco.order_id
-                 WHERE wco.conversation_id IN (${placeholders})
-                 ORDER BY wco.created_at DESC`,
-                conversationIds
-            );
-        }
-
-        const linksByConversation = links.reduce((map, link) => {
-            const current = map.get(link.conversation_id) || [];
-            current.push(link);
-            map.set(link.conversation_id, current);
-            return map;
-        }, new Map());
-
         const localTagsByConversation = await getLocalTagsForConversations(conversationIds);
-        const labelMirror = await getEvolutionLabelMirrorForInbox();
 
         res.json({
             conversations: visibleConversations.map(item => {
-                const nativeTags = labelMirror.tagsByPhone.get(normalizePhone(item.phone))
-                    || labelMirror.tagsByJid.get(item.remote_jid)
-                    || [];
                 const localTags = localTagsByConversation.get(item.id) || [];
 
                 return {
                     ...item,
                     client_name: item.matched_client_name || item.client_name || '',
-                    linked_orders: linksByConversation.get(item.id) || [],
-                    tags: mergeConversationTags(localTags, nativeTags).map(tag => ({
+                    linked_orders: [],
+                    tags: mergeConversationTags(localTags).map(tag => ({
                         id: tag.id,
                         name: tag.name,
                         color: tag.color,
@@ -2605,25 +2523,10 @@ router.get('/whatsapp/labels', authenticateToken, async (req, res) => {
     if (requireEvolutionApiKey(res)) return;
 
     try {
-        let labels = await fetchEvolutionLabels();
-        if (!labels.length) labels = await fetchEvolutionLabelsFromChats();
-        const formattedLabels = formatEvolutionLabels(labels);
-        res.json({ tags: formattedLabels, labels: formattedLabels });
+        const { labels, warning } = await loadAvailableWhatsappLabels();
+        res.json({ tags: labels, labels, warning });
     } catch (error) {
-        console.error('Erro ao buscar etiquetas oficiais do WhatsApp:', error.failures || summarizeEvolutionError(error));
-        try {
-            const labels = await fetchEvolutionLabelsFromChats();
-            const formattedLabels = formatEvolutionLabels(labels);
-            return res.json({ tags: formattedLabels, labels: formattedLabels });
-        } catch (chatError) {
-            console.error('Erro ao buscar etiquetas embutidas nas conversas:', chatError.failures || summarizeEvolutionError(chatError));
-            return res.status(502).json({
-                error: 'Não foi possível buscar as etiquetas oficiais do WhatsApp.',
-                details: chatError.failures || error.failures || summarizeEvolutionError(chatError),
-                tags: [],
-                labels: []
-            });
-        }
+        res.status(500).json({ error: error.message, tags: [], labels: [] });
     }
 });
 
@@ -2631,25 +2534,10 @@ router.get('/whatsapp/tags', authenticateToken, async (req, res) => {
     if (requireEvolutionApiKey(res)) return;
 
     try {
-        let labels = await fetchEvolutionLabels();
-        if (!labels.length) labels = await fetchEvolutionLabelsFromChats();
-        const formattedLabels = formatEvolutionLabels(labels);
-        res.json({ tags: formattedLabels, labels: formattedLabels });
+        const { labels, warning } = await loadAvailableWhatsappLabels();
+        res.json({ tags: labels, labels, warning });
     } catch (error) {
-        console.error('Erro ao buscar etiquetas oficiais do WhatsApp:', error.failures || summarizeEvolutionError(error));
-        try {
-            const labels = await fetchEvolutionLabelsFromChats();
-            const formattedLabels = formatEvolutionLabels(labels);
-            return res.json({ tags: formattedLabels, labels: formattedLabels });
-        } catch (chatError) {
-            console.error('Erro ao buscar etiquetas embutidas nas conversas:', chatError.failures || summarizeEvolutionError(chatError));
-            return res.status(502).json({
-                error: 'Não foi possível buscar as etiquetas oficiais do WhatsApp.',
-                details: chatError.failures || error.failures || summarizeEvolutionError(chatError),
-                tags: [],
-                labels: []
-            });
-        }
+        res.status(500).json({ error: error.message, tags: [], labels: [] });
     }
 });
 
