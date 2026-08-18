@@ -588,6 +588,17 @@ const WhatsappDashboard = () => {
         ))
     );
 
+    const getMetaCapiFeedback = (metaCapi) => {
+        if (!metaCapi) return '';
+        if (metaCapi.sent) return ' Evento enviado para Meta CAPI.';
+        if (metaCapi.reason === 'already_sent') return ' Meta CAPI ja havia sido enviada.';
+        if (metaCapi.reason === 'missing_config') return ' Meta CAPI sem Pixel ID ou token.';
+        if (metaCapi.reason === 'missing_user_data') return ' Meta CAPI sem telefone ou e-mail valido.';
+        if (metaCapi.reason === 'label_not_qualified') return '';
+        if (metaCapi.skipped) return ' Meta CAPI nao enviada.';
+        return ' Meta CAPI falhou; verifique os logs do servidor.';
+    };
+
     const handleApplyWhatsappLabel = async (label) => {
         if (!selectedConversation || !label?.id) return;
 
@@ -619,7 +630,7 @@ const WhatsappDashboard = () => {
                     tags: [...(Array.isArray(conversation.tags) ? conversation.tags : []), appliedLabel]
                 };
             }));
-            setSuccess('Etiqueta aplicada no WhatsApp Business.');
+            setSuccess(`Etiqueta aplicada no WhatsApp Business.${getMetaCapiFeedback(response.data?.meta_capi)}`);
         } catch (requestError) {
             setError(requestError.response?.data?.error || 'Não foi possível aplicar a etiqueta no WhatsApp Business.');
         } finally {

@@ -12,6 +12,10 @@ const {
     buildEvolutionTextPayload,
     getEvolutionDiagnostics
 } = require('../config/evolution');
+const {
+    sendQualifiedLeadEvent,
+    isQualifiedLeadLabel
+} = require('../services/metaCapiService');
 
 const router = express.Router();
 let QRCode = null;
@@ -764,6 +768,67 @@ async function getLinkedOrders(conversationId) {
          ORDER BY wco.created_at DESC`,
         [conversationId]
     );
+}
+
+async function findClientForMetaLead(conversation) {
+    if (!conversation) return null;
+
+    if (conversation.client_id) {
+        const client = await dbGet(
+            `SELECT id, name, phone, email FROM clients WHERE id = ?`,
+            [conversation.client_id]
+        );
+
+        if (client) return client;
+    }
+
+    const clients = await dbAll(
+        `SELECT id, name, phone, email
+         FROM clients
+         WHERE phone IS NOT NULL
+           AND phone <> ''`
+    );
+
+    return clients.find(client => phoneLooksSame(client.phone, conversation.phone)) || null;
+}
+
+async function sendQualifiedLeadToMetaIfNeeded(conversation, label, userId) {
+    if (!isQualifiedLeadLabel(label)) {
+        return {
+            sent: false,
+            skipped: true,
+            reason: 'label_not_qualified'
+        };
+    }
+
+    try {
+        const client = await findClientForMetaLead(conversation);
+        const phone = client?.phone || conversation?.phone || '';
+        const email = client?.email || '';
+
+        return await sendQualifiedLeadEvent(
+            {
+                leadId: conversation.id,
+                phone,
+                email
+            },
+            {
+                source: 'whatsapp',
+                sourceId: String(conversation.id),
+                conversationId: conversation.id,
+                clientId: client?.id || conversation.client_id || null,
+                createdByUserId: userId || null,
+                eventId: `whatsapp-qualified-lead-${conversation.id}`
+            }
+        );
+    } catch (error) {
+        console.error('Erro ao enviar lead qualificado do WhatsApp para Meta CAPI:', error.metaCapi || error.message);
+        return error.metaCapi || {
+            sent: false,
+            skipped: false,
+            error: error.message
+        };
+    }
 }
 
 async function persistIncomingMessage(incoming, payload, options = {}) {
@@ -2303,6 +2368,39 @@ router.post('/whatsapp/add-label', authenticateToken, async (req, res) => {
 
         clearEvolutionLabelMirrorCache();
 
+        let metaCapi = {
+            sent: false,
+            skipped: true,
+            reason: 'label_not_qualified'
+        };
+
+        if (isQualifiedLeadLabel(selectedLabel)) {
+            try {
+                const metaPhone = normalizePhone(phone || finalRemoteJid.split('@')[0]);
+
+                if (!metaPhone || !isLikelyWhatsappPhone(metaPhone)) {
+                    metaCapi = {
+                        sent: false,
+                        skipped: true,
+                        reason: 'invalid_phone'
+                    };
+                } else {
+                    const updatedConversation = await ensureConversation(metaPhone, {
+                        remoteJid: finalRemoteJid
+                    });
+
+                    metaCapi = await sendQualifiedLeadToMetaIfNeeded(updatedConversation, selectedLabel, req.user.id);
+                }
+            } catch (metaError) {
+                console.error('Erro ao preparar lead qualificado do WhatsApp para Meta CAPI:', metaError.metaCapi || metaError.message);
+                metaCapi = metaError.metaCapi || {
+                    sent: false,
+                    skipped: false,
+                    error: metaError.message
+                };
+            }
+        }
+
         res.json({
             message: 'Etiqueta aplicada no WhatsApp Business.',
             label: {
@@ -2311,6 +2409,7 @@ router.post('/whatsapp/add-label', authenticateToken, async (req, res) => {
                 color: selectedLabel.color,
                 evolution_label_id: selectedLabel.id
             },
+            meta_capi: metaCapi,
             provider: result.response.data,
             attempt: result.attempt
         });

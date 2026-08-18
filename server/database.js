@@ -177,6 +177,32 @@ function createTables() {
     db.run(`CREATE INDEX IF NOT EXISTS idx_whatsapp_conversation_orders_conversation ON whatsapp_conversation_orders(conversation_id)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_whatsapp_conversation_orders_order ON whatsapp_conversation_orders(order_id)`);
 
+    db.run(`CREATE TABLE IF NOT EXISTS meta_capi_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        conversation_id INTEGER,
+        client_id INTEGER,
+        created_by_user_id INTEGER,
+        event_name TEXT NOT NULL,
+        event_time INTEGER NOT NULL,
+        event_id TEXT,
+        email_hash TEXT,
+        phone_hash TEXT,
+        request_payload TEXT,
+        response_payload TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        error TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(source, event_name, source_id),
+        FOREIGN KEY (conversation_id) REFERENCES whatsapp_conversations(id) ON DELETE SET NULL,
+        FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    )`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_meta_capi_events_status ON meta_capi_events(status)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_meta_capi_events_conversation ON meta_capi_events(conversation_id)`);
+
     db.run(`CREATE TABLE IF NOT EXISTS order_product_lines (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         order_id INTEGER NOT NULL,
