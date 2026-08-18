@@ -1,5 +1,9 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+
+const DEV_JWT_SECRET_PATH = path.join(__dirname, '..', '.dev-jwt-secret');
 
 function resolveJwtSecret() {
     if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
@@ -8,8 +12,20 @@ function resolveJwtSecret() {
         throw new Error('JWT_SECRET é obrigatório em produção.');
     }
 
-    console.warn('JWT_SECRET não definido. Usando segredo temporário apenas para desenvolvimento local.');
-    return crypto.randomBytes(32).toString('hex');
+    try {
+        if (fs.existsSync(DEV_JWT_SECRET_PATH)) {
+            const savedSecret = fs.readFileSync(DEV_JWT_SECRET_PATH, 'utf8').trim();
+            if (savedSecret) return savedSecret;
+        }
+
+        const generatedSecret = crypto.randomBytes(32).toString('hex');
+        fs.writeFileSync(DEV_JWT_SECRET_PATH, generatedSecret, { mode: 0o600 });
+        console.warn('JWT_SECRET não definido. Gerado segredo persistente para desenvolvimento local.');
+        return generatedSecret;
+    } catch (error) {
+        console.warn('JWT_SECRET não definido. Usando segredo temporário apenas para esta execução local.', error.message);
+        return crypto.randomBytes(32).toString('hex');
+    }
 }
 
 const JWT_SECRET = resolveJwtSecret();

@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+server/.dev-jwt-secret
 
 # Dependencies
 node_modules/

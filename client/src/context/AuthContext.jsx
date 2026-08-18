@@ -3,7 +3,12 @@ import React, { createContext, useCallback, useState, useEffect, useContext } fr
 const AuthContext = createContext();
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou. Faça login novamente.';
 const AUTH_NOTICE_KEY = 'auth_notice';
+const AUTH_API_BASE_URL_KEY = 'auth_api_base_url';
 const PRODUCTION_API_BASE_URL = 'https://atosfardamentos.com.br/api';
+
+const isProductionHost = (hostname) => (
+    hostname === 'atosfardamentos.com.br' || hostname === 'www.atosfardamentos.com.br'
+);
 
 const resolveApiBaseUrl = () => {
     const envUrl = import.meta.env.VITE_API_BASE_URL;
@@ -12,7 +17,7 @@ const resolveApiBaseUrl = () => {
     if (typeof window === 'undefined') return PRODUCTION_API_BASE_URL;
 
     const { hostname } = window.location;
-    if (hostname === 'atosfardamentos.com.br' || hostname === 'www.atosfardamentos.com.br') {
+    if (isProductionHost(hostname)) {
         return PRODUCTION_API_BASE_URL;
     }
 
@@ -64,6 +69,7 @@ export const AuthProvider = ({ children }) => {
     const clearSession = () => {
         sessionStorage.removeItem('token');
         sessionStorage.removeItem('user');
+        sessionStorage.removeItem(AUTH_API_BASE_URL_KEY);
     };
 
     // 3. Função de Logout
@@ -87,9 +93,17 @@ export const AuthProvider = ({ children }) => {
             try {
                 const storedToken = sessionStorage.getItem('token');
                 const storedUser = sessionStorage.getItem('user');
+                const storedApiBaseUrl = sessionStorage.getItem(AUTH_API_BASE_URL_KEY);
 
                 if (storedToken && storedUser) {
-                    if (isTokenExpired(storedToken)) {
+                    const isLocalHost = typeof window !== 'undefined' && !isProductionHost(window.location.hostname);
+                    const sessionFromDifferentApi = storedApiBaseUrl && storedApiBaseUrl !== API_BASE_URL;
+                    const legacyLocalSession = isLocalHost && !storedApiBaseUrl;
+
+                    if (sessionFromDifferentApi || legacyLocalSession) {
+                        clearSession();
+                        sessionStorage.setItem(AUTH_NOTICE_KEY, 'Sua sessão era de outro servidor. Faça login novamente neste ambiente.');
+                    } else if (isTokenExpired(storedToken)) {
                         clearSession();
                         sessionStorage.setItem(AUTH_NOTICE_KEY, SESSION_EXPIRED_MESSAGE);
                     } else {
@@ -153,7 +167,7 @@ export const AuthProvider = ({ children }) => {
                     const isAuthProblem = status === 401 || message.includes('token') || message.includes('jwt');
 
                     if (hasActiveSession && isAuthProblem) {
-                        logout(SESSION_EXPIRED_MESSAGE);
+                        logout(status === 403 ? 'Sessão inválida neste servidor. Faça login novamente.' : SESSION_EXPIRED_MESSAGE);
                     }
 
                     return Promise.reject(error);
@@ -176,6 +190,7 @@ export const AuthProvider = ({ children }) => {
         try {
             sessionStorage.setItem('token', newToken);
             sessionStorage.setItem('user', JSON.stringify(userData));
+            sessionStorage.setItem(AUTH_API_BASE_URL_KEY, API_BASE_URL);
             
             setToken(newToken);
             setUser(userData);
