@@ -3,6 +3,21 @@ import React, { createContext, useCallback, useState, useEffect, useContext } fr
 const AuthContext = createContext();
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou. Faça login novamente.';
 const AUTH_NOTICE_KEY = 'auth_notice';
+const PRODUCTION_API_BASE_URL = 'https://atosfardamentos.com.br/api';
+
+const resolveApiBaseUrl = () => {
+    const envUrl = import.meta.env.VITE_API_BASE_URL;
+    if (envUrl) return String(envUrl).replace(/\/+$/, '');
+
+    if (typeof window === 'undefined') return PRODUCTION_API_BASE_URL;
+
+    const { hostname } = window.location;
+    if (hostname === 'atosfardamentos.com.br' || hostname === 'www.atosfardamentos.com.br') {
+        return PRODUCTION_API_BASE_URL;
+    }
+
+    return `http://${hostname || 'localhost'}:3001/api`;
+};
 
 const getTokenExpirationTime = (jwtToken) => {
     try {
@@ -44,7 +59,7 @@ export const AuthProvider = ({ children }) => {
     // ------------------------------------------
 
     // Endereço do Backend
-    const API_BASE_URL = 'https://atosfardamentos.com.br/api';
+    const API_BASE_URL = resolveApiBaseUrl();
 
     const clearSession = () => {
         sessionStorage.removeItem('token');

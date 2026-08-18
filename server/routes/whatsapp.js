@@ -1,10 +1,17 @@
 const express = require('express');
-const axios = require('axios');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const db = require('../database');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
+const {
+    EVOLUTION_API_KEY,
+    EVOLUTION_INSTANCE,
+    EVOLUTION_WEBHOOK_URL,
+    createEvolutionClient,
+    buildEvolutionTextPayload,
+    getEvolutionDiagnostics
+} = require('../config/evolution');
 
 const router = express.Router();
 let QRCode = null;
@@ -15,11 +22,6 @@ try {
     console.warn('Pacote qrcode não instalado. Rode npm install no server para gerar QR Code quando a Evolution retornar apenas o código bruto.');
 }
 
-const EVOLUTION_BASE_URL = process.env.EVOLUTION_BASE_URL || 'http://127.0.0.1:8080';
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
-const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE || 'AtosVendas';
-const PUBLIC_APP_URL = (process.env.PUBLIC_APP_URL || 'https://atosfardamentos.com.br').replace(/\/+$/, '');
-const EVOLUTION_WEBHOOK_URL = process.env.EVOLUTION_WEBHOOK_URL || `${PUBLIC_APP_URL}/api/whatsapp/webhook`;
 const EVOLUTION_WEBHOOK_EVENTS = [
     'MESSAGES_SET',
     'MESSAGES_UPSERT',
@@ -106,14 +108,7 @@ db.run(`
     );
 });
 
-const evolution = axios.create({
-    baseURL: EVOLUTION_BASE_URL,
-    timeout: 15000,
-    headers: {
-        ...(EVOLUTION_API_KEY ? { apikey: EVOLUTION_API_KEY } : {}),
-        'Content-Type': 'application/json'
-    }
-});
+const evolution = createEvolutionClient();
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, AUDIO_UPLOAD_DIR),
@@ -307,13 +302,24 @@ async function fetchConnectionState() {
 }
 
 function handleEvolutionError(res, error, fallbackMessage) {
-    const status = error.response?.status || 502;
+    const status = error.response?.status || (['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNABORTED'].includes(error.code) ? 503 : 502);
     const details = error.failures || error.response?.data || error.message;
 
     return res.status(status).json({
         error: fallbackMessage,
-        details
+        details,
+        config: getEvolutionDiagnostics()
     });
+}
+
+function requireEvolutionApiKey(res) {
+    if (EVOLUTION_API_KEY) return false;
+
+    res.status(400).json({
+        error: 'Chave da Evolution API não configurada. Defina EVOLUTION_API_KEY ou AUTHENTICATION_API_KEY.',
+        config: getEvolutionDiagnostics()
+    });
+    return true;
 }
 
 function isInstanceNotFound(error) {
@@ -841,13 +847,10 @@ async function persistOutgoingMessage(phone, body, userId = null, rawPayload = n
 
 async function sendTextMessage(phone, text) {
     const normalizedPhone = normalizePhone(phone);
-    
-    const payload = {
-        number: normalizedPhone,
-        text: text,
+    const payload = buildEvolutionTextPayload(normalizedPhone, text, {
         delay: 1000,
         linkPreview: true
-    };
+    });
 
     try {
         const response = await evolution.post(`/message/sendText/${EVOLUTION_INSTANCE}`, payload);
@@ -1685,6 +1688,38 @@ async function getEvolutionLabelMirror() {
     return evolutionLabelMirrorCache;
 }
 
+function setEmptyEvolutionLabelMirrorCache(ttlMs = EVOLUTION_LABEL_CACHE_MS) {
+    evolutionLabelMirrorCache = {
+        expiresAt: Date.now() + ttlMs,
+        labels: [],
+        tagsByPhone: new Map(),
+        tagsByJid: new Map()
+    };
+
+    return evolutionLabelMirrorCache;
+}
+
+async function getEvolutionLabelMirrorForInbox() {
+    if (!EVOLUTION_API_KEY) {
+        return setEmptyEvolutionLabelMirrorCache();
+    }
+
+    if (evolutionLabelMirrorCache.expiresAt > Date.now()) {
+        return evolutionLabelMirrorCache;
+    }
+
+    return Promise.race([
+        getEvolutionLabelMirror().catch((error) => {
+            console.warn('Não foi possível buscar etiquetas da Evolution para a caixa de entrada:', error.failures || summarizeEvolutionError(error));
+            return setEmptyEvolutionLabelMirrorCache();
+        }),
+        wait(2500).then(() => {
+            console.warn('Busca de etiquetas da Evolution excedeu 2.5s; exibindo conversas locais sem etiquetas remotas.');
+            return setEmptyEvolutionLabelMirrorCache();
+        })
+    ]);
+}
+
 function normalizeChatTarget(chat) {
     const remoteJid = extractChatRemoteJid(chat);
     const phone = normalizePhone(chat?.phone || chat?.number || remoteJid.split('@')[0]);
@@ -1910,12 +1945,29 @@ async function syncEvolutionChatsAndMessages() {
 }
 
 router.get('/whatsapp/status', authenticateToken, async (req, res) => {
+    if (!EVOLUTION_API_KEY) {
+        return res.json({
+            status: 'close',
+            configured: false,
+            config: getEvolutionDiagnostics(),
+            error: 'Chave da Evolution API não configurada.'
+        });
+    }
+
     try {
         const state = await fetchConnectionState();
-        res.json({ status: state.status });
+        res.json({
+            status: state.status,
+            configured: true,
+            config: getEvolutionDiagnostics()
+        });
     } catch (error) {
         if (isInstanceNotFound(error)) {
-            return res.json({ status: 'close' });
+            return res.json({
+                status: 'close',
+                configured: true,
+                config: getEvolutionDiagnostics()
+            });
         }
 
         handleEvolutionError(res, error, 'Não foi possível consultar o status da Evolution API.');
@@ -1923,6 +1975,8 @@ router.get('/whatsapp/status', authenticateToken, async (req, res) => {
 });
 
 router.post('/whatsapp/connect', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+    if (requireEvolutionApiKey(res)) return;
+
     try {
         const currentState = await fetchConnectionState().catch((error) => {
             if (error.response?.status === 404) return null;
@@ -1941,7 +1995,8 @@ router.post('/whatsapp/connect', authenticateToken, authorizeRole(['admin', 'ger
                 status: 'open',
                 qrcode: '',
                 base64: '',
-                message: 'Instância já conectada.'
+                message: 'Instância já conectada.',
+                config: getEvolutionDiagnostics()
             });
         }
 
@@ -2007,7 +2062,8 @@ router.post('/whatsapp/connect', authenticateToken, authorizeRole(['admin', 'ger
             message: qrcode
                 ? 'QR Code gerado.'
                 : 'A Evolution API respondeu, mas não retornou o código do QR Code.',
-            details: qrcode ? undefined : response?.data
+            details: qrcode ? undefined : response?.data,
+            config: getEvolutionDiagnostics()
         });
     } catch (error) {
         handleEvolutionError(res, error, 'Não foi possível gerar o QR Code da instância WhatsApp.');
@@ -2015,6 +2071,8 @@ router.post('/whatsapp/connect', authenticateToken, authorizeRole(['admin', 'ger
 });
 
 router.post('/whatsapp/configure-webhook', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+    if (requireEvolutionApiKey(res)) return;
+
     try {
         const response = await configureInstanceWebhook();
         const settings = await configureInstanceSettings().catch(error => ({
@@ -2037,6 +2095,8 @@ router.post('/whatsapp/configure-webhook', authenticateToken, authorizeRole(['ad
 });
 
 router.post('/whatsapp/sync', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+    if (requireEvolutionApiKey(res)) return;
+
     try {
         const result = await syncEvolutionChatsAndMessages();
         res.json({
@@ -2132,7 +2192,7 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
             return map;
         }, new Map());
 
-        const labelMirror = await getEvolutionLabelMirror();
+        const labelMirror = await getEvolutionLabelMirrorForInbox();
 
         res.json({
             conversations: visibleConversations.map(item => {
@@ -2158,6 +2218,8 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
 });
 
 router.get('/whatsapp/labels', authenticateToken, async (req, res) => {
+    if (requireEvolutionApiKey(res)) return;
+
     try {
         let labels = await fetchEvolutionLabels();
         if (!labels.length) labels = await fetchEvolutionLabelsFromChats();
@@ -2182,6 +2244,8 @@ router.get('/whatsapp/labels', authenticateToken, async (req, res) => {
 });
 
 router.get('/whatsapp/tags', authenticateToken, async (req, res) => {
+    if (requireEvolutionApiKey(res)) return;
+
     try {
         let labels = await fetchEvolutionLabels();
         if (!labels.length) labels = await fetchEvolutionLabelsFromChats();
@@ -2206,6 +2270,8 @@ router.get('/whatsapp/tags', authenticateToken, async (req, res) => {
 });
 
 router.post('/whatsapp/add-label', authenticateToken, async (req, res) => {
+    if (requireEvolutionApiKey(res)) return;
+
     try {
         const phone = normalizePhone(req.body?.phone || '');
         const remoteJid = normalizeWhatsappJid(req.body?.jid || req.body?.remoteJid || '');
@@ -2298,6 +2364,8 @@ router.get('/whatsapp/conversations/:phone/messages', authenticateToken, async (
 });
 
 router.post('/whatsapp/conversations/:phone/send', authenticateToken, async (req, res) => {
+    if (requireEvolutionApiKey(res)) return;
+
     try {
         const phone = normalizePhone(req.params.phone);
         const text = String(req.body.text || '').trim();
@@ -2422,6 +2490,8 @@ router.delete('/whatsapp/conversations/:phone/orders/:orderId', authenticateToke
 });
 
 router.delete('/whatsapp/logout', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+    if (requireEvolutionApiKey(res)) return;
+
     try {
         await evolution.delete(`/instance/logout/${EVOLUTION_INSTANCE}`);
         res.json({

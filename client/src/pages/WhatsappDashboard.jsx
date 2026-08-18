@@ -135,6 +135,19 @@ function formatDateTime(value) {
     });
 }
 
+function formatMessageBody(message) {
+    const body = String(message?.body || '').trim();
+    if (body) return body;
+
+    const type = String(message?.message_type || '').toLowerCase();
+    if (type.includes('audio')) return '[Audio]';
+    if (type.includes('image')) return '[Imagem]';
+    if (type.includes('video')) return '[Video]';
+    if (type.includes('document')) return '[Documento]';
+
+    return 'Mensagem sem texto';
+}
+
 function orderOptionLabel(order) {
     if (!order) return '';
     const code = order.tracking_code || `Pedido ${order.id}`;
@@ -159,15 +172,21 @@ const WhatsappDashboard = () => {
     const [delaySeconds, setDelaySeconds] = useState(3);
     const [audioFile, setAudioFile] = useState(null);
     const [savedAudioName, setSavedAudioName] = useState('');
+    const [evolutionInfo, setEvolutionInfo] = useState(null);
 
     const [conversations, setConversations] = useState([]);
+    const [messages, setMessages] = useState([]);
     const [selectedPhone, setSelectedPhone] = useState('');
+    const [replyText, setReplyText] = useState('');
     const [linkedOrders, setLinkedOrders] = useState([]);
     const [orders, setOrders] = useState([]);
     const [conversationSearch, setConversationSearch] = useState('');
     const [orderSearch, setOrderSearch] = useState('');
     const [selectedOrderId, setSelectedOrderId] = useState('');
     const [loadingConversations, setLoadingConversations] = useState(false);
+    const [loadingMessages, setLoadingMessages] = useState(false);
+    const [sendingMessage, setSendingMessage] = useState(false);
+    const [syncingConversations, setSyncingConversations] = useState(false);
     const [linking, setLinking] = useState(false);
     const [officialLabels, setOfficialLabels] = useState([]);
     const [labelActionLoading, setLabelActionLoading] = useState('');
@@ -179,6 +198,7 @@ const WhatsappDashboard = () => {
     const currentStatus = STATUS_META[status] || STATUS_META.close;
     const isConnected = status === 'open';
     const selectedConversation = conversations.find(item => item.phone === selectedPhone) || null;
+    const visibleLinkedOrders = selectedConversation ? linkedOrders : [];
     const shouldLoadConversations = activeView === 'inbox' || activeView === 'funnel';
 
     const conversationsWithFunnelStage = useMemo(() => (
@@ -208,8 +228,6 @@ const WhatsappDashboard = () => {
             icon: Icons.Settings
         }
     ]), []);
-    const activeViewMeta = navigationItems.find(item => item.id === activeView) || navigationItems[0];
-
     const filteredOrders = useMemo(() => {
         const search = orderSearch.trim().toLowerCase();
         return orders
@@ -230,8 +248,13 @@ const WhatsappDashboard = () => {
 
         try {
             const response = await axios.get(`${API_BASE_URL}/whatsapp/status`, authConfig);
+            if (response.data?.config) setEvolutionInfo(response.data.config);
             setStatus(normalizeStatus(response.data?.status));
+            if (response.data?.configured === false && response.data?.error) {
+                setError(previous => previous || response.data.error);
+            }
         } catch (requestError) {
+            if (requestError.response?.data?.config) setEvolutionInfo(requestError.response.data.config);
             setStatus('close');
             setError(requestError.response?.data?.error || 'Não foi possível consultar o WhatsApp agora.');
         } finally {
@@ -289,7 +312,11 @@ const WhatsappDashboard = () => {
             });
             const nextConversations = response.data?.conversations || [];
             setConversations(nextConversations);
-            setSelectedPhone(previous => previous || nextConversations[0]?.phone || '');
+            setSelectedPhone(previous => (
+                previous && nextConversations.some(conversation => conversation.phone === previous)
+                    ? previous
+                    : nextConversations[0]?.phone || ''
+            ));
         } catch (requestError) {
             setError(requestError.response?.data?.error || 'Não foi possível carregar as conversas.');
         } finally {
@@ -299,45 +326,127 @@ const WhatsappDashboard = () => {
 
     const fetchConversationLinks = useCallback(async (phone = selectedPhone, silent = false) => {
         if (!token || !phone) return;
+        if (!silent) setLoadingMessages(true);
 
         try {
             const response = await axios.get(`${API_BASE_URL}/whatsapp/conversations/${phone}/messages`, authConfig);
             setLinkedOrders(response.data?.linked_orders || []);
+            setMessages(response.data?.messages || []);
             if (!silent) await fetchConversations(true);
         } catch (requestError) {
             setError(requestError.response?.data?.error || 'Não foi possível carregar os pedidos vinculados.');
+            setMessages([]);
+        } finally {
+            if (!silent) setLoadingMessages(false);
         }
     }, [API_BASE_URL, authConfig, fetchConversations, selectedPhone, token]);
 
     useEffect(() => {
-        fetchStatus();
-        fetchAutomation();
-        fetchOfficialLabels();
+        const initialLoad = window.setTimeout(() => {
+            fetchStatus();
+            fetchAutomation();
+            fetchOfficialLabels();
+        }, 0);
 
         const interval = window.setInterval(fetchStatus, 12000);
-        return () => window.clearInterval(interval);
+        return () => {
+            window.clearTimeout(initialLoad);
+            window.clearInterval(interval);
+        };
     }, [fetchAutomation, fetchOfficialLabels, fetchStatus]);
 
     useEffect(() => {
         if (!shouldLoadConversations) return undefined;
 
-        fetchConversations();
-        fetchOrders();
+        const initialLoad = window.setTimeout(() => {
+            fetchConversations();
+            fetchOrders();
+        }, 0);
 
         const interval = window.setInterval(() => fetchConversations(true), 3000);
-        return () => window.clearInterval(interval);
+        return () => {
+            window.clearTimeout(initialLoad);
+            window.clearInterval(interval);
+        };
     }, [fetchConversations, fetchOrders, shouldLoadConversations]);
 
     useEffect(() => {
         if (activeView !== 'inbox' || !selectedPhone) {
-            setLinkedOrders([]);
             return undefined;
         }
 
-        fetchConversationLinks(selectedPhone);
+        const initialLoad = window.setTimeout(() => fetchConversationLinks(selectedPhone), 0);
 
-        return undefined;
+        const interval = window.setInterval(() => fetchConversationLinks(selectedPhone, true), 5000);
+        return () => {
+            window.clearTimeout(initialLoad);
+            window.clearInterval(interval);
+        };
     }, [activeView, fetchConversationLinks, selectedPhone]);
+
+    const handleSyncConversations = async () => {
+        if (!token || syncingConversations) return;
+
+        setSyncingConversations(true);
+        setError('');
+        setSuccess('');
+
+        try {
+            const response = await axios.post(`${API_BASE_URL}/whatsapp/sync`, {}, authConfig);
+            const importedChats = Number(response.data?.chats || 0);
+            const importedMessages = Number(response.data?.messages || 0);
+            const warnings = Array.isArray(response.data?.warnings) ? response.data.warnings.length : 0;
+
+            setSuccess(`Sincronização concluída: ${importedChats} conversa(s) e ${importedMessages} mensagem(ns).${warnings ? ' Houve aviso(s) da Evolution API.' : ''}`);
+            await fetchConversations();
+            if (selectedPhone) await fetchConversationLinks(selectedPhone, true);
+        } catch (requestError) {
+            if (requestError.response?.data?.config) setEvolutionInfo(requestError.response.data.config);
+            setError(requestError.response?.data?.error || 'Não foi possível sincronizar as conversas agora.');
+        } finally {
+            setSyncingConversations(false);
+        }
+    };
+
+    const handleSendConversationMessage = async (event) => {
+        event?.preventDefault?.();
+
+        const text = replyText.trim();
+        if (!selectedPhone || !text || sendingMessage) return;
+
+        if (!isConnected) {
+            setError('Conecte a sessão WhatsApp antes de enviar mensagens.');
+            return;
+        }
+
+        setSendingMessage(true);
+        setError('');
+        setSuccess('');
+
+        try {
+            await axios.post(
+                `${API_BASE_URL}/whatsapp/conversations/${selectedPhone}/send`,
+                { text },
+                authConfig
+            );
+            setReplyText('');
+            setSuccess('Mensagem enviada.');
+            await fetchConversationLinks(selectedPhone, true);
+            await fetchConversations(true);
+        } catch (requestError) {
+            if (requestError.response?.data?.config) setEvolutionInfo(requestError.response.data.config);
+            setError(requestError.response?.data?.error || 'Não foi possível enviar a mensagem.');
+        } finally {
+            setSendingMessage(false);
+        }
+    };
+
+    const handleReplyKeyDown = (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            handleSendConversationMessage();
+        }
+    };
 
     const handleConnect = async () => {
         setActionLoading('connect');
@@ -347,6 +456,7 @@ const WhatsappDashboard = () => {
 
         try {
             const response = await axios.post(`${API_BASE_URL}/whatsapp/connect`, {}, authConfig);
+            if (response.data?.config) setEvolutionInfo(response.data.config);
             const nextQrCode = normalizeQrImage(response.data?.qrcode || response.data?.base64 || '');
             const nextStatus = normalizeStatus(response.data?.status || (nextQrCode ? 'connecting' : 'close'));
 
@@ -361,6 +471,7 @@ const WhatsappDashboard = () => {
                 setError(response.data?.message || 'A Evolution API respondeu, mas não retornou um QR Code.');
             }
         } catch (requestError) {
+            if (requestError.response?.data?.config) setEvolutionInfo(requestError.response.data.config);
             setError(requestError.response?.data?.error || 'Erro ao gerar QR Code.');
         } finally {
             setActionLoading('');
@@ -516,15 +627,42 @@ const WhatsappDashboard = () => {
         }
     };
 
+    const renderMessageBubble = (chatMessage) => {
+        const outgoing = chatMessage.direction === 'outgoing';
+        const body = formatMessageBody(chatMessage);
+
+        return (
+            <div key={chatMessage.id || `${chatMessage.direction}-${chatMessage.created_at}`} className={`flex ${outgoing ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[82%] rounded-lg px-4 py-3 shadow-sm ${outgoing ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white text-slate-800'}`}>
+                    <p className="whitespace-pre-wrap break-words text-sm font-medium leading-6">{body}</p>
+                    <p className={`mt-2 text-[11px] font-bold ${outgoing ? 'text-blue-100' : 'text-slate-400'}`}>
+                        {formatDateTime(chatMessage.created_at) || 'Sem horário'}
+                        {chatMessage.sent_by_name ? ` · ${chatMessage.sent_by_name}` : ''}
+                    </p>
+                </div>
+            </div>
+        );
+    };
+
     const renderConversations = () => (
         <div className="flex-1 flex h-full flex-col gap-3 overflow-hidden p-3 lg:flex-row lg:gap-4 lg:p-4">
-            <section className="flex-1 min-w-0 flex flex-col bg-white border border-slate-200 rounded-lg overflow-hidden h-full">
+            <section className="flex h-full w-full shrink-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white lg:w-[330px]">
                 <div className="shrink-0 border-b border-slate-100 p-4">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-start justify-between gap-3">
                         <div>
                             <h2 className="text-lg font-extrabold text-slate-950">Contatos Capturados (Via Etiquetas)</h2>
                             <p className="mt-1 text-xs font-bold text-slate-500">{conversations.length} contato(s) capturado(s)</p>
                         </div>
+                        <button
+                            type="button"
+                            onClick={handleSyncConversations}
+                            disabled={syncingConversations}
+                            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-extrabold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            title="Sincronizar conversas"
+                        >
+                            {syncingConversations ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" /> : Icons.Refresh}
+                            Sync
+                        </button>
                     </div>
                     <input
                         value={conversationSearch}
@@ -534,7 +672,7 @@ const WhatsappDashboard = () => {
                     />
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 overflow-y-auto p-3 sm:grid-cols-2 xl:grid-cols-3 xl:gap-4 xl:p-4">
+                <div className="flex-1 space-y-2 overflow-y-auto p-3">
                     {loadingConversations ? (
                         <div className="col-span-full flex h-44 items-center justify-center text-sm font-bold text-slate-500">Carregando contatos...</div>
                     ) : conversations.length ? (
@@ -550,7 +688,7 @@ const WhatsappDashboard = () => {
                                     key={conversation.id}
                                     type="button"
                                     onClick={() => setSelectedPhone(conversation.phone)}
-                                    className={`bg-white border border-slate-200 rounded-lg p-4 shadow-sm cursor-pointer hover:border-blue-400 text-left transition ${active ? 'border-blue-500 ring-4 ring-blue-100' : ''}`}
+                                    className={`w-full cursor-pointer rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-400 ${active ? 'border-blue-500 ring-4 ring-blue-100' : ''}`}
                                 >
                                     <div className="flex items-center gap-3">
                                         <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-sm font-extrabold text-slate-500">
@@ -600,6 +738,75 @@ const WhatsappDashboard = () => {
                 </div>
             </section>
 
+            <section className="flex min-h-[460px] flex-1 min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white lg:h-full lg:min-h-0">
+                {selectedConversation ? (
+                    <>
+                        <div className="shrink-0 border-b border-slate-100 p-4 lg:p-5">
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="min-w-0">
+                                    <h2 className="truncate text-lg font-extrabold text-slate-950">
+                                        {selectedConversation.display_name || selectedConversation.push_name || formatPhone(selectedConversation.phone)}
+                                    </h2>
+                                    <p className="mt-1 text-sm font-semibold text-slate-500">{formatPhone(selectedConversation.phone)}</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => fetchConversationLinks(selectedPhone)}
+                                    disabled={loadingMessages}
+                                    className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-extrabold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                    title="Atualizar conversa"
+                                >
+                                    {loadingMessages ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-slate-700" /> : Icons.Refresh}
+                                    Atualizar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4">
+                            {loadingMessages ? (
+                                <div className="flex h-full min-h-[260px] items-center justify-center text-sm font-bold text-slate-500">
+                                    Carregando mensagens...
+                                </div>
+                            ) : messages.length ? (
+                                messages.map(renderMessageBubble)
+                            ) : (
+                                <div className="flex h-full min-h-[260px] items-center justify-center px-6 text-center text-sm font-semibold leading-6 text-slate-500">
+                                    Nenhuma mensagem salva para esta conversa.
+                                </div>
+                            )}
+                        </div>
+
+                        <form onSubmit={handleSendConversationMessage} className="shrink-0 border-t border-slate-100 bg-white p-4">
+                            <label className="sr-only" htmlFor="whatsapp-reply">Mensagem</label>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                                <textarea
+                                    id="whatsapp-reply"
+                                    value={replyText}
+                                    onChange={(event) => setReplyText(event.target.value)}
+                                    onKeyDown={handleReplyKeyDown}
+                                    rows={2}
+                                    placeholder={isConnected ? 'Digite sua resposta...' : 'Conecte o WhatsApp para responder'}
+                                    disabled={!selectedConversation || sendingMessage || !isConnected}
+                                    className="min-h-[52px] flex-1 resize-none rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={!replyText.trim() || sendingMessage || !selectedConversation || !isConnected}
+                                    className="inline-flex h-[52px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {sendingMessage ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : Icons.Message}
+                                    Enviar
+                                </button>
+                            </div>
+                        </form>
+                    </>
+                ) : (
+                    <div className="flex h-full min-h-[360px] items-center justify-center px-6 text-center text-sm font-semibold leading-6 text-slate-500">
+                        Selecione um contato para abrir o histórico e responder pelo WhatsApp.
+                    </div>
+                )}
+            </section>
+
             <aside className="flex max-h-[42dvh] w-full shrink-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white lg:h-full lg:max-h-none lg:w-[320px]">
                 <div className="shrink-0 border-b border-slate-100 p-4 lg:p-5">
                     <h2 className="text-lg font-extrabold text-slate-950">Pedido vinculado</h2>
@@ -645,9 +852,9 @@ const WhatsappDashboard = () => {
 
                     <div>
                         <h3 className="mb-3 text-sm font-extrabold text-slate-700">Pedidos anexados</h3>
-                        {linkedOrders.length ? (
+                        {visibleLinkedOrders.length ? (
                             <div className="space-y-2">
-                                {linkedOrders.map(order => (
+                                {visibleLinkedOrders.map(order => (
                                     <div key={order.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                                         <div className="flex items-start justify-between gap-2">
                                             <div>
@@ -847,6 +1054,23 @@ const WhatsappDashboard = () => {
                         <span className={`h-4 w-4 rounded-full ${currentStatus.dot}`} />
                     </div>
                 </div>
+
+                {evolutionInfo ? (
+                    <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                        <p className="mb-3 text-xs font-extrabold uppercase tracking-wide text-slate-500">Configuração Evolution</p>
+                        <div className="space-y-2 text-xs font-semibold leading-5 text-slate-600">
+                            <p><strong className="text-slate-800">Base:</strong> {evolutionInfo.baseUrl || 'Não definida'}</p>
+                            <p><strong className="text-slate-800">Instância:</strong> {evolutionInfo.instance || 'Não definida'}</p>
+                            <p><strong className="text-slate-800">Webhook:</strong> {evolutionInfo.webhookUrl || 'Não definido'}</p>
+                            <p>
+                                <strong className="text-slate-800">Chave:</strong>{' '}
+                                <span className={evolutionInfo.hasApiKey ? 'text-emerald-700' : 'text-red-700'}>
+                                    {evolutionInfo.hasApiKey ? `carregada (${evolutionInfo.apiKeySource || 'ambiente'})` : 'não encontrada'}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                ) : null}
 
                 <div className="flex min-h-[330px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
                     {qrcode && !isConnected ? (

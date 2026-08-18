@@ -1,5 +1,4 @@
 const express = require('express');
-const axios = require('axios');
 const router = express.Router();
 const db = require('../database');
 const multer = require('multer');
@@ -7,6 +6,12 @@ const fs = require('fs');
 const archiver = require('archiver');
 const crypto = require('crypto');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
+const {
+    EVOLUTION_API_KEY,
+    EVOLUTION_INSTANCE,
+    createEvolutionClient,
+    buildEvolutionTextPayload
+} = require('../config/evolution');
 
 db.run("ALTER TABLE orders ADD COLUMN amount_paid REAL DEFAULT 0", (err) => { /* Ignora se já existir */ });
 db.run("ALTER TABLE orders ADD COLUMN client_id INTEGER", () => {});
@@ -28,22 +33,11 @@ db.run(`
     )
 `);
 
-const EVOLUTION_BASE_URL = process.env.EVOLUTION_BASE_URL || 'http://127.0.0.1:8080';
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
-const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE || 'AtosVendas';
-
 if (!EVOLUTION_API_KEY) {
     console.warn('EVOLUTION_API_KEY não definida. Envios WhatsApp pela Evolution API podem falhar.');
 }
 
-const evolution = axios.create({
-    baseURL: EVOLUTION_BASE_URL,
-    timeout: 15000,
-    headers: {
-        ...(EVOLUTION_API_KEY ? { apikey: EVOLUTION_API_KEY } : {}),
-        'Content-Type': 'application/json'
-    }
-});
+const evolution = createEvolutionClient();
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -1007,14 +1001,13 @@ async function notifyOrderStatusChange(order, oldStatus, newStatus, userId = nul
     }, newStatus);
 
     try {
-        const response = await evolution.post(`/message/sendText/${EVOLUTION_INSTANCE}`, {
-            number: contact.phone,
-            textMessage: { text: message },
-            options: {
-                presence: 'composing',
+        const response = await evolution.post(
+            `/message/sendText/${EVOLUTION_INSTANCE}`,
+            buildEvolutionTextPayload(contact.phone, message, {
+                delay: 1000,
                 linkPreview: true
-            }
-        });
+            })
+        );
 
         await dbRunAsync(
             `INSERT INTO whatsapp_order_status_messages
