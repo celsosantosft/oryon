@@ -79,12 +79,37 @@ function normalizeUrl(value, fallback = '') {
     return `http://${trimmed}`;
 }
 
+function readBooleanConfig(keys) {
+    const resolved = readConfigValue(keys);
+    const normalized = String(resolved.value || '').trim().toLowerCase();
+
+    if (!resolved.source) {
+        return {
+            value: null,
+            source: '',
+            configured: false
+        };
+    }
+
+    return {
+        value: ['true', '1', 'yes', 'on'].includes(normalized),
+        source: resolved.source,
+        configured: true
+    };
+}
+
 function resolveEvolutionConfig() {
     const baseUrl = readConfigValue(['EVOLUTION_BASE_URL', 'SERVER_URL']);
     const apiKey = readConfigValue(['EVOLUTION_API_KEY', 'AUTHENTICATION_API_KEY']);
     const instance = readConfigValue(['EVOLUTION_INSTANCE', 'WHATSAPP_INSTANCE']);
     const publicAppUrl = readConfigValue(['PUBLIC_APP_URL', 'APP_PUBLIC_URL']);
     const webhookUrl = readConfigValue(['EVOLUTION_WEBHOOK_URL', 'WHATSAPP_WEBHOOK_URL']);
+    const saveDataLabels = readBooleanConfig(['DATABASE_SAVE_DATA_LABELS']);
+    const saveDataChats = readBooleanConfig(['DATABASE_SAVE_DATA_CHATS']);
+    const saveDataContacts = readBooleanConfig(['DATABASE_SAVE_DATA_CONTACTS']);
+    const saveDataMessages = readBooleanConfig(['DATABASE_SAVE_DATA_NEW_MESSAGE']);
+    const saveMessageUpdates = readBooleanConfig(['DATABASE_SAVE_MESSAGE_UPDATE']);
+    const saveDataHistoric = readBooleanConfig(['DATABASE_SAVE_DATA_HISTORIC']);
 
     const resolvedPublicAppUrl = normalizeUrl(publicAppUrl.value, DEFAULT_PUBLIC_APP_URL);
 
@@ -98,7 +123,15 @@ function resolveEvolutionConfig() {
         publicAppUrl: resolvedPublicAppUrl,
         publicAppUrlSource: publicAppUrl.source || 'default',
         webhookUrl: normalizeUrl(webhookUrl.value, `${resolvedPublicAppUrl}/api/whatsapp/webhook`),
-        webhookUrlSource: webhookUrl.source || 'default'
+        webhookUrlSource: webhookUrl.source || 'default',
+        dataStorage: {
+            labels: saveDataLabels,
+            chats: saveDataChats,
+            contacts: saveDataContacts,
+            messages: saveDataMessages,
+            messageUpdates: saveMessageUpdates,
+            historic: saveDataHistoric
+        }
     };
 }
 
@@ -139,7 +172,8 @@ function getEvolutionDiagnostics() {
         webhookUrl: evolutionConfig.webhookUrl,
         webhookUrlSource: evolutionConfig.webhookUrlSource,
         hasApiKey: Boolean(evolutionConfig.apiKey),
-        apiKeySource: evolutionConfig.apiKey ? evolutionConfig.apiKeySource : ''
+        apiKeySource: evolutionConfig.apiKey ? evolutionConfig.apiKeySource : '',
+        dataStorage: evolutionConfig.dataStorage
     };
 }
 

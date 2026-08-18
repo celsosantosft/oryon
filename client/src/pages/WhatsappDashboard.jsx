@@ -135,6 +135,18 @@ function getMetaCapiFeedback(metaCapi) {
     return ' Meta falhou; confira os logs do servidor.';
 }
 
+function getDisabledEvolutionStorage(dataStorage) {
+    const labels = {
+        labels: 'DATABASE_SAVE_DATA_LABELS',
+        chats: 'DATABASE_SAVE_DATA_CHATS',
+        contacts: 'DATABASE_SAVE_DATA_CONTACTS'
+    };
+
+    return Object.entries(labels)
+        .filter(([key]) => dataStorage?.[key]?.configured && dataStorage[key].value === false)
+        .map(([, envName]) => envName);
+}
+
 const WhatsappDashboard = () => {
     const { token, API_BASE_URL } = useAuth();
     const navigate = useNavigate();
@@ -321,11 +333,15 @@ const WhatsappDashboard = () => {
 
         try {
             const response = await axios.post(`${API_BASE_URL}/whatsapp/sync`, {}, authConfig);
+            if (response.data?.config) setEvolutionInfo(response.data.config);
+            if (response.data?.meta) setMetaInfo(response.data.meta);
+
             const importedChats = Number(response.data?.chats || response.data?.label_sync?.conversations || 0);
             const labels = Number(response.data?.labels || 0);
             const labelAssociations = Number(response.data?.label_associations || 0);
             const metaSent = Number(response.data?.label_sync?.meta_sent || 0);
             const warnings = Array.isArray(response.data?.warnings) ? response.data.warnings.length : 0;
+            const disabledStorage = getDisabledEvolutionStorage(response.data?.config?.dataStorage);
 
             setSyncReport({
                 labels,
@@ -334,7 +350,9 @@ const WhatsappDashboard = () => {
                 metaSent,
                 warnings
             });
-            if (!labels && !labelAssociations && !importedChats) {
+            if (disabledStorage.length) {
+                setError(`A Evolution está com ${disabledStorage.join(', ')} desligado. Ligue essas variáveis no .env da VPS e reinicie a Evolution API.`);
+            } else if (!labels && !labelAssociations && !importedChats) {
                 setError('A Evolution respondeu sem etiquetas e sem vínculos. Se você aplicou a etiqueta pelo WhatsApp Desktop, teste aplicar pelo app WhatsApp Business no celular e clique em sincronizar de novo.');
             } else {
                 setSuccess(`Sincronização de etiquetas concluída: ${labels} etiqueta(s), ${labelAssociations} vínculo(s), ${importedChats} contato(s).${metaSent ? ` ${metaSent} evento(s) enviado(s) para a Meta.` : ''}${warnings ? ' Houve aviso(s) da Evolution API.' : ''}`);
@@ -798,6 +816,28 @@ const WhatsappDashboard = () => {
                             <p className={`mt-2 text-xs font-bold ${metaInfo?.hasPixelId && metaInfo?.hasAccessToken ? 'text-emerald-700' : 'text-red-700'}`}>
                                 {metaInfo?.hasPixelId && metaInfo?.hasAccessToken ? 'Pixel e token carregados' : 'Pixel ID ou token ausente'}
                             </p>
+                        </div>
+                        <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
+                            <p className="text-xs font-extrabold uppercase text-slate-400">Banco da Evolution</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {[
+                                    ['labels', 'Labels'],
+                                    ['chats', 'Chats'],
+                                    ['contacts', 'Contatos']
+                                ].map(([key, label]) => {
+                                    const enabled = evolutionInfo?.dataStorage?.[key]?.value === true;
+                                    const configured = evolutionInfo?.dataStorage?.[key]?.configured;
+
+                                    return (
+                                        <span
+                                            key={key}
+                                            className={`rounded-md px-2 py-1 text-xs font-extrabold ${enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}
+                                        >
+                                            {label}: {configured ? (enabled ? 'ON' : 'OFF') : 'N/D'}
+                                        </span>
+                                    );
+                                })}
+                            </div>
                         </div>
                     </div>
                 ) : (

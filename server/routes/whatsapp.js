@@ -386,6 +386,28 @@ function requireEvolutionApiKey(res) {
     return true;
 }
 
+function getEvolutionStorageWarnings() {
+    const diagnostics = getEvolutionDiagnostics();
+    const storage = diagnostics.dataStorage || {};
+    const warnings = [];
+
+    [
+        ['labels', 'DATABASE_SAVE_DATA_LABELS'],
+        ['chats', 'DATABASE_SAVE_DATA_CHATS'],
+        ['contacts', 'DATABASE_SAVE_DATA_CONTACTS']
+    ].forEach(([key, envName]) => {
+        if (storage[key]?.configured && storage[key].value === false) {
+            warnings.push({
+                step: 'evolution_storage',
+                env: envName,
+                message: `${envName}=false impede a Evolution API de devolver etiquetas/vínculos para sincronização.`
+            });
+        }
+    });
+
+    return warnings;
+}
+
 function isInstanceNotFound(error) {
     const message = JSON.stringify(error.response?.data || {});
     return error.response?.status === 404 && message.includes('instance does not exist');
@@ -2497,7 +2519,7 @@ async function importEvolutionMessage(messagePayload, options = {}) {
 }
 
 async function syncEvolutionLabelsAndContacts(userId = null) {
-    const warnings = [];
+    const warnings = getEvolutionStorageWarnings();
     const errors = [];
 
     try {
@@ -2714,7 +2736,9 @@ router.post('/whatsapp/sync', authenticateToken, authorizeRole(['admin', 'gerent
 
         res.json({
             message: 'Sincronização de etiquetas solicitada.',
-            ...result
+            ...result,
+            config: getEvolutionDiagnostics(),
+            meta: getMetaCapiDiagnostics()
         });
     } catch (error) {
         console.error('Erro inesperado ao sincronizar etiquetas da Evolution:', error.response?.data || error.message);
@@ -2731,7 +2755,9 @@ router.post('/whatsapp/sync', authenticateToken, authorizeRole(['admin', 'gerent
             labels: 0,
             label_associations: 0,
             label_sync: null,
-            errors: []
+            errors: [],
+            config: getEvolutionDiagnostics(),
+            meta: getMetaCapiDiagnostics()
         });
     }
 });
