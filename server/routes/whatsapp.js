@@ -1187,6 +1187,9 @@ function extractChatRemoteJid(chat) {
         || chat?.jid
         || chat?.key?.remoteJid
         || chat?.conversation?.remoteJid
+        || chat?.contact?.remoteJid
+        || chat?.contact?.jid
+        || chat?.contact?.id
         || '';
 }
 
@@ -1285,6 +1288,47 @@ async function callEvolutionFallbacks(label, attempts) {
     throw fallbackError;
 }
 
+async function callEvolutionFallbacksPreferData(label, attempts, readItems) {
+    const failures = [];
+    let firstSuccess = null;
+
+    for (const attempt of attempts) {
+        const request = {
+            method: attempt.method || 'post',
+            url: attempt.url
+        };
+
+        if (attempt.data !== undefined) request.data = attempt.data;
+        if (attempt.params !== undefined) request.params = attempt.params;
+
+        try {
+            const response = await evolution.request(request);
+            const items = readItems(response.data);
+            const success = {
+                response,
+                attempt: attempt.name || `${request.method.toUpperCase()} ${request.url}`,
+                failures,
+                items
+            };
+
+            if (Array.isArray(items) && items.length) return success;
+            if (!firstSuccess) firstSuccess = success;
+        } catch (error) {
+            failures.push({
+                attempt: attempt.name || `${request.method.toUpperCase()} ${request.url}`,
+                status: error.response?.status || null,
+                error: summarizeEvolutionError(error)
+            });
+        }
+    }
+
+    if (firstSuccess) return firstSuccess;
+
+    const fallbackError = new Error(`${label} falhou na Evolution API.`);
+    fallbackError.failures = failures;
+    throw fallbackError;
+}
+
 function normalizeLabelKey(value) {
     return String(value || '').trim().toLowerCase();
 }
@@ -1361,7 +1405,12 @@ function readEvolutionLabels(payload) {
 }
 
 async function fetchEvolutionLabelPayload() {
-    const labelsResult = await callEvolutionFallbacks('Buscar etiquetas oficiais', [
+    const labelsResult = await callEvolutionFallbacksPreferData('Buscar etiquetas oficiais', [
+        {
+            name: 'findLabels oficial',
+            method: 'get',
+            url: `/label/findLabels/${EVOLUTION_INSTANCE}`
+        },
         {
             name: 'findLabels em chat',
             method: 'get',
@@ -1383,13 +1432,8 @@ async function fetchEvolutionLabelPayload() {
             method: 'post',
             url: '/chat/fetchLabels',
             data: { instance: EVOLUTION_INSTANCE }
-        },
-        {
-            name: 'findLabels oficial',
-            method: 'get',
-            url: `/label/findLabels/${EVOLUTION_INSTANCE}`
         }
-    ]);
+    ], readEvolutionLabels);
 
     return labelsResult.response.data;
 }
@@ -1688,11 +1732,14 @@ async function applyEvolutionLabelToChat({ remoteJid, phone, label }) {
 function readEvolutionChats(payload) {
     const chats = asArrayResponse(payload, [
         'chats',
+        'contacts',
         'records',
         'data.chats',
+        'data.contacts',
         'data.records',
         'response',
         'response.chats',
+        'response.contacts',
         'response.records',
         'data',
         'result',
@@ -1703,10 +1750,13 @@ function readEvolutionChats(payload) {
 
     const objectCandidates = [
         payload?.chats,
+        payload?.contacts,
         payload?.records,
         payload?.data?.chats,
+        payload?.data?.contacts,
         payload?.data?.records,
         payload?.response?.chats,
+        payload?.response?.contacts,
         payload?.response?.records
     ];
 
@@ -2022,7 +2072,7 @@ function mapLabelPayloadToTargets(payload, labelsById, labelsByName) {
 }
 
 async function fetchEvolutionChatsWithLabels() {
-    const chatsResult = await callEvolutionFallbacks('Buscar conversas com etiquetas', [
+    const chatsResult = await callEvolutionFallbacksPreferData('Buscar conversas com etiquetas', [
         {
             name: 'find chats',
             url: `/chat/find/${EVOLUTION_INSTANCE}`,
@@ -2048,17 +2098,46 @@ async function fetchEvolutionChatsWithLabels() {
             method: 'get',
             url: `/chat/findChats/${EVOLUTION_INSTANCE}`
         }
-    ]);
+    ], readEvolutionChats);
 
     return readEvolutionChats(chatsResult.response.data);
+}
+
+async function fetchEvolutionContactsWithLabels() {
+    const contactsResult = await callEvolutionFallbacksPreferData('Buscar contatos com etiquetas', [
+        {
+            name: 'findContacts completo',
+            url: `/chat/findContacts/${EVOLUTION_INSTANCE}`,
+            data: { where: {}, take: 500, skip: 0 }
+        },
+        {
+            name: 'findContacts vazio',
+            url: `/chat/findContacts/${EVOLUTION_INSTANCE}`,
+            data: {}
+        },
+        {
+            name: 'findContacts GET',
+            method: 'get',
+            url: `/chat/findContacts/${EVOLUTION_INSTANCE}`
+        }
+    ], readEvolutionChats);
+
+    return readEvolutionChats(contactsResult.response.data);
 }
 
 async function fetchEvolutionLabelsFromChats() {
     const seen = new Set();
     const labels = [];
-    const chats = await fetchEvolutionChatsWithLabels();
+    const [chatsResult, contactsResult] = await Promise.allSettled([
+        fetchEvolutionChatsWithLabels(),
+        fetchEvolutionContactsWithLabels()
+    ]);
+    const records = [
+        ...(chatsResult.status === 'fulfilled' ? chatsResult.value : []),
+        ...(contactsResult.status === 'fulfilled' ? contactsResult.value : [])
+    ];
 
-    for (const chat of chats) {
+    for (const chat of records) {
         for (const ref of extractChatLabelRefs(chat)) {
             const label = normalizeEvolutionLabel(ref);
             if (!label.name) continue;
@@ -2082,12 +2161,14 @@ async function getEvolutionLabelMirror(options = {}) {
 
     let labels = [];
     let chats = [];
+    let contacts = [];
     let labelPayload = null;
     const tagsByPhone = new Map();
     const tagsByJid = new Map();
 
-    const [chatsResult, labelsResult] = await Promise.allSettled([
+    const [chatsResult, contactsResult, labelsResult] = await Promise.allSettled([
         fetchEvolutionChatsWithLabels(),
+        fetchEvolutionContactsWithLabels(),
         fetchEvolutionLabelPayload()
     ]);
 
@@ -2095,6 +2176,12 @@ async function getEvolutionLabelMirror(options = {}) {
         chats = chatsResult.value;
     } else {
         console.warn('Não foi possível buscar conversas com etiquetas nativas:', chatsResult.reason?.failures || summarizeEvolutionError(chatsResult.reason));
+    }
+
+    if (contactsResult.status === 'fulfilled') {
+        contacts = contactsResult.value;
+    } else {
+        console.warn('Não foi possível buscar contatos com etiquetas nativas:', contactsResult.reason?.failures || summarizeEvolutionError(contactsResult.reason));
     }
 
     if (labelsResult.status === 'fulfilled') {
@@ -2107,14 +2194,14 @@ async function getEvolutionLabelMirror(options = {}) {
     const labelsById = new Map(labels.map(label => [normalizeLabelKey(label.id), label]));
     const labelsByName = new Map(labels.map(label => [normalizeLabelKey(label.name), label]));
 
-    for (const chat of chats) {
+    for (const chat of [...chats, ...contacts]) {
         const tags = mapChatTags(chat, labelsById, labelsByName);
         if (!tags.length) continue;
 
-        const remoteJid = extractChatRemoteJid(chat);
-        const phone = normalizePhone(chat?.phone || chat?.number || remoteJid.split('@')[0]);
+        const target = normalizeChatTarget(chat);
+        if (!target) continue;
 
-        tags.forEach(tag => addTagToTargetMaps({ tagsByPhone, tagsByJid }, { remoteJid, phone }, tag));
+        tags.forEach(tag => addTagToTargetMaps({ tagsByPhone, tagsByJid }, target, tag));
     }
 
     if (labelPayload) {
@@ -2323,7 +2410,20 @@ async function persistLabelMirrorAssociations(labelMirror, userId = null) {
 
 function normalizeChatTarget(chat) {
     const remoteJid = extractChatRemoteJid(chat);
-    const phone = normalizePhone(chat?.phone || chat?.number || remoteJid.split('@')[0]);
+    const phone = normalizePhone(
+        chat?.phone
+        || chat?.number
+        || chat?.phoneNumber
+        || chat?.phone_number
+        || chat?.waId
+        || chat?.wa_id
+        || chat?.user
+        || chat?.contact?.phone
+        || chat?.contact?.number
+        || chat?.contact?.phoneNumber
+        || chat?.contact?.waId
+        || remoteJid.split('@')[0]
+    );
     const finalRemoteJid = remoteJid || (phone ? `${phone}@s.whatsapp.net` : '');
 
     if (!phone || !finalRemoteJid || !isLikelyWhatsappPhone(phone)) return null;
@@ -2332,7 +2432,14 @@ function normalizeChatTarget(chat) {
     return {
         phone,
         remoteJid: finalRemoteJid,
-        pushName: chat?.pushName || chat?.name || chat?.profileName || chat?.client_name || ''
+        pushName: chat?.pushName
+            || chat?.push_name
+            || chat?.name
+            || chat?.profileName
+            || chat?.client_name
+            || chat?.contact?.pushName
+            || chat?.contact?.name
+            || ''
     };
 }
 
@@ -2426,6 +2533,18 @@ async function syncEvolutionLabelsAndContacts(userId = null) {
     try {
         const labelMirror = await getEvolutionLabelMirror({ force: true });
         labelSync = await persistLabelMirrorAssociations(labelMirror, userId);
+
+        if (!labelSync.labels && !labelSync.associations) {
+            warnings.push({
+                step: 'labels',
+                message: 'A Evolution API respondeu, mas não retornou etiquetas nem associações. Se a etiqueta foi aplicada no WhatsApp Desktop, teste aplicar pelo app WhatsApp Business no celular para disparar o webhook.'
+            });
+        } else if (labelSync.labels && !labelSync.associations) {
+            warnings.push({
+                step: 'label_associations',
+                message: 'A Evolution API retornou etiquetas, mas não informou quais contatos estão vinculados a elas. Novas aplicações de etiqueta dependem do webhook LABELS_ASSOCIATION.'
+            });
+        }
     } catch (error) {
         errors.push({
             step: 'labels',

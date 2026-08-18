@@ -334,7 +334,11 @@ const WhatsappDashboard = () => {
                 metaSent,
                 warnings
             });
-            setSuccess(`Sincronização de etiquetas concluída: ${labels} etiqueta(s), ${labelAssociations} vínculo(s), ${importedChats} contato(s).${metaSent ? ` ${metaSent} evento(s) enviado(s) para a Meta.` : ''}${warnings ? ' Houve aviso(s) da Evolution API.' : ''}`);
+            if (!labels && !labelAssociations && !importedChats) {
+                setError('A Evolution respondeu sem etiquetas e sem vínculos. Se você aplicou a etiqueta pelo WhatsApp Desktop, teste aplicar pelo app WhatsApp Business no celular e clique em sincronizar de novo.');
+            } else {
+                setSuccess(`Sincronização de etiquetas concluída: ${labels} etiqueta(s), ${labelAssociations} vínculo(s), ${importedChats} contato(s).${metaSent ? ` ${metaSent} evento(s) enviado(s) para a Meta.` : ''}${warnings ? ' Houve aviso(s) da Evolution API.' : ''}`);
+            }
             await fetchOfficialLabels();
             await fetchConversations();
         } catch (requestError) {
