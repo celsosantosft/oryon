@@ -1,0 +1,90 @@
+name: Deploy production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy Oryon
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+
+      - name: Validate frontend build
+        run: |
+          npm ci --prefix client
+          npm run build --prefix client
+
+      - name: Validate backend install and syntax
+        run: |
+          npm ci --prefix server --omit=dev
+          node --check server/server.js
+
+      - name: Prepare SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+
+          : "${DEPLOY_HOST:?Configure DEPLOY_HOST in GitHub Actions secrets.}"
+          : "${DEPLOY_SSH_KEY:?Configure DEPLOY_SSH_KEY in GitHub Actions secrets.}"
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/oryon_deploy_key
+          chmod 600 ~/.ssh/oryon_deploy_key
+
+          ssh-keyscan -p "${DEPLOY_PORT:-22}" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy on VPS
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          TARGET_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          DEPLOY_PORT="${DEPLOY_PORT:-22}"
+          DEPLOY_USER="${DEPLOY_USER:-root}"
+          DEPLOY_PATH="${DEPLOY_PATH:-/var/www/oryon}"
+
+          ssh -i ~/.ssh/oryon_deploy_key \
+              -p "$DEPLOY_PORT" \
+              "$DEPLOY_USER@$DEPLOY_HOST" \
+              "bash -s -- '$TARGET_COMMIT' '$DEPLOY_PATH'" <<'REMOTE'
+          set -euo pipefail
+
+          TARGET_COMMIT="$1"
+          APP_DIR="$2"
+
+          cd "$APP_DIR"
+          echo "Deploying commit $TARGET_COMMIT in $APP_DIR"
+
+          git fetch origin main
+          git checkout main
+          git reset --hard "$TARGET_COMMIT"
+
+          bash scripts/deploy-production.sh
+          REMOTE
