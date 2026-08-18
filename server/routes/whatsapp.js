@@ -31,7 +31,10 @@ const EVOLUTION_WEBHOOK_EVENTS = [
     'MESSAGES_UPSERT',
     'MESSAGES_UPDATE',
     'SEND_MESSAGE',
-    'CHATS_UPSERT'
+    'CHATS_UPSERT',
+    'CHATS_UPDATE',
+    'LABELS_EDIT',
+    'LABELS_ASSOCIATION'
 ];
 const EVOLUTION_LABEL_CACHE_MS = 10000;
 
@@ -1041,6 +1044,11 @@ async function processWebhookMessage(messagePayload, rootPayload, options = {}) 
 
 async function processIncomingWebhook(payload) {
     const eventName = String(payload?.event || payload?.type || payload?.eventType || '').toUpperCase();
+
+    if (eventName.includes('LABELS_ASSOCIATION') || eventName.includes('LABELS_EDIT')) {
+        return processLabelWebhook(payload, eventName);
+    }
+
     const messagePayloads = collectMessagePayloads(payload);
     const isHistorySync = eventName.includes('MESSAGES_SET');
     const runAutomation = !isHistorySync && (!eventName || eventName.includes('MESSAGES_UPSERT'));
@@ -1265,6 +1273,138 @@ function formatEvolutionLabels(labels) {
         color: label.color,
         evolution_label_id: label.id
     }));
+}
+
+function mergeConversationTags(...tagGroups) {
+    const seen = new Set();
+    const tags = [];
+
+    for (const group of tagGroups) {
+        for (const tag of Array.isArray(group) ? group : []) {
+            const tagKey = normalizeLabelKey(tag?.evolution_label_id || tag?.id || tag?.name);
+            if (!tag?.name || !tagKey || seen.has(tagKey)) continue;
+
+            seen.add(tagKey);
+            tags.push({
+                id: tag.id || tag.evolution_label_id || tag.name,
+                name: tag.name,
+                color: tag.color || '#64748b',
+                evolution_label_id: tag.evolution_label_id || tag.id || null
+            });
+        }
+    }
+
+    return tags;
+}
+
+async function getLocalTagsForConversations(conversationIds) {
+    const tagsByConversation = new Map();
+    if (!conversationIds.length) return tagsByConversation;
+
+    const placeholders = conversationIds.map(() => '?').join(',');
+    const rows = await dbAll(
+        `SELECT
+            wct.conversation_id,
+            wt.id,
+            wt.name,
+            wt.color,
+            wt.evolution_label_id
+         FROM whatsapp_conversation_tags wct
+         JOIN whatsapp_tags wt ON wt.id = wct.tag_id
+         WHERE wct.conversation_id IN (${placeholders})`,
+        conversationIds
+    );
+
+    rows.forEach((tag) => {
+        const current = tagsByConversation.get(tag.conversation_id) || [];
+        current.push({
+            id: tag.evolution_label_id || tag.id,
+            name: tag.name,
+            color: tag.color,
+            evolution_label_id: tag.evolution_label_id
+        });
+        tagsByConversation.set(tag.conversation_id, current);
+    });
+
+    return tagsByConversation;
+}
+
+async function upsertLocalWhatsappTag(tag) {
+    const label = normalizeEvolutionLabel(tag);
+    if (!label.name && !label.id) return null;
+
+    const tagName = label.name || label.id;
+    const evolutionLabelId = label.id || null;
+
+    await dbRun(
+        `INSERT OR IGNORE INTO whatsapp_tags (name, color, evolution_label_id)
+         VALUES (?, ?, ?)`,
+        [tagName, label.color || '#64748b', evolutionLabelId]
+    );
+
+    await dbRun(
+        `UPDATE whatsapp_tags
+         SET color = ?,
+             evolution_label_id = COALESCE(NULLIF(?, ''), evolution_label_id)
+         WHERE name = ?`,
+        [label.color || '#64748b', evolutionLabelId || '', tagName]
+    );
+
+    if (evolutionLabelId) {
+        const byEvolutionId = await dbGet(
+            `SELECT id, name, color, evolution_label_id
+             FROM whatsapp_tags
+             WHERE evolution_label_id = ?
+             LIMIT 1`,
+            [evolutionLabelId]
+        );
+
+        if (byEvolutionId) return byEvolutionId;
+    }
+
+    return dbGet(
+        `SELECT id, name, color, evolution_label_id
+         FROM whatsapp_tags
+         WHERE name = ?
+         LIMIT 1`,
+        [tagName]
+    );
+}
+
+async function persistLocalConversationTag(conversation, tag, action = 'add') {
+    if (!conversation?.id) return { changed: false, action, reason: 'missing_conversation' };
+
+    const localTag = await upsertLocalWhatsappTag(tag);
+    if (!localTag?.id) return { changed: false, action, reason: 'missing_tag' };
+
+    if (action === 'remove') {
+        const result = await dbRun(
+            `DELETE FROM whatsapp_conversation_tags
+             WHERE conversation_id = ?
+               AND tag_id = ?`,
+            [conversation.id, localTag.id]
+        );
+
+        return {
+            changed: result.changes > 0,
+            action,
+            tag: localTag
+        };
+    }
+
+    const result = await dbRun(
+        `INSERT OR IGNORE INTO whatsapp_conversation_tags
+            (conversation_id, tag_id)
+         VALUES
+            (?, ?)`,
+        [conversation.id, localTag.id]
+    );
+
+    return {
+        changed: result.changes > 0,
+        action: 'add',
+        tag: localTag
+    };
 }
 
 function normalizeWhatsappJid(value) {
@@ -1566,6 +1706,31 @@ function collectChatTargets(value, targets = []) {
     return targets;
 }
 
+function looksLikeLabelRecord(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+
+    return Boolean(
+        value.label
+        || value.labels
+        || value.labelInfo
+        || value.labelData
+        || value.whatsappLabel
+        || value.labelId
+        || value.label_id
+        || value.idLabel
+        || value.labelName
+        || value.remoteJid
+        || value.remote_jid
+        || value.jid
+        || value.chatId
+        || value.chat_id
+        || value.chat
+        || value.chats
+        || value.contacts
+        || value.conversations
+    );
+}
+
 function readEvolutionLabelRecords(payload) {
     const records = asArrayResponse(payload, [
         'labels',
@@ -1580,6 +1745,10 @@ function readEvolutionLabelRecords(payload) {
     ]);
 
     if (records.length) return records;
+
+    for (const candidate of [payload, payload?.data, payload?.response, payload?.result]) {
+        if (looksLikeLabelRecord(candidate)) return [candidate];
+    }
 
     const objectCandidates = [
         payload?.labels,
@@ -1691,9 +1860,9 @@ async function fetchEvolutionLabelsFromChats() {
     return labels;
 }
 
-async function getEvolutionLabelMirror() {
+async function getEvolutionLabelMirror(options = {}) {
     const now = Date.now();
-    if (evolutionLabelMirrorCache.expiresAt > now) {
+    if (!options.force && evolutionLabelMirrorCache.expiresAt > now) {
         return evolutionLabelMirrorCache;
     }
 
@@ -1783,6 +1952,157 @@ async function getEvolutionLabelMirrorForInbox() {
             return setEmptyEvolutionLabelMirrorCache();
         })
     ]);
+}
+
+function extractLabelAssociationAction(payload) {
+    const action = findTextByPaths(
+        [payload?.data, payload],
+        [
+            'action',
+            'operation',
+            'associationAction',
+            'labelAction',
+            'data.action',
+            'data.operation'
+        ]
+    );
+    const normalizedAction = normalizeLabelKey(action);
+
+    if (
+        normalizedAction.includes('remove')
+        || normalizedAction.includes('delete')
+        || normalizedAction.includes('unlink')
+        || normalizedAction.includes('unassign')
+    ) {
+        return 'remove';
+    }
+
+    return 'add';
+}
+
+async function getLabelsByKeyForWebhook(payload) {
+    let labels = readEvolutionLabels(payload);
+
+    if (!labels.length) {
+        labels = await fetchEvolutionLabels().catch((error) => {
+            console.warn('Não foi possível buscar etiquetas para mapear webhook:', error.failures || summarizeEvolutionError(error));
+            return [];
+        });
+    }
+
+    return {
+        labels,
+        labelsById: new Map(labels.map(label => [normalizeLabelKey(label.id), label])),
+        labelsByName: new Map(labels.map(label => [normalizeLabelKey(label.name), label]))
+    };
+}
+
+async function persistLabelAssociationTarget(linkedTag, action, userId = null) {
+    const target = normalizeChatTarget(linkedTag.target || {});
+    if (!target) return { processed: false, reason: 'invalid_target' };
+
+    const conversation = await ensureConversation(target.phone, {
+        remoteJid: target.remoteJid,
+        pushName: target.pushName
+    });
+    const persisted = await persistLocalConversationTag(conversation, linkedTag.tag, action);
+    let metaCapi = null;
+
+    if (action === 'add' && isQualifiedLeadLabel(linkedTag.tag)) {
+        metaCapi = await sendQualifiedLeadToMetaIfNeeded(conversation, linkedTag.tag, userId);
+    }
+
+    return {
+        processed: true,
+        phone: target.phone,
+        action,
+        tag: persisted.tag || linkedTag.tag,
+        changed: persisted.changed,
+        meta_capi: metaCapi
+    };
+}
+
+async function processLabelWebhook(payload, eventName) {
+    clearEvolutionLabelMirrorCache();
+
+    const action = eventName.includes('LABELS_EDIT') ? 'add' : extractLabelAssociationAction(payload);
+    const { labels, labelsById, labelsByName } = await getLabelsByKeyForWebhook(payload);
+    const linkedTags = mapLabelPayloadToTargets(payload, labelsById, labelsByName);
+    const results = [];
+
+    if (!linkedTags.length && eventName.includes('LABELS_EDIT')) {
+        for (const label of labels) {
+            const localTag = await upsertLocalWhatsappTag(label);
+            if (localTag) {
+                results.push({
+                    processed: true,
+                    action: 'upsert_label',
+                    tag: localTag
+                });
+            }
+        }
+    }
+
+    for (const linkedTag of linkedTags) {
+        try {
+            results.push(await persistLabelAssociationTarget(linkedTag, action));
+        } catch (error) {
+            results.push({
+                processed: false,
+                action,
+                error: error.message
+            });
+        }
+    }
+
+    return {
+        processed: results.filter(result => result.processed).length,
+        event: eventName,
+        action,
+        labels: labels.length,
+        results
+    };
+}
+
+async function persistLabelMirrorAssociations(labelMirror, userId = null) {
+    const summary = {
+        labels: labelMirror?.labels?.length || 0,
+        associations: 0,
+        changed: 0,
+        meta_sent: 0,
+        meta_skipped: 0,
+        errors: []
+    };
+
+    const tagsByPhone = labelMirror?.tagsByPhone instanceof Map ? labelMirror.tagsByPhone : new Map();
+
+    for (const [phone, tags] of tagsByPhone.entries()) {
+        const normalizedPhone = normalizePhone(phone);
+        if (!normalizedPhone || !isLikelyWhatsappPhone(normalizedPhone)) continue;
+
+        try {
+            const conversation = await ensureConversation(normalizedPhone);
+
+            for (const tag of tags) {
+                const persisted = await persistLocalConversationTag(conversation, tag, 'add');
+                summary.associations += 1;
+                if (persisted.changed) summary.changed += 1;
+
+                if (isQualifiedLeadLabel(tag)) {
+                    const metaCapi = await sendQualifiedLeadToMetaIfNeeded(conversation, tag, userId);
+                    if (metaCapi.sent) summary.meta_sent += 1;
+                    if (metaCapi.skipped) summary.meta_skipped += 1;
+                }
+            }
+        } catch (error) {
+            summary.errors.push({
+                phone: normalizedPhone,
+                error: error.message
+            });
+        }
+    }
+
+    return summary;
 }
 
 function normalizeChatTarget(chat) {
@@ -2137,9 +2457,29 @@ router.post('/whatsapp/sync', authenticateToken, authorizeRole(['admin', 'gerent
 
     try {
         const result = await syncEvolutionChatsAndMessages();
+        let labelSync = null;
+
+        try {
+            const labelMirror = await getEvolutionLabelMirror({ force: true });
+            labelSync = await persistLabelMirrorAssociations(labelMirror, req.user.id);
+        } catch (labelError) {
+            labelSync = {
+                labels: 0,
+                associations: 0,
+                changed: 0,
+                errors: [{
+                    message: 'Não foi possível sincronizar etiquetas do WhatsApp.',
+                    error: labelError.failures || summarizeEvolutionError(labelError)
+                }]
+            };
+        }
+
         res.json({
             message: 'Sincronização solicitada.',
-            ...result
+            ...result,
+            labels: labelSync.labels,
+            label_associations: labelSync.associations,
+            label_sync: labelSync
         });
     } catch (error) {
         console.error('Erro inesperado ao sincronizar conversas da Evolution:', error.response?.data || error.message);
@@ -2153,6 +2493,9 @@ router.post('/whatsapp/sync', authenticateToken, authorizeRole(['admin', 'gerent
                 message: 'Não foi possível consultar o histórico da Evolution agora. Novas mensagens ainda podem chegar pelo webhook.',
                 error: summarizeEvolutionError(error)
             }],
+            labels: 0,
+            label_associations: 0,
+            label_sync: null,
             errors: []
         });
     }
@@ -2230,6 +2573,7 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
             return map;
         }, new Map());
 
+        const localTagsByConversation = await getLocalTagsForConversations(conversationIds);
         const labelMirror = await getEvolutionLabelMirrorForInbox();
 
         res.json({
@@ -2237,15 +2581,17 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
                 const nativeTags = labelMirror.tagsByPhone.get(normalizePhone(item.phone))
                     || labelMirror.tagsByJid.get(item.remote_jid)
                     || [];
+                const localTags = localTagsByConversation.get(item.id) || [];
 
                 return {
                     ...item,
                     client_name: item.matched_client_name || item.client_name || '',
                     linked_orders: linksByConversation.get(item.id) || [],
-                    tags: nativeTags.map(tag => ({
+                    tags: mergeConversationTags(localTags, nativeTags).map(tag => ({
                         id: tag.id,
                         name: tag.name,
-                        color: tag.color
+                        color: tag.color,
+                        evolution_label_id: tag.evolution_label_id
                     }))
                 };
             })
@@ -2341,27 +2687,31 @@ router.post('/whatsapp/add-label', authenticateToken, async (req, res) => {
 
         clearEvolutionLabelMirrorCache();
 
+        const metaPhone = normalizePhone(phone || finalRemoteJid.split('@')[0]);
+        let updatedConversation = null;
+        let localTag = null;
         let metaCapi = {
             sent: false,
             skipped: true,
             reason: 'label_not_qualified'
         };
 
+        if (metaPhone && isLikelyWhatsappPhone(metaPhone)) {
+            updatedConversation = await ensureConversation(metaPhone, {
+                remoteJid: finalRemoteJid
+            });
+            localTag = await persistLocalConversationTag(updatedConversation, selectedLabel, 'add');
+        }
+
         if (isQualifiedLeadLabel(selectedLabel)) {
             try {
-                const metaPhone = normalizePhone(phone || finalRemoteJid.split('@')[0]);
-
-                if (!metaPhone || !isLikelyWhatsappPhone(metaPhone)) {
+                if (!updatedConversation) {
                     metaCapi = {
                         sent: false,
                         skipped: true,
                         reason: 'invalid_phone'
                     };
                 } else {
-                    const updatedConversation = await ensureConversation(metaPhone, {
-                        remoteJid: finalRemoteJid
-                    });
-
                     metaCapi = await sendQualifiedLeadToMetaIfNeeded(updatedConversation, selectedLabel, req.user.id);
                 }
             } catch (metaError) {
@@ -2382,6 +2732,7 @@ router.post('/whatsapp/add-label', authenticateToken, async (req, res) => {
                 color: selectedLabel.color,
                 evolution_label_id: selectedLabel.id
             },
+            local_tag: localTag,
             meta_capi: metaCapi,
             provider: result.response.data,
             attempt: result.attempt

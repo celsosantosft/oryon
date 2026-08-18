@@ -395,9 +395,12 @@ const WhatsappDashboard = () => {
             const response = await axios.post(`${API_BASE_URL}/whatsapp/sync`, {}, authConfig);
             const importedChats = Number(response.data?.chats || 0);
             const importedMessages = Number(response.data?.messages || 0);
+            const labels = Number(response.data?.labels || 0);
+            const labelAssociations = Number(response.data?.label_associations || 0);
             const warnings = Array.isArray(response.data?.warnings) ? response.data.warnings.length : 0;
 
-            setSuccess(`Sincronização concluída: ${importedChats} conversa(s) e ${importedMessages} mensagem(ns).${warnings ? ' Houve aviso(s) da Evolution API.' : ''}`);
+            setSuccess(`Sincronização concluída: ${importedChats} conversa(s), ${importedMessages} mensagem(ns), ${labels} etiqueta(s) e ${labelAssociations} vínculo(s).${warnings ? ' Houve aviso(s) da Evolution API.' : ''}`);
+            await fetchOfficialLabels();
             await fetchConversations();
             if (selectedPhone) await fetchConversationLinks(selectedPhone, true);
         } catch (requestError) {
