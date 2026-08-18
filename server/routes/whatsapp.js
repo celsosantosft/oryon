@@ -2093,40 +2093,13 @@ router.post('/whatsapp/connect', authenticateToken, authorizeRole(['admin', 'ger
             if (retryResponse?.data) response = retryResponse;
         }
 
-        if (!qrcode) {
-            await evolution.put(`/instance/restart/${EVOLUTION_INSTANCE}`).catch(() => null);
-            await wait(2000);
-
-            const restartedResponse = await evolution
-                .get(`/instance/connect/${EVOLUTION_INSTANCE}`)
-                .catch(() => null);
-
-            qrcode = await extractQrCode(restartedResponse?.data);
-            if (restartedResponse?.data) response = restartedResponse;
-        }
-
-        if (!qrcode) {
-            await evolution.delete(`/instance/delete/${EVOLUTION_INSTANCE}`).catch(() => null);
-            await wait(1000);
-
-            createResponse = await createInstance();
-            await wait(2000);
-
-            const recreatedResponse = await evolution
-                .get(`/instance/connect/${EVOLUTION_INSTANCE}`)
-                .catch(() => createResponse);
-
-            qrcode = await extractQrCode(recreatedResponse?.data) || await extractQrCode(createResponse?.data);
-            response = recreatedResponse || createResponse;
-        }
-
         res.json({
             status: qrcode ? 'connecting' : 'close',
             qrcode,
             base64: qrcode,
             message: qrcode
                 ? 'QR Code gerado.'
-                : 'A Evolution API respondeu, mas não retornou o código do QR Code.',
+                : 'A Evolution API respondeu, mas não retornou QR Code. A instância foi preservada para evitar derrubar sessões conectadas.',
             details: qrcode ? undefined : response?.data,
             config: getEvolutionDiagnostics()
         });
