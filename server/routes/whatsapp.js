@@ -1515,6 +1515,23 @@ function getConfiguredQualifiedLabelsForWebhook() {
         .filter(label => label.id && label.name);
 }
 
+function getQualifiedLeadLocalLabel() {
+    const configuredLabel = getConfiguredQualifiedLabelsForWebhook()[0];
+    if (configuredLabel) return configuredLabel;
+
+    const metaDiagnostics = getMetaCapiDiagnostics();
+    const labelName = metaDiagnostics.qualifiedLeadLabels?.[0]
+        || metaDiagnostics.qualifiedLeadEventName
+        || 'Lead Qualificado';
+
+    return resolveQualifiedLeadLabel({
+        id: labelName,
+        name: labelName,
+        color: '#22c55e',
+        evolution_label_id: labelName
+    });
+}
+
 function mergeConversationTags(...tagGroups) {
     const seen = new Set();
     const tags = [];
@@ -2828,6 +2845,63 @@ router.post('/whatsapp/sync', authenticateToken, authorizeRole(['admin', 'gerent
             errors: [],
             config: getEvolutionDiagnostics(),
             meta: getMetaCapiDiagnostics()
+        });
+    }
+});
+
+router.post('/whatsapp/meta/qualified-lead', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+    try {
+        const phone = normalizePhone(req.body?.phone || '');
+        const email = String(req.body?.email || '').trim().toLowerCase();
+        const name = String(req.body?.name || '').trim();
+
+        if (!phone && !email) {
+            return res.status(400).json({ error: 'Informe telefone ou e-mail para enviar o lead qualificado.' });
+        }
+
+        if (phone && !isLikelyWhatsappPhone(phone)) {
+            return res.status(400).json({ error: 'Telefone inválido para WhatsApp. Use DDD e número.' });
+        }
+
+        let conversation = null;
+        let localTag = null;
+
+        if (phone) {
+            conversation = await ensureConversation(phone, { clientName: name });
+            localTag = await persistLocalConversationTag(conversation, getQualifiedLeadLocalLabel(), 'add');
+        }
+
+        const sourceId = phone || email;
+        const metaCapi = await sendQualifiedLeadEvent(
+            {
+                leadId: sourceId,
+                name,
+                phone,
+                email
+            },
+            {
+                source: 'whatsapp_manual',
+                sourceId,
+                conversationId: conversation?.id || null,
+                clientId: conversation?.client_id || null,
+                createdByUserId: req.user.id,
+                eventId: `whatsapp-qualified-lead-manual-${sourceId}`
+            }
+        );
+
+        res.json({
+            message: metaCapi.sent
+                ? 'Lead qualificado enviado para a Meta.'
+                : 'Lead qualificado processado.',
+            meta_capi: metaCapi,
+            conversation,
+            local_tag: localTag
+        });
+    } catch (error) {
+        console.error('Erro ao enviar lead qualificado manual para Meta CAPI:', error.metaCapi || error.message);
+        res.status(500).json({
+            error: 'Não foi possível enviar o lead qualificado para a Meta.',
+            meta_capi: error.metaCapi || null
         });
     }
 });

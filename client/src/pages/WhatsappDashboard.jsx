@@ -169,6 +169,8 @@ const WhatsappDashboard = () => {
     const [syncingLabels, setSyncingLabels] = useState(false);
     const [labelActionLoading, setLabelActionLoading] = useState('');
     const [syncReport, setSyncReport] = useState(null);
+    const [manualLead, setManualLead] = useState({ name: '', phone: '', email: '' });
+    const [manualLeadLoading, setManualLeadLoading] = useState(false);
 
     const authConfig = useMemo(() => ({
         headers: { Authorization: `Bearer ${token}` }
@@ -176,6 +178,7 @@ const WhatsappDashboard = () => {
 
     const currentStatus = STATUS_META[status] || STATUS_META.close;
     const isConnected = status === 'open';
+    const canSendManualLead = manualLead.phone.trim() || manualLead.email.trim();
 
     const taggedConversations = useMemo(() => (
         conversations.filter(conversation => getConversationTags(conversation).length > 0)
@@ -415,6 +418,40 @@ const WhatsappDashboard = () => {
         }
     };
 
+    const handleManualQualifiedLead = async (event) => {
+        event.preventDefault();
+        if (!canSendManualLead || manualLeadLoading) return;
+
+        setManualLeadLoading(true);
+        setError('');
+        setSuccess('');
+
+        try {
+            const response = await axios.post(
+                `${API_BASE_URL}/whatsapp/meta/qualified-lead`,
+                manualLead,
+                authConfig
+            );
+            const metaCapi = response.data?.meta_capi;
+
+            if (metaCapi?.sent) {
+                setSyncReport(previous => ({
+                    ...(previous || {}),
+                    metaSent: Number(previous?.metaSent || 0) + 1
+                }));
+            }
+
+            setSuccess(`${response.data?.message || 'Lead qualificado processado.'}${getMetaCapiFeedback(metaCapi)}`);
+            setManualLead({ name: '', phone: '', email: '' });
+            await fetchConversations(true);
+        } catch (requestError) {
+            const metaCapi = requestError.response?.data?.meta_capi;
+            setError(`${requestError.response?.data?.error || 'Não foi possível enviar o lead qualificado.'}${getMetaCapiFeedback(metaCapi)}`);
+        } finally {
+            setManualLeadLoading(false);
+        }
+    };
+
     const handleApplyWhatsappLabel = async (label) => {
         if (!selectedConversation || (!label?.id && !label?.name)) return;
 
@@ -544,6 +581,50 @@ const WhatsappDashboard = () => {
                         Sincronizar etiquetas
                     </button>
                 </div>
+            </section>
+
+            <section className="shrink-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <form onSubmit={handleManualQualifiedLead} className="grid gap-3 xl:grid-cols-[1fr_180px] xl:items-end">
+                    <div className="grid gap-3 md:grid-cols-3">
+                        <label className="block">
+                            <span className="mb-1 block text-xs font-extrabold uppercase text-slate-400">Nome</span>
+                            <input
+                                value={manualLead.name}
+                                onChange={(event) => setManualLead(previous => ({ ...previous, name: event.target.value }))}
+                                placeholder="Cliente"
+                                className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                            />
+                        </label>
+                        <label className="block">
+                            <span className="mb-1 block text-xs font-extrabold uppercase text-slate-400">Telefone</span>
+                            <input
+                                value={manualLead.phone}
+                                onChange={(event) => setManualLead(previous => ({ ...previous, phone: event.target.value }))}
+                                placeholder="DDD e número"
+                                inputMode="tel"
+                                className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                            />
+                        </label>
+                        <label className="block">
+                            <span className="mb-1 block text-xs font-extrabold uppercase text-slate-400">E-mail</span>
+                            <input
+                                value={manualLead.email}
+                                onChange={(event) => setManualLead(previous => ({ ...previous, email: event.target.value }))}
+                                placeholder="cliente@email.com"
+                                type="email"
+                                className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                            />
+                        </label>
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={!canSendManualLead || manualLeadLoading}
+                        className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {manualLeadLoading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : Icons.Tag}
+                        Enviar Meta
+                    </button>
+                </form>
             </section>
 
             <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[380px_1fr]">
