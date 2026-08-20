@@ -361,13 +361,12 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
                     client_ip_address: '1.1.1.1'
                 }
             }
-        ],
-        test_event_code: 'TEST58782'
+        ]
     };
 
-    // if (testEventCode) {
-    //     payload.test_event_code = testEventCode;
-    // }
+    if (testEventCode) {
+        payload.test_event_code = testEventCode;
+    }
 
     await upsertEventAttempt({
         source,
