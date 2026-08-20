@@ -31,6 +31,11 @@ try {
 const EVOLUTION_WEBHOOK_EVENTS = [
     'CHATS_UPSERT',
     'CHATS_UPDATE',
+    'CONTACTS_UPSERT',
+    'CONTACTS_UPDATE',
+    'MESSAGES_UPSERT',
+    'MESSAGES_UPDATE',
+    'SEND_MESSAGE',
     'LABELS_EDIT',
     'LABELS_ASSOCIATION',
     'CONNECTION_UPDATE'
@@ -1194,8 +1199,12 @@ async function processIncomingWebhook(payload) {
         return processLabelWebhook(payload, eventName);
     }
 
-    if (eventName.includes('CHATS_UPSERT') || eventName.includes('CHATS_UPDATE')) {
+    if (eventName.includes('CHATS_UPSERT') || eventName.includes('CHATS_UPDATE') || eventName.includes('CONTACTS')) {
         return processChatWebhook(payload, eventName);
+    }
+
+    if (eventName.includes('MESSAGES') || eventName.includes('MESSAGE') || collectMessagePayloads(payload).length) {
+        return processMessageContactWebhook(payload, eventName);
     }
 
     return {
@@ -1253,6 +1262,47 @@ async function processChatWebhook(payload, eventName) {
     return {
         processed: results.length,
         event: eventName || 'CHAT_UPDATE',
+        results
+    };
+}
+
+async function processMessageContactWebhook(payload, eventName) {
+    const results = [];
+    const seenMessages = new Set();
+
+    for (const messagePayload of collectMessagePayloads(payload)) {
+        const incoming = extractIncomingMessage(messagePayload, payload);
+        const messageKey = incoming?.id || JSON.stringify(messagePayload?.key || {});
+
+        if (!incoming?.phone || !isLikelyWhatsappPhone(incoming.phone) || incoming.isGroup || incoming.isBroadcast) {
+            continue;
+        }
+
+        if (seenMessages.has(messageKey)) continue;
+        seenMessages.add(messageKey);
+
+        const previewText = incoming.text
+            || outgoingDeviceFallbackText(incoming.type)
+            || (incoming.fromMe ? 'Mensagem enviada' : 'Mensagem recebida');
+        const conversation = await ensureConversation(incoming.phone, {
+            remoteJid: incoming.remoteJid,
+            pushName: incoming.pushName,
+            lastMessageText: previewText,
+            lastMessageAt: incoming.timestamp
+        });
+
+        results.push({
+            saved: true,
+            conversation_id: conversation.id,
+            phone: incoming.phone,
+            direction: incoming.fromMe ? 'outgoing' : 'incoming'
+        });
+    }
+
+    return {
+        processed: results.length,
+        event: eventName || 'MESSAGES_UPSERT',
+        mode: 'contact_activity_only',
         results
     };
 }

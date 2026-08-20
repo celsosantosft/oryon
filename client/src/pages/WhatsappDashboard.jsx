@@ -537,6 +537,8 @@ const WhatsappDashboard = () => {
         const initial = String(displayName || conversation.phone || '?').trim().charAt(0).toUpperCase() || '?';
         const tags = getConversationTags(conversation);
         const metaSent = conversation.meta_capi_status === 'sent';
+        const lastActivity = formatDateTime(conversation.last_message_at || conversation.updated_at);
+        const lastMessageText = String(conversation.last_message_text || '').trim();
         const profileImage = conversation.profile_picture_url || conversation.profile_picture || conversation.picture_url || conversation.avatar_url || conversation.photo_url;
 
         return (
@@ -559,10 +561,18 @@ const WhatsappDashboard = () => {
                             <div className="min-w-0">
                                 <p className="truncate text-sm font-extrabold text-slate-950">{displayName}</p>
                                 <p className="mt-1 text-xs font-bold text-slate-500">{formatPhone(conversation.phone)}</p>
+                                {lastMessageText ? (
+                                    <p className="mt-1 truncate text-xs font-semibold text-slate-500">{lastMessageText}</p>
+                                ) : null}
                             </div>
-                            <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-extrabold uppercase ring-1 ${metaSent ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-slate-50 text-slate-500 ring-slate-200'}`}>
-                                {metaSent ? 'Meta' : 'Ativo'}
-                            </span>
+                            <div className="flex shrink-0 flex-col items-end gap-2">
+                                {lastActivity ? (
+                                    <span className="text-[10px] font-extrabold uppercase text-slate-400">{lastActivity}</span>
+                                ) : null}
+                                <span className={`rounded-full px-2 py-1 text-[10px] font-extrabold uppercase ring-1 ${metaSent ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-slate-50 text-slate-500 ring-slate-200'}`}>
+                                    {metaSent ? 'Meta' : 'Ativo'}
+                                </span>
+                            </div>
                         </div>
 
                         <div className="mt-3 flex flex-wrap gap-1.5">
