@@ -2552,6 +2552,62 @@ function normalizeChatTarget(chat) {
     };
 }
 
+async function persistEvolutionConversationTargets() {
+    const summary = {
+        contacts: 0,
+        changed: 0,
+        errors: []
+    };
+    const seen = new Set();
+    const [chatsResult, contactsResult] = await Promise.allSettled([
+        fetchEvolutionChatsWithLabels(),
+        fetchEvolutionContactsWithLabels()
+    ]);
+    const records = [
+        ...(chatsResult.status === 'fulfilled' ? chatsResult.value : []),
+        ...(contactsResult.status === 'fulfilled' ? contactsResult.value : [])
+    ];
+
+    if (chatsResult.status === 'rejected') {
+        summary.errors.push({
+            step: 'chats',
+            error: chatsResult.reason?.failures || summarizeEvolutionError(chatsResult.reason)
+        });
+    }
+
+    if (contactsResult.status === 'rejected') {
+        summary.errors.push({
+            step: 'contacts',
+            error: contactsResult.reason?.failures || summarizeEvolutionError(contactsResult.reason)
+        });
+    }
+
+    for (const record of records) {
+        const target = normalizeChatTarget(record);
+        if (!target || seen.has(target.phone) || !isLikelyWhatsappPhone(target.phone)) continue;
+
+        seen.add(target.phone);
+
+        try {
+            const existingConversation = await findExistingConversationByPhone(target.phone);
+            await ensureConversation(target.phone, {
+                remoteJid: target.remoteJid,
+                pushName: target.pushName
+            });
+
+            summary.contacts += 1;
+            if (!existingConversation) summary.changed += 1;
+        } catch (error) {
+            summary.errors.push({
+                phone: target.phone,
+                error: error.message
+            });
+        }
+    }
+
+    return summary;
+}
+
 async function getKnownConversationTargets() {
     const rows = await dbAll(`
         SELECT phone, remote_jid, push_name FROM whatsapp_conversations
@@ -2638,6 +2694,11 @@ async function syncEvolutionLabelsAndContacts(userId = null) {
         meta_skipped: 0,
         errors: []
     };
+    let contactSync = {
+        contacts: 0,
+        changed: 0,
+        errors: []
+    };
 
     try {
         const labelMirror = await getEvolutionLabelMirror({ force: true });
@@ -2662,17 +2723,38 @@ async function syncEvolutionLabelsAndContacts(userId = null) {
         });
     }
 
+    try {
+        contactSync = await persistEvolutionConversationTargets();
+
+        if (!contactSync.contacts) {
+            warnings.push({
+                step: 'contacts',
+                message: 'A Evolution API não retornou contatos com telefone real para importar.'
+            });
+        }
+    } catch (error) {
+        errors.push({
+            step: 'contacts',
+            message: 'Não foi possível importar contatos recentes da Evolution API.',
+            error: error.failures || summarizeEvolutionError(error)
+        });
+    }
+
     return {
-        chats: labelSync.conversations || 0,
+        chats: Math.max(labelSync.conversations || 0, contactSync.contacts || 0),
+        contacts: contactSync.contacts || 0,
+        imported_contacts: contactSync.contacts || 0,
         messages: 0,
         labels: labelSync.labels,
         label_associations: labelSync.associations,
         label_sync: labelSync,
-        source: 'labels',
+        contact_sync: contactSync,
+        source: 'labels_contacts',
         warnings,
         errors: [
             ...errors,
-            ...(Array.isArray(labelSync.errors) ? labelSync.errors : [])
+            ...(Array.isArray(labelSync.errors) ? labelSync.errors : []),
+            ...(Array.isArray(contactSync.errors) ? contactSync.errors : [])
         ]
     };
 }

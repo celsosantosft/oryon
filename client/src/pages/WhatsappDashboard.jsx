@@ -171,6 +171,7 @@ const WhatsappDashboard = () => {
     const [syncReport, setSyncReport] = useState(null);
     const [manualLead, setManualLead] = useState({ name: '', phone: '', email: '' });
     const [manualLeadLoading, setManualLeadLoading] = useState(false);
+    const [conversationLeadLoading, setConversationLeadLoading] = useState('');
 
     const authConfig = useMemo(() => ({
         headers: { Authorization: `Bearer ${token}` }
@@ -186,7 +187,7 @@ const WhatsappDashboard = () => {
 
     const filteredConversations = useMemo(() => {
         const search = normalizeText(conversationSearch.trim());
-        const source = search ? conversations : taggedConversations;
+        const source = conversations;
 
         if (!search) return source;
 
@@ -199,7 +200,7 @@ const WhatsappDashboard = () => {
                 tags
             ].some(value => normalizeText(value).includes(search));
         });
-    }, [conversationSearch, conversations, taggedConversations]);
+    }, [conversationSearch, conversations]);
 
     const selectedConversation = useMemo(() => (
         filteredConversations.find(item => item.phone === selectedPhone)
@@ -418,37 +419,67 @@ const WhatsappDashboard = () => {
         }
     };
 
+    const sendQualifiedLeadPayload = async (leadData) => {
+        setError('');
+        setSuccess('');
+
+        const response = await axios.post(
+            `${API_BASE_URL}/whatsapp/meta/qualified-lead`,
+            leadData,
+            authConfig
+        );
+        const metaCapi = response.data?.meta_capi;
+
+        if (metaCapi?.sent) {
+            setSyncReport(previous => ({
+                ...(previous || {}),
+                metaSent: Number(previous?.metaSent || 0) + 1
+            }));
+        }
+
+        setSuccess(`${response.data?.message || 'Lead qualificado processado.'}${getMetaCapiFeedback(metaCapi)}`);
+        await fetchConversations(true);
+
+        return response.data;
+    };
+
     const handleManualQualifiedLead = async (event) => {
         event.preventDefault();
         if (!canSendManualLead || manualLeadLoading) return;
 
         setManualLeadLoading(true);
-        setError('');
-        setSuccess('');
 
         try {
-            const response = await axios.post(
-                `${API_BASE_URL}/whatsapp/meta/qualified-lead`,
-                manualLead,
-                authConfig
-            );
-            const metaCapi = response.data?.meta_capi;
+            await sendQualifiedLeadPayload(manualLead);
 
-            if (metaCapi?.sent) {
-                setSyncReport(previous => ({
-                    ...(previous || {}),
-                    metaSent: Number(previous?.metaSent || 0) + 1
-                }));
-            }
-
-            setSuccess(`${response.data?.message || 'Lead qualificado processado.'}${getMetaCapiFeedback(metaCapi)}`);
             setManualLead({ name: '', phone: '', email: '' });
-            await fetchConversations(true);
         } catch (requestError) {
             const metaCapi = requestError.response?.data?.meta_capi;
             setError(`${requestError.response?.data?.error || 'Não foi possível enviar o lead qualificado.'}${getMetaCapiFeedback(metaCapi)}`);
         } finally {
             setManualLeadLoading(false);
+        }
+    };
+
+    const handleSendConversationQualifiedLead = async (conversation) => {
+        if (!conversation?.phone) return;
+
+        const loadingKey = String(conversation.id || conversation.phone);
+        if (conversationLeadLoading) return;
+
+        setConversationLeadLoading(loadingKey);
+
+        try {
+            await sendQualifiedLeadPayload({
+                name: getDisplayName(conversation),
+                phone: conversation.phone,
+                email: ''
+            });
+        } catch (requestError) {
+            const metaCapi = requestError.response?.data?.meta_capi;
+            setError(`${requestError.response?.data?.error || 'Não foi possível enviar o lead qualificado.'}${getMetaCapiFeedback(metaCapi)}`);
+        } finally {
+            setConversationLeadLoading('');
         }
     };
 
@@ -557,12 +588,12 @@ const WhatsappDashboard = () => {
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                     <div className="grid gap-3 sm:grid-cols-3">
                         <div>
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Contatos com etiqueta</p>
-                            <strong className="mt-1 block text-2xl text-slate-950">{taggedConversations.length}</strong>
+                            <p className="text-xs font-extrabold uppercase text-slate-400">Contatos capturados</p>
+                            <strong className="mt-1 block text-2xl text-slate-950">{conversations.length}</strong>
                         </div>
                         <div>
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Etiquetas conhecidas</p>
-                            <strong className="mt-1 block text-2xl text-slate-950">{labelSummary.length}</strong>
+                            <p className="text-xs font-extrabold uppercase text-slate-400">Com etiqueta</p>
+                            <strong className="mt-1 block text-2xl text-slate-950">{taggedConversations.length}</strong>
                         </div>
                         <div>
                             <p className="text-xs font-extrabold uppercase text-slate-400">Meta CAPI</p>
@@ -632,9 +663,9 @@ const WhatsappDashboard = () => {
                     <div className="shrink-0 border-b border-slate-100 p-4">
                         <div className="flex items-center justify-between gap-3">
                             <div>
-                                <h2 className="text-lg font-extrabold text-slate-950">Contatos por etiqueta</h2>
+                                <h2 className="text-lg font-extrabold text-slate-950">Contatos capturados</h2>
                                 <p className="mt-1 text-xs font-bold text-slate-500">
-                                    {conversationSearch.trim() ? `${filteredConversations.length} resultado(s)` : `${taggedConversations.length} contato(s)`}
+                                    {conversationSearch.trim() ? `${filteredConversations.length} resultado(s)` : `${conversations.length} contato(s)`}
                                 </p>
                             </div>
                             <button
@@ -666,7 +697,7 @@ const WhatsappDashboard = () => {
                             filteredConversations.map(renderContactItem)
                         ) : (
                             <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm font-semibold leading-6 text-slate-500">
-                                Nenhum contato com etiqueta sincronizada.
+                                Nenhum contato capturado ainda.
                             </div>
                         )}
                     </div>
@@ -683,21 +714,35 @@ const WhatsappDashboard = () => {
                                         {formatPhone(selectedConversation.phone)}
                                     </p>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={handleSyncLabels}
-                                    disabled={syncingLabels}
-                                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-extrabold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                    title="Sincronizar etiquetas"
-                                >
-                                    {syncingLabels ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" /> : Icons.Refresh}
-                                    Sync
-                                </button>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSendConversationQualifiedLead(selectedConversation)}
+                                        disabled={conversationLeadLoading === String(selectedConversation.id || selectedConversation.phone)}
+                                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                        title="Enviar lead qualificado para a Meta"
+                                    >
+                                        {conversationLeadLoading === String(selectedConversation.id || selectedConversation.phone)
+                                            ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                                            : Icons.Tag}
+                                        Enviar Meta
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSyncLabels}
+                                        disabled={syncingLabels}
+                                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-extrabold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                        title="Sincronizar etiquetas"
+                                    >
+                                        {syncingLabels ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" /> : Icons.Refresh}
+                                        Sync
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <div>
                                 <h2 className="text-xl font-extrabold text-slate-950">Etiquetas do WhatsApp</h2>
-                                <p className="mt-1 text-sm font-bold text-slate-500">Selecione um contato etiquetado.</p>
+                                <p className="mt-1 text-sm font-bold text-slate-500">Selecione um contato capturado.</p>
                             </div>
                         )}
                     </div>
@@ -773,7 +818,7 @@ const WhatsappDashboard = () => {
                             </div>
                         ) : (
                             <div className="flex h-full min-h-[360px] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
-                                Clique em sincronizar para carregar os contatos que possuem etiqueta no WhatsApp Business.
+                                Selecione um contato capturado para enviar o lead qualificado para a Meta.
                             </div>
                         )}
                     </div>
