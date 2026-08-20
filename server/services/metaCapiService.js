@@ -349,6 +349,10 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
                 event_time: eventTime,
                 action_source: 'system_generated',
                 event_id: eventId,
+                custom_data: {
+                    lead_stage: 'qualified',
+                    source: 'whatsapp'
+                },
                 user_data: userData
             }
         ]

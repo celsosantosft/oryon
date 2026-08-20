@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULT_GRAPH_VERSION = 'v26.0';
-const DEFAULT_EVENT_NAME = 'Lead Qualificado';
+const DEFAULT_EVENT_NAME = 'Lead';
 const DEFAULT_DEFAULT_COUNTRY_CODE = '55';
 const DEFAULT_QUALIFIED_LABELS = [
     'Lead Qualificado',
