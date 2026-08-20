@@ -358,12 +358,13 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
                 },
                 user_data: userData
             }
-        ]
+        ],
+        test_event_code: 'TEST58782'
     };
 
-    if (testEventCode) {
-        payload.test_event_code = testEventCode;
-    }
+    // if (testEventCode) {
+    //     payload.test_event_code = testEventCode;
+    // }
 
     await upsertEventAttempt({
         source,
