@@ -446,6 +446,39 @@ function phoneLooksSame(left, right) {
     return normalizedLeft.endsWith(normalizedRight) || normalizedRight.endsWith(normalizedLeft);
 }
 
+function formatHistoryPhone(value) {
+    const digits = normalizePhone(value);
+    if (!digits) return '';
+
+    const match = digits.match(/^55(\d{2})(\d{4,5})(\d{4})$/);
+    if (match) return `+55 (${match[1]}) ${match[2]}-${match[3]}`;
+    return digits;
+}
+
+function getPhoneSearchVariants(value) {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (!digits) return [];
+
+    const variants = [
+        digits,
+        normalizePhone(digits)
+    ];
+
+    if (digits.startsWith('55')) variants.push(digits.slice(2));
+    if (normalizePhone(digits).startsWith('55')) variants.push(normalizePhone(digits).slice(2));
+
+    if (digits.length === 11 && digits[2] === '9') {
+        variants.push(`${digits.slice(0, 2)}${digits.slice(3)}`);
+    }
+
+    if (digits.length === 13 && digits.startsWith('55') && digits[4] === '9') {
+        variants.push(`${digits.slice(0, 4)}${digits.slice(5)}`);
+        variants.push(`${digits.slice(2, 4)}${digits.slice(5)}`);
+    }
+
+    return Array.from(new Set(variants.filter(item => item && item.length >= 4)));
+}
+
 function isLikelyWhatsappPhone(value) {
     const digits = normalizePhone(value);
     if (!digits) return false;
@@ -812,6 +845,8 @@ async function ensureConversation(phone, metadata = {}) {
     const existingClient = metadata.client || await findExistingClientByPhone(normalizedPhone).catch(() => null);
     const clientName = metadata.clientName || existingClient?.name || '';
     const existingConversation = await findExistingConversationByPhone(normalizedPhone).catch(() => null);
+    const lastMessageText = String(metadata.lastMessageText || '').trim();
+    const lastMessageAt = toSqlDateTime(metadata.lastMessageAt) || null;
 
     if (existingConversation) {
         await dbRun(
@@ -820,6 +855,8 @@ async function ensureConversation(phone, metadata = {}) {
                     push_name = COALESCE(NULLIF(?, ''), push_name),
                     client_id = COALESCE(?, client_id),
                     client_name = COALESCE(NULLIF(?, ''), client_name),
+                    last_message_text = COALESCE(NULLIF(?, ''), last_message_text),
+                    last_message_at = COALESCE(?, last_message_at),
                     updated_at = CURRENT_TIMESTAMP
               WHERE id = ?`,
             [
@@ -827,6 +864,8 @@ async function ensureConversation(phone, metadata = {}) {
                 metadata.pushName || '',
                 existingClient?.id || metadata.clientId || null,
                 clientName,
+                lastMessageText,
+                lastMessageAt,
                 existingConversation.id
             ]
         );
@@ -836,21 +875,25 @@ async function ensureConversation(phone, metadata = {}) {
 
     await dbRun(
         `INSERT INTO whatsapp_conversations
-            (phone, remote_jid, push_name, client_id, client_name, updated_at)
+            (phone, remote_jid, push_name, client_id, client_name, last_message_text, last_message_at, updated_at)
          VALUES
-            (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
          ON CONFLICT(phone) DO UPDATE SET
             remote_jid = COALESCE(NULLIF(excluded.remote_jid, ''), remote_jid),
             push_name = COALESCE(NULLIF(excluded.push_name, ''), push_name),
             client_id = COALESCE(excluded.client_id, client_id),
             client_name = COALESCE(NULLIF(excluded.client_name, ''), client_name),
+            last_message_text = COALESCE(NULLIF(excluded.last_message_text, ''), last_message_text),
+            last_message_at = COALESCE(excluded.last_message_at, last_message_at),
             updated_at = CURRENT_TIMESTAMP`,
         [
             normalizedPhone,
             metadata.remoteJid || '',
             metadata.pushName || '',
             existingClient?.id || metadata.clientId || null,
-            clientName
+            clientName,
+            lastMessageText,
+            lastMessageAt
         ]
     );
 
@@ -1195,7 +1238,9 @@ async function processChatWebhook(payload, eventName) {
         seenPhones.add(target.phone);
         const conversation = await ensureConversation(target.phone, {
             remoteJid: target.remoteJid,
-            pushName: target.pushName
+            pushName: target.pushName,
+            lastMessageText: target.lastMessageText,
+            lastMessageAt: target.lastMessageAt
         });
 
         results.push({
@@ -2533,6 +2578,63 @@ async function persistLabelMirrorAssociations(labelMirror, userId = null) {
     return summary;
 }
 
+function extractChatActivity(chat) {
+    if (!chat || typeof chat !== 'object') {
+        return {
+            lastMessageText: '',
+            lastMessageAt: null
+        };
+    }
+
+    const lastMessage = Array.isArray(chat.messages) ? chat.messages[0] : (
+        chat.lastMessage
+        || chat.last_message
+        || chat.message
+        || chat.messages
+        || chat.recentMessage
+        || chat.recent_message
+        || null
+    );
+    const lastMessageText = findTextByPaths(
+        [chat, lastMessage],
+        [
+            'lastMessageText',
+            'last_message_text',
+            'messageText',
+            'message_text',
+            'body',
+            'text',
+            'conversation',
+            'message.conversation',
+            'message.extendedTextMessage.text',
+            'lastMessage.message.conversation',
+            'lastMessage.message.extendedTextMessage.text',
+            'last_message.message.conversation',
+            'last_message.message.extendedTextMessage.text'
+        ]
+    ) || extractIncomingText(lastMessage || chat);
+    const timestamp = chat.lastMessageAt
+        || chat.last_message_at
+        || chat.lastMessageTimestamp
+        || chat.last_message_timestamp
+        || chat.updatedAt
+        || chat.updated_at
+        || chat.date_time
+        || chat.createdAt
+        || chat.created_at
+        || chat.timestamp
+        || chat.messageTimestamp
+        || lastMessage?.messageTimestamp
+        || lastMessage?.timestamp
+        || lastMessage?.createdAt
+        || null;
+
+    return {
+        lastMessageText,
+        lastMessageAt: toSqlDateTime(extractMessageTimestamp({ timestamp })) || toSqlDateTime(timestamp)
+    };
+}
+
 function normalizeChatTarget(chat) {
     const remoteJid = extractChatRemoteJid(chat);
     const explicitPhone = normalizePhone(
@@ -2553,6 +2655,7 @@ function normalizeChatTarget(chat) {
         explicitPhone || extractPhoneFromRemoteJid(remoteJid)
     );
     const finalRemoteJid = remoteJid || (phone ? `${phone}@s.whatsapp.net` : '');
+    const activity = extractChatActivity(chat);
 
     if (!phone || !finalRemoteJid || !isLikelyWhatsappPhone(phone)) return null;
     if (isLidJid(finalRemoteJid) || finalRemoteJid.includes('@g.us') || finalRemoteJid.includes('status@broadcast')) return null;
@@ -2567,7 +2670,9 @@ function normalizeChatTarget(chat) {
             || chat?.client_name
             || chat?.contact?.pushName
             || chat?.contact?.name
-            || ''
+            || '',
+        lastMessageText: activity.lastMessageText,
+        lastMessageAt: activity.lastMessageAt
     };
 }
 
@@ -2611,7 +2716,9 @@ async function persistEvolutionConversationTargets() {
             const existingConversation = await findExistingConversationByPhone(target.phone);
             await ensureConversation(target.phone, {
                 remoteJid: target.remoteJid,
-                pushName: target.pushName
+                pushName: target.pushName,
+                lastMessageText: target.lastMessageText,
+                lastMessageAt: target.lastMessageAt
             });
 
             summary.contacts += 1;
@@ -3007,6 +3114,84 @@ router.post('/whatsapp/meta/qualified-lead', authenticateToken, authorizeRole(['
     }
 });
 
+router.get('/whatsapp/meta/qualified-leads/history', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+    try {
+        const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 50);
+        const eventName = getMetaCapiDiagnostics().qualifiedLeadEventName || 'Lead Qualificado';
+        const sources = ['whatsapp_manual', 'whatsapp'];
+        const sourcePlaceholders = sources.map(() => '?').join(', ');
+        const queryParams = [eventName, ...sources];
+        const summary = await dbGet(
+            `SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
+             FROM meta_capi_events
+             WHERE event_name = ?
+               AND source IN (${sourcePlaceholders})`,
+            queryParams
+        );
+        const rows = await dbAll(
+            `SELECT
+                mce.id,
+                mce.source,
+                mce.source_id,
+                mce.conversation_id,
+                mce.client_id,
+                mce.event_name,
+                mce.status,
+                mce.error,
+                mce.created_at,
+                mce.updated_at,
+                wc.phone,
+                wc.push_name,
+                wc.client_name,
+                c.name AS client_name_match
+             FROM meta_capi_events mce
+             LEFT JOIN whatsapp_conversations wc ON wc.id = mce.conversation_id
+             LEFT JOIN clients c ON c.id = COALESCE(mce.client_id, wc.client_id)
+             WHERE mce.event_name = ?
+               AND mce.source IN (${sourcePlaceholders})
+             ORDER BY COALESCE(mce.updated_at, mce.created_at) DESC
+             LIMIT ?`,
+            [...queryParams, limit]
+        );
+
+        res.json({
+            summary: {
+                total: Number(summary?.total || 0),
+                sent: Number(summary?.sent || 0),
+                failed: Number(summary?.failed || 0)
+            },
+            history: rows.map(row => {
+                const fallbackPhone = isLikelyWhatsappPhone(row.source_id) ? normalizePhone(row.source_id) : '';
+                const phone = normalizePhone(row.phone || fallbackPhone);
+
+                return {
+                    id: row.id,
+                    event_name: row.event_name,
+                    status: row.status,
+                    source: row.source,
+                    source_id: row.source_id,
+                    conversation_id: row.conversation_id,
+                    client_id: row.client_id,
+                    display_name: row.client_name_match || row.client_name || row.push_name || formatHistoryPhone(phone) || row.source_id,
+                    phone,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                    error: row.status === 'failed' ? row.error : ''
+                };
+            })
+        });
+    } catch (error) {
+        res.status(500).json({
+            error: 'Não foi possível carregar o histórico de leads Meta.',
+            details: error.message,
+            history: []
+        });
+    }
+});
+
 router.post('/whatsapp/webhook', async (req, res) => {
     const eventName = normalizeWebhookEventName(req.body);
 
@@ -3032,21 +3217,28 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
 
         if (search) {
             const searchLike = `%${search}%`;
-            whereClause = `
-                WHERE wc.phone LIKE ?
-                   OR wc.push_name LIKE ?
-                   OR wc.client_name LIKE ?
-                   OR c.name LIKE ?
-                   OR wc.last_message_text LIKE ?
-                   OR EXISTS (
+            const searchPredicates = [
+                'wc.phone LIKE ?',
+                'wc.push_name LIKE ?',
+                'wc.client_name LIKE ?',
+                'c.name LIKE ?',
+                'wc.last_message_text LIKE ?',
+                `EXISTS (
                         SELECT 1
                         FROM whatsapp_conversation_tags wct
                         JOIN whatsapp_tags wt ON wt.id = wct.tag_id
                         WHERE wct.conversation_id = wc.id
                           AND wt.name LIKE ?
-                   )
-            `;
+                   )`
+            ];
             params.push(searchLike, searchLike, searchLike, searchLike, searchLike, searchLike);
+
+            for (const variant of getPhoneSearchVariants(search)) {
+                searchPredicates.push('wc.phone LIKE ?');
+                params.push(`%${variant}%`);
+            }
+
+            whereClause = `WHERE (${searchPredicates.join(' OR ')})`;
         }
 
         const conversations = await dbAll(
@@ -3067,7 +3259,7 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
                    AND mce_auto.source_id = CAST(wc.id AS TEXT)
                    AND mce_auto.event_name = ?
              ${whereClause}
-             ORDER BY COALESCE(wc.last_message_at, wc.updated_at) DESC
+             ORDER BY COALESCE(wc.last_message_at, wc.updated_at, wc.created_at) DESC
              LIMIT 120`,
             [metaEventName, metaEventName, ...params]
         );
