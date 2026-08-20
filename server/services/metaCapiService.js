@@ -348,18 +348,15 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
             {
                 event_name: eventName,
                 event_time: eventTime,
-                action_source: 'website',
-                event_source_url: 'https://atosfardamentos.com.br',
+                action_source: 'system_generated',
                 event_id: `${eventId}:${Date.now()}`,
                 custom_data: {
+                    event_source: 'crm',
+                    lead_event_source: 'Oryon CRM',
                     lead_stage: 'qualified',
                     source: 'whatsapp'
                 },
-                user_data: {
-                    ...userData,
-                    client_user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    client_ip_address: '1.1.1.1'
-                }
+                user_data: userData
             }
         ]
     };
