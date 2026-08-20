@@ -141,6 +141,16 @@ function matchesPhoneSearch(phone, search) {
     ));
 }
 
+function getManualLeadPhone(value) {
+    const digits = onlyDigits(value);
+    if (!digits) return '';
+
+    if (digits.startsWith('55') && digits.length >= 12 && digits.length <= 13) return digits;
+    if (!digits.startsWith('55') && digits.length >= 10 && digits.length <= 11) return `55${digits}`;
+
+    return '';
+}
+
 function formatDateTime(value) {
     if (!value) return '';
 
@@ -276,6 +286,7 @@ const WhatsappDashboard = () => {
         || null
     ), [filteredConversations, selectedPhone]);
     const selectedMetaSent = selectedConversation?.meta_capi_status === 'sent';
+    const manualLeadPhone = useMemo(() => getManualLeadPhone(conversationSearch), [conversationSearch]);
 
     const navigationItems = useMemo(() => ([
         { id: 'labels', label: 'Leads Meta', icon: Icons.Tag },
@@ -517,6 +528,25 @@ const WhatsappDashboard = () => {
         }
     };
 
+    const handleSendSearchQualifiedLead = async () => {
+        if (!manualLeadPhone || conversationLeadLoading) return;
+
+        setConversationLeadLoading(`manual-${manualLeadPhone}`);
+
+        try {
+            await sendQualifiedLeadPayload({
+                name: formatPhone(manualLeadPhone),
+                phone: manualLeadPhone,
+                email: ''
+            });
+        } catch (requestError) {
+            const metaCapi = requestError.response?.data?.meta_capi;
+            setError(`${requestError.response?.data?.error || 'Não foi possível enviar o lead qualificado.'}${getMetaCapiFeedback(metaCapi)}`);
+        } finally {
+            setConversationLeadLoading('');
+        }
+    };
+
     const renderTagPill = (tag, compact = false) => {
         const color = tag.color || '#64748b';
 
@@ -712,9 +742,25 @@ const WhatsappDashboard = () => {
                             <div className="flex h-44 items-center justify-center text-sm font-bold text-slate-500">Carregando contatos...</div>
                         ) : filteredConversations.length ? (
                             filteredConversations.map(renderContactItem)
+                        ) : manualLeadPhone ? (
+                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-semibold leading-6 text-blue-900">
+                                <p className="font-extrabold">Contato não encontrado</p>
+                                <p className="mt-1">Você pode enviar {formatPhone(manualLeadPhone)} direto para a Meta.</p>
+                                <button
+                                    type="button"
+                                    onClick={handleSendSearchQualifiedLead}
+                                    disabled={conversationLeadLoading === `manual-${manualLeadPhone}`}
+                                    className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-xs font-extrabold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {conversationLeadLoading === `manual-${manualLeadPhone}`
+                                        ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                                        : Icons.Tag}
+                                    Enviar este número
+                                </button>
+                            </div>
                         ) : (
                             <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm font-semibold leading-6 text-slate-500">
-                                Nenhum contato capturado ainda.
+                                {conversationSearch.trim() ? 'Nenhum contato encontrado para essa busca.' : 'Nenhum contato capturado ainda.'}
                             </div>
                         )}
                     </div>
@@ -790,6 +836,34 @@ const WhatsappDashboard = () => {
                                     </div>
                                 </div>
                                 {renderLeadHistory()}
+                            </div>
+                        ) : manualLeadPhone ? (
+                            <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-5">
+                                    <p className="text-xs font-extrabold uppercase text-slate-400">Número digitado</p>
+                                    <h3 className="mt-2 text-2xl font-extrabold text-slate-950">{formatPhone(manualLeadPhone)}</h3>
+                                    <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
+                                        Este contato ainda não foi capturado pela Evolution, mas pode ser enviado manualmente para a Meta usando o telefone.
+                                    </p>
+                                </div>
+
+                                <div className="rounded-lg border border-blue-200 bg-blue-50 p-5">
+                                    <p className="text-xs font-extrabold uppercase text-blue-700">Meta CAPI</p>
+                                    <p className="mt-2 text-sm font-semibold leading-6 text-blue-900">
+                                        O número será normalizado e enviado com hash SHA-256 para o Pixel.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={handleSendSearchQualifiedLead}
+                                        disabled={conversationLeadLoading === `manual-${manualLeadPhone}`}
+                                        className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
+                                    >
+                                        {conversationLeadLoading === `manual-${manualLeadPhone}`
+                                            ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                                            : Icons.Tag}
+                                        Enviar Meta
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <div className="flex h-full min-h-[360px] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
