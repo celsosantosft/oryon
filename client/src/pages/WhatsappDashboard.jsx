@@ -204,9 +204,10 @@ function getMetaCapiFeedback(metaCapi) {
 
 function getDisabledEvolutionStorage(dataStorage) {
     const labels = {
-        labels: 'DATABASE_SAVE_DATA_LABELS',
+        messages: 'DATABASE_SAVE_DATA_NEW_MESSAGE',
         chats: 'DATABASE_SAVE_DATA_CHATS',
-        contacts: 'DATABASE_SAVE_DATA_CONTACTS'
+        contacts: 'DATABASE_SAVE_DATA_CONTACTS',
+        labels: 'DATABASE_SAVE_DATA_LABELS'
     };
 
     return Object.entries(labels)

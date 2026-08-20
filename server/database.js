@@ -144,6 +144,19 @@ function createTables() {
     )`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_whatsapp_conversations_updated ON whatsapp_conversations(updated_at)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_whatsapp_conversations_phone ON whatsapp_conversations(phone)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_whatsapp_conversations_last_msg ON whatsapp_conversations(last_message_at)`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS whatsapp_webhook_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_name TEXT,
+        processed_count INTEGER NOT NULL DEFAULT 0,
+        summary TEXT,
+        raw_payload TEXT,
+        result_payload TEXT,
+        error TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_whatsapp_webhook_audit_created ON whatsapp_webhook_audit(created_at)`);
 
     db.run(`CREATE TABLE IF NOT EXISTS whatsapp_messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

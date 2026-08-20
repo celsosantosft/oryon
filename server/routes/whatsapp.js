@@ -29,9 +29,12 @@ try {
 }
 
 const EVOLUTION_WEBHOOK_EVENTS = [
+    'APPLICATION_STARTUP',
+    'QRCODE_UPDATED',
     'CHATS_SET',
     'CHATS_UPSERT',
     'CHATS_UPDATE',
+    'CHATS_DELETE',
     'CONTACTS_SET',
     'CONTACTS_UPSERT',
     'CONTACTS_UPDATE',
@@ -119,6 +122,19 @@ db.run(`
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         event_name TEXT,
         processed_count INTEGER NOT NULL DEFAULT 0,
+        raw_payload TEXT,
+        result_payload TEXT,
+        error TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+`);
+
+db.run(`
+    CREATE TABLE IF NOT EXISTS whatsapp_webhook_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_name TEXT,
+        processed_count INTEGER NOT NULL DEFAULT 0,
+        summary TEXT,
         raw_payload TEXT,
         result_payload TEXT,
         error TEXT,
@@ -587,21 +603,41 @@ function collectMessagePayloads(payload) {
         return payload.flatMap(collectMessagePayloads);
     }
 
-    const candidates = [
-        payload.data,
-        payload.messages,
-        payload.message,
-        payload.data?.messages,
-        payload.data?.message,
-        payload.data?.messages?.records,
-        payload.data?.records,
-        payload.response,
-        payload.response?.messages,
-        payload.response?.records
-    ];
+    if (Array.isArray(payload.data)) {
+        return payload.data.flatMap(collectMessagePayloads);
+    }
 
-    const collected = candidates.flatMap(collectMessagePayloads);
-    if (collected.length) return collected;
+    if (Array.isArray(payload.messages)) {
+        return payload.messages.flatMap(collectMessagePayloads);
+    }
+
+    if (Array.isArray(payload.records)) {
+        return payload.records.flatMap(collectMessagePayloads);
+    }
+
+    if (Array.isArray(payload.data?.messages)) {
+        return payload.data.messages.flatMap(collectMessagePayloads);
+    }
+
+    if (Array.isArray(payload.data?.records)) {
+        return payload.data.records.flatMap(collectMessagePayloads);
+    }
+
+    if (Array.isArray(payload.response?.messages)) {
+        return payload.response.messages.flatMap(collectMessagePayloads);
+    }
+
+    if (Array.isArray(payload.response?.records)) {
+        return payload.response.records.flatMap(collectMessagePayloads);
+    }
+
+    if (payload.data && typeof payload.data === 'object' && (payload.data.key || payload.data.message || payload.data.remoteJid || payload.data.messageTimestamp)) {
+        return [payload.data];
+    }
+
+    if (payload.message && typeof payload.message === 'object' && (payload.key || payload.remoteJid || payload.messageTimestamp)) {
+        return [payload];
+    }
 
     if (payload.key || payload.remoteJid || payload.from || payload.messageTimestamp || payload.messageType) {
         return [payload];
@@ -703,20 +739,37 @@ function findTextLikeValue(payload, depth = 0, seen = new Set()) {
 function extractIncomingText(messagePayload) {
     if (!messagePayload) return '';
 
-    const searchForText = (obj) => {
+    const searchForText = (obj, depth = 0) => {
+        if (!obj || depth > 6) return '';
         if (typeof obj === 'string') return obj;
-        if (!obj || typeof obj !== 'object') return '';
-        
+        if (typeof obj !== 'object') return '';
+
         if (obj.conversation) return obj.conversation;
-        if (obj.text) return obj.text;
+        if (typeof obj.text === 'string' && obj.text.trim()) return obj.text.trim();
         if (obj.caption) return obj.caption;
         if (obj.selectedDisplayText) return obj.selectedDisplayText;
         if (obj.title) return obj.title;
-        
+        if (typeof obj.body?.text === 'string' && obj.body.text.trim()) return obj.body.text.trim();
+
         if (obj.extendedTextMessage?.text) return obj.extendedTextMessage.text;
-        if (obj.ephemeralMessage?.message) return searchForText(obj.ephemeralMessage.message);
-        if (obj.documentWithCaptionMessage?.message?.documentMessage?.caption) return obj.documentWithCaptionMessage.message.documentMessage.caption;
-        
+        if (obj.imageMessage?.caption) return obj.imageMessage.caption;
+        if (obj.videoMessage?.caption) return obj.videoMessage.caption;
+        if (obj.documentMessage?.caption) return obj.documentMessage.caption;
+        if (obj.documentMessage?.fileName) return `[Documento: ${obj.documentMessage.fileName}]`;
+        if (obj.buttonsResponseMessage?.selectedDisplayText) return obj.buttonsResponseMessage.selectedDisplayText;
+        if (obj.templateButtonReplyMessage?.selectedDisplayText) return obj.templateButtonReplyMessage.selectedDisplayText;
+        if (obj.listResponseMessage?.title) return obj.listResponseMessage.title;
+        if (obj.interactiveMessage?.body?.text) return obj.interactiveMessage.body.text;
+        if (obj.ephemeralMessage?.message) return searchForText(obj.ephemeralMessage.message, depth + 1);
+        if (obj.viewOnceMessage?.message) return searchForText(obj.viewOnceMessage.message, depth + 1);
+        if (obj.viewOnceMessageV2?.message) return searchForText(obj.viewOnceMessageV2.message, depth + 1);
+        if (obj.documentWithCaptionMessage?.message?.documentMessage?.caption) {
+            return obj.documentWithCaptionMessage.message.documentMessage.caption;
+        }
+        if (obj.editedMessage?.message) return searchForText(obj.editedMessage.message, depth + 1);
+        if (obj.locationMessage) return `[Localização${obj.locationMessage.name ? `: ${obj.locationMessage.name}` : ''}]`;
+        if (obj.contactMessage) return `[Contato: ${obj.contactMessage.displayName || 'WhatsApp'}]`;
+
         return '';
     };
 
@@ -737,30 +790,45 @@ function extractMessageType(messagePayload, rootPayload = null) {
 function outgoingDeviceFallbackText(messageType) {
     const normalizedType = String(messageType || '').toLowerCase();
 
-    if (normalizedType.includes('audio')) return '[Audio enviado pelo aparelho]';
-    if (normalizedType.includes('image')) return '[Imagem enviada pelo aparelho]';
-    if (normalizedType.includes('video')) return '[Video enviado pelo aparelho]';
-    if (normalizedType.includes('document')) return '[Documento enviado pelo aparelho]';
-    if (normalizedType.includes('sticker')) return '[Figurinha enviada pelo aparelho]';
-    if (normalizedType.includes('location')) return '[Localizacao enviada pelo aparelho]';
-    if (normalizedType.includes('contact')) return '[Contato enviado pelo aparelho]';
-    if (normalizedType.includes('reaction')) return '[Reacao enviada pelo aparelho]';
+    if (normalizedType.includes('audio')) return '[Áudio enviado]';
+    if (normalizedType.includes('image')) return '[Imagem enviada]';
+    if (normalizedType.includes('video')) return '[Vídeo enviado]';
+    if (normalizedType.includes('document')) return '[Documento enviado]';
+    if (normalizedType.includes('sticker')) return '[Figurinha enviada]';
+    if (normalizedType.includes('location')) return '[Localização enviada]';
+    if (normalizedType.includes('contact')) return '[Contato enviado]';
+    if (normalizedType.includes('reaction')) return '[Reação enviada]';
 
     return '';
 }
 
 function extractMessageTimestamp(messagePayload) {
+    if (!messagePayload) return null;
     const value = messagePayload?.messageTimestamp
         || messagePayload?.timestamp
+        || messagePayload?.conversationTimestamp
+        || messagePayload?.conversation_timestamp
+        || messagePayload?.lastMessageTimestamp
+        || messagePayload?.last_message_timestamp
+        || messagePayload?.lastMessageTime
+        || messagePayload?.last_message_time
         || messagePayload?.createdAt
-        || messagePayload?.dateTime;
+        || messagePayload?.created_at
+        || messagePayload?.updatedAt
+        || messagePayload?.updated_at
+        || messagePayload?.dateTime
+        || messagePayload?.date_time;
 
-    if (!value) return null;
+    if (value === undefined || value === null || value === '') return null;
     if (typeof value === 'number') return value;
-    if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value);
+    if (typeof value === 'string') {
+        if (/^\d+$/.test(value.trim())) return Number(value.trim());
+        return value.trim();
+    }
     if (typeof value === 'object') {
         if (typeof value.low === 'number') return value.low;
         if (typeof value.seconds === 'number') return value.seconds;
+        if (typeof value.getTime === 'function') return value.getTime();
     }
 
     return value;
@@ -770,8 +838,18 @@ function toSqlDateTime(value) {
     if (!value) return null;
 
     if (typeof value === 'number' && Number.isFinite(value)) {
-        const milliseconds = value > 1000000000000 ? value : value * 1000;
-        return new Date(milliseconds).toISOString().slice(0, 19).replace('T', ' ');
+        const milliseconds = value > 100000000000 ? value : value * 1000;
+        const date = new Date(milliseconds);
+        if (Number.isNaN(date.getTime())) return null;
+        return date.toISOString().slice(0, 19).replace('T', ' ');
+    }
+
+    if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+        const num = Number(value.trim());
+        const milliseconds = num > 100000000000 ? num : num * 1000;
+        const date = new Date(milliseconds);
+        if (Number.isNaN(date.getTime())) return null;
+        return date.toISOString().slice(0, 19).replace('T', ' ');
     }
 
     const date = new Date(value);
@@ -780,24 +858,92 @@ function toSqlDateTime(value) {
 }
 
 function extractIncomingMessage(payload, rootPayload = null) {
-    const messagePayload = extractIncomingPayload(payload);
-    if (!messagePayload) return null;
+    const messagePayload = extractIncomingPayload(payload) || payload;
+    if (!messagePayload || typeof messagePayload !== 'object') return null;
 
-    const key = messagePayload.key || {};
-    const remoteJid = key.remoteJid || messagePayload.remoteJid || messagePayload.from || '';
-    const phone = extractPhoneFromRemoteJid(remoteJid);
+    const key = messagePayload.key || payload?.key || {};
+
+    const candidateJids = [
+        key.remoteJid,
+        messagePayload.remoteJid,
+        messagePayload.from,
+        messagePayload.jid,
+        key.participant,
+        messagePayload.participant,
+        messagePayload.sender,
+        messagePayload.senderJid,
+        messagePayload.recipient,
+        rootPayload?.data?.key?.remoteJid,
+        rootPayload?.data?.remoteJid
+    ].filter(Boolean);
+
+    let remoteJid = '';
+    let phone = '';
+
+    for (const cand of candidateJids) {
+        const extracted = extractPhoneFromRemoteJid(cand);
+        if (extracted) {
+            phone = extracted;
+            remoteJid = normalizeWhatsappJid(cand);
+            break;
+        }
+    }
+
+    if (!phone) {
+        const candidatePhones = [
+            messagePayload.phone,
+            messagePayload.number,
+            messagePayload.phoneNumber,
+            messagePayload.phone_number,
+            key.phone,
+            key.number,
+            rootPayload?.data?.phone,
+            rootPayload?.data?.number
+        ].filter(Boolean);
+
+        for (const cand of candidatePhones) {
+            const normalized = normalizePhone(cand);
+            if (isLikelyWhatsappPhone(normalized)) {
+                phone = normalized;
+                remoteJid = `${normalized}@s.whatsapp.net`;
+                break;
+            }
+        }
+    }
+
+    const mainJid = key.remoteJid || messagePayload.remoteJid || remoteJid || '';
+    const isGroup = mainJid.includes('@g.us');
+    const isBroadcast = mainJid.includes('status@broadcast');
+
+    const pushName = messagePayload.pushName
+        || messagePayload.pushname
+        || messagePayload.name
+        || messagePayload.verifiedName
+        || messagePayload.notify
+        || messagePayload.sender?.pushName
+        || messagePayload.sender?.name
+        || messagePayload.contact?.pushName
+        || messagePayload.contact?.name
+        || rootPayload?.data?.pushName
+        || rootPayload?.pushName
+        || '';
+
+    const text = extractIncomingText(messagePayload, rootPayload || payload);
+    const type = extractMessageType(messagePayload, rootPayload || payload);
+    const rawTimestamp = extractMessageTimestamp(messagePayload) || extractMessageTimestamp(rootPayload);
+    const timestamp = toSqlDateTime(rawTimestamp) || new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     return {
         id: key.id || messagePayload.id || '',
         phone,
-        remoteJid,
+        remoteJid: remoteJid || mainJid,
         fromMe: Boolean(key.fromMe || messagePayload.fromMe),
-        pushName: messagePayload.pushName || messagePayload.sender?.pushName || '',
-        text: extractIncomingText(messagePayload, rootPayload || payload),
-        type: extractMessageType(messagePayload, rootPayload || payload),
-        timestamp: toSqlDateTime(extractMessageTimestamp(messagePayload)),
-        isGroup: remoteJid.includes('@g.us'),
-        isBroadcast: remoteJid.includes('status@broadcast')
+        pushName: String(pushName).trim(),
+        text,
+        type,
+        timestamp,
+        isGroup,
+        isBroadcast
     };
 }
 
@@ -1199,45 +1345,87 @@ async function processWebhookMessage(messagePayload, rootPayload, options = {}) 
 async function processIncomingWebhook(payload) {
     const eventName = normalizeWebhookEventName(payload);
 
-    if (eventName.includes('LABELS_ASSOCIATION') || eventName.includes('LABELS_EDIT')) {
+    if (eventName.includes('LABEL')) {
         return processLabelWebhook(payload, eventName);
     }
 
-    if (eventName.includes('CHATS_UPSERT') || eventName.includes('CHATS_UPDATE') || eventName.includes('CONTACTS')) {
+    if (
+        eventName.includes('CHAT')
+        || eventName.includes('CONTACT')
+        || eventName === 'CHATS_SET'
+        || eventName === 'CHATS_UPSERT'
+        || eventName === 'CHATS_UPDATE'
+        || eventName === 'CONTACTS_SET'
+        || eventName === 'CONTACTS_UPSERT'
+        || eventName === 'CONTACTS_UPDATE'
+    ) {
         return processChatWebhook(payload, eventName);
     }
 
-    if (eventName.includes('MESSAGES') || eventName.includes('MESSAGE') || collectMessagePayloads(payload).length) {
+    if (
+        eventName.includes('MESSAGE')
+        || eventName.includes('SEND_MESSAGE')
+        || eventName === 'MESSAGES_SET'
+        || eventName === 'MESSAGES_UPSERT'
+        || eventName === 'MESSAGES_UPDATE'
+        || collectMessagePayloads(payload).length > 0
+    ) {
         return processMessageContactWebhook(payload, eventName);
+    }
+
+    if (eventName.includes('CONNECTION') || eventName.includes('QRCODE')) {
+        return {
+            processed: 0,
+            event: eventName,
+            status: normalizeConnectionState(payload?.data || payload)
+        };
     }
 
     return {
         ignored: true,
         event: eventName || 'UNKNOWN',
-        reason: 'whatsapp_message_events_disabled'
+        reason: 'unhandled_event'
     };
 }
 
 function collectChatPayloads(payload) {
-    const candidates = [
-        payload?.data,
-        payload?.chat,
-        payload?.chats,
-        payload?.conversation,
-        payload?.message?.chat,
-        payload
-    ];
-    const chats = [];
+    if (!payload || typeof payload !== 'object') return [];
 
-    for (const candidate of candidates) {
-        if (Array.isArray(candidate)) {
-            chats.push(...candidate.filter(item => item && typeof item === 'object'));
-        } else if (candidate && typeof candidate === 'object') {
-            chats.push(candidate);
-        }
+    if (Array.isArray(payload)) {
+        return payload.flatMap(collectChatPayloads);
     }
 
-    return chats;
+    if (Array.isArray(payload.data)) {
+        return payload.data.filter(item => item && typeof item === 'object');
+    }
+
+    if (Array.isArray(payload.chats)) {
+        return payload.chats.filter(item => item && typeof item === 'object');
+    }
+
+    if (Array.isArray(payload.contacts)) {
+        return payload.contacts.filter(item => item && typeof item === 'object');
+    }
+
+    if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
+        if (Array.isArray(payload.data.chats)) return payload.data.chats;
+        if (Array.isArray(payload.data.contacts)) return payload.data.contacts;
+        return [payload.data];
+    }
+
+    if (payload.chat && typeof payload.chat === 'object') {
+        return [payload.chat];
+    }
+
+    if (payload.contact && typeof payload.contact === 'object') {
+        return [payload.contact];
+    }
+
+    if (payload.remoteJid || payload.jid || payload.id || payload.phone || payload.number) {
+        return [payload];
+    }
+
+    return [];
 }
 
 async function processChatWebhook(payload, eventName) {
@@ -1300,11 +1488,12 @@ async function persistMessageContactActivity(incoming) {
     const previewText = incoming.text
         || outgoingDeviceFallbackText(incoming.type)
         || (incoming.fromMe ? 'Mensagem enviada' : 'Mensagem recebida');
+    const timestamp = incoming.timestamp || new Date().toISOString().slice(0, 19).replace('T', ' ');
     const conversation = await ensureConversation(incoming.phone, {
         remoteJid: incoming.remoteJid,
         pushName: incoming.pushName,
         lastMessageText: previewText,
-        lastMessageAt: incoming.timestamp
+        lastMessageAt: timestamp
     });
 
     return {
@@ -1397,6 +1586,46 @@ async function recordLabelWebhookAudit(eventName, payload, result = null, error 
          WHERE id NOT IN (
             SELECT id
             FROM whatsapp_label_webhook_audit
+            ORDER BY id DESC
+            LIMIT 100
+         )`
+    ).catch(() => {});
+}
+
+async function recordWebhookAudit(eventName, payload, result = null, error = '') {
+    const processedCount = Number(result?.processed || (result?.saved ? 1 : 0) || 0);
+    const summary = error
+        ? `Erro: ${error}`
+        : `${eventName || 'UNKNOWN'}: ${processedCount} contato(s) processado(s)${result?.mode ? ` (${result.mode})` : ''}`;
+
+    console.log(`[WhatsApp Webhook] ${summary}`);
+
+    await dbRun(
+        `INSERT INTO whatsapp_webhook_audit
+            (event_name, processed_count, summary, raw_payload, result_payload, error)
+         VALUES
+            (?, ?, ?, ?, ?, ?)`,
+        [
+            eventName || 'UNKNOWN',
+            processedCount,
+            summary,
+            sanitizeWebhookPayload(payload),
+            result ? sanitizeWebhookPayload(result, 4000) : null,
+            error || null
+        ]
+    ).catch((err) => {
+        console.warn('Não foi possível auditar webhook do WhatsApp:', err.message);
+    });
+
+    if (eventName && eventName.includes('LABEL')) {
+        await recordLabelWebhookAudit(eventName, payload, result, error).catch(() => {});
+    }
+
+    await dbRun(
+        `DELETE FROM whatsapp_webhook_audit
+         WHERE id NOT IN (
+            SELECT id
+            FROM whatsapp_webhook_audit
             ORDER BY id DESC
             LIMIT 100
          )`
@@ -2343,12 +2572,22 @@ async function fetchEvolutionRecentMessages() {
         {
             name: 'findMessages recente',
             url: `/chat/findMessages/${EVOLUTION_INSTANCE}`,
-            data: { where: {}, limit: 200, orderBy: { messageTimestamp: 'desc' } }
+            data: { where: {}, take: 300, skip: 0, orderBy: { messageTimestamp: 'desc' } }
         },
         {
-            name: 'findMessages take skip',
+            name: 'findMessages limit',
             url: `/chat/findMessages/${EVOLUTION_INSTANCE}`,
-            data: { where: {}, take: 200, skip: 0, orderBy: { messageTimestamp: 'desc' } }
+            data: { where: {}, limit: 300, orderBy: { messageTimestamp: 'desc' } }
+        },
+        {
+            name: 'findMessages take simplificado',
+            url: `/chat/findMessages/${EVOLUTION_INSTANCE}`,
+            data: { take: 300 }
+        },
+        {
+            name: 'findMessages limit simplificado',
+            url: `/chat/findMessages/${EVOLUTION_INSTANCE}`,
+            data: { limit: 300 }
         },
         {
             name: 'findMessages vazio',
@@ -2720,15 +2959,23 @@ function extractChatActivity(chat) {
     ) || extractIncomingText(lastMessage || chat);
     const timestamp = chat.lastMessageAt
         || chat.last_message_at
+        || chat.conversationTimestamp
+        || chat.conversation_timestamp
         || chat.lastMessageTimestamp
         || chat.last_message_timestamp
+        || chat.lastMessageTime
+        || chat.last_message_time
         || chat.updatedAt
         || chat.updated_at
         || chat.date_time
+        || chat.dateTime
         || chat.createdAt
         || chat.created_at
         || chat.timestamp
         || chat.messageTimestamp
+        || lastMessage?.conversationTimestamp
+        || lastMessage?.conversation_timestamp
+        || lastMessage?.lastMessageTimestamp
         || lastMessage?.messageTimestamp
         || lastMessage?.timestamp
         || lastMessage?.createdAt
@@ -3373,13 +3620,13 @@ router.post('/whatsapp/webhook', async (req, res) => {
 
     try {
         const result = await processIncomingWebhook(req.body);
-        await recordLabelWebhookAudit(eventName || result.event || '', req.body, result).catch((auditError) => {
-            console.warn('Não foi possível auditar webhook de etiqueta:', auditError.message);
+        await recordWebhookAudit(eventName || result.event || '', req.body, result).catch((auditError) => {
+            console.warn('Não foi possível auditar webhook do WhatsApp:', auditError.message);
         });
         res.json({ ok: true, ...result });
     } catch (error) {
         console.error('Erro ao processar webhook WhatsApp:', error.response?.data || error.message);
-        await recordLabelWebhookAudit(eventName, req.body, null, error.message).catch(() => {});
+        await recordWebhookAudit(eventName, req.body, null, error.message).catch(() => {});
         res.status(200).json({ ok: false });
     }
 });
@@ -3435,8 +3682,8 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
                    AND mce_auto.source_id = CAST(wc.id AS TEXT)
                    AND mce_auto.event_name = ?
              ${whereClause}
-             ORDER BY COALESCE(wc.last_message_at, wc.updated_at) DESC
-             LIMIT 120`,
+             ORDER BY COALESCE(NULLIF(wc.last_message_at, ''), wc.updated_at, wc.created_at) DESC
+             LIMIT 150`,
             [metaEventName, metaEventName, ...params]
         );
 
@@ -3491,9 +3738,47 @@ router.get('/whatsapp/tags', authenticateToken, async (req, res) => {
     }
 });
 
+router.get('/whatsapp/diagnostics', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+    try {
+        const [recentWebhooks, totalConversations, providerWebhook] = await Promise.all([
+            dbAll(`
+                SELECT id, event_name, processed_count, summary, error, created_at
+                FROM whatsapp_webhook_audit
+                ORDER BY id DESC
+                LIMIT 30
+            `),
+            dbGet(`SELECT COUNT(*) AS total FROM whatsapp_conversations`),
+            fetchEvolutionWebhookConfig().catch(error => ({
+                error: summarizeEvolutionError(error)
+            }))
+        ]);
+
+        res.json({
+            evolution: getEvolutionDiagnostics(),
+            meta: getMetaCapiDiagnostics(),
+            webhook: {
+                configuredUrl: EVOLUTION_WEBHOOK_URL,
+                events: EVOLUTION_WEBHOOK_EVENTS,
+                lastConfiguredAt: lastWebhookConfiguredAt ? new Date(lastWebhookConfiguredAt).toISOString() : null,
+                provider: providerWebhook
+            },
+            conversations: {
+                total: Number(totalConversations?.total || 0)
+            },
+            recent_webhooks: recentWebhooks
+        });
+    } catch (error) {
+        res.status(500).json({
+            error: error.message,
+            evolution: getEvolutionDiagnostics(),
+            meta: getMetaCapiDiagnostics()
+        });
+    }
+});
+
 router.get('/whatsapp/labels/diagnostics', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
     try {
-        const [localLabels, taggedConversations, recentWebhooks, providerWebhook] = await Promise.all([
+        const [localLabels, taggedConversations, recentWebhooks, recentAllWebhooks, providerWebhook] = await Promise.all([
             getLocalWhatsappLabels(),
             dbGet(`
                 SELECT COUNT(DISTINCT wc.id) AS total
@@ -3508,6 +3793,12 @@ router.get('/whatsapp/labels/diagnostics', authenticateToken, authorizeRole(['ad
                 FROM whatsapp_label_webhook_audit
                 ORDER BY id DESC
                 LIMIT 20
+            `),
+            dbAll(`
+                SELECT id, event_name, processed_count, summary, error, created_at
+                FROM whatsapp_webhook_audit
+                ORDER BY id DESC
+                LIMIT 30
             `),
             fetchEvolutionWebhookConfig().catch(error => ({
                 error: summarizeEvolutionError(error)
@@ -3524,7 +3815,8 @@ router.get('/whatsapp/labels/diagnostics', authenticateToken, authorizeRole(['ad
             },
             labels: localLabels,
             tagged_conversations: Number(taggedConversations?.total || 0),
-            recent_webhooks: recentWebhooks
+            recent_webhooks: recentWebhooks,
+            recent_all_webhooks: recentAllWebhooks
         });
     } catch (error) {
         res.status(500).json({
