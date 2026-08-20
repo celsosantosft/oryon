@@ -53,6 +53,11 @@ const Icons = {
         <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="m5 12 4.5 4.5L19 7" />
         </svg>
+    ),
+    List: (
+        <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+        </svg>
     )
 };
 
@@ -190,7 +195,8 @@ const WhatsappDashboard = () => {
     ), [leadHistory, manualLeadPhone]);
 
     const navigationItems = useMemo(() => ([
-        { id: 'labels', label: 'Leads Meta', icon: Icons.Tag },
+        { id: 'labels', label: 'Novo Envio', icon: Icons.Tag },
+        { id: 'history', label: 'Histórico', icon: Icons.List },
         { id: 'settings', label: 'Conexão', icon: Icons.Settings }
     ]), []);
 
@@ -336,43 +342,43 @@ const WhatsappDashboard = () => {
         }
     };
 
-    const renderLeadHistory = () => (
-        <div className="mt-4 rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex flex-col gap-2 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+    const renderHistoryView = () => (
+        <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="shrink-0 flex flex-col gap-2 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h3 className="text-sm font-extrabold text-slate-950">Histórico de leads enviados</h3>
-                    <p className="mt-1 text-xs font-bold text-slate-500">
-                        {leadHistorySummary.sent || 0} enviado(s) para a Meta
+                    <h2 className="text-xl font-extrabold text-slate-950">Histórico de envios Meta</h2>
+                    <p className="mt-1 text-sm font-bold text-slate-500">
+                        {leadHistorySummary.sent || 0} lead(s) processado(s)
                     </p>
                 </div>
                 <button
                     type="button"
                     onClick={() => fetchLeadHistory()}
                     disabled={loadingLeadHistory}
-                    className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-extrabold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-extrabold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                     {loadingLeadHistory ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-slate-700" /> : Icons.Refresh}
-                    Atualizar
+                    Atualizar Histórico
                 </button>
             </div>
 
-            <div className="max-h-72 overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto">
                 {loadingLeadHistory ? (
-                    <div className="flex h-28 items-center justify-center text-sm font-bold text-slate-500">Carregando histórico...</div>
+                    <div className="flex h-40 items-center justify-center text-sm font-bold text-slate-500">Carregando histórico...</div>
                 ) : leadHistory.length ? (
-                    <div className="divide-y divide-slate-100">
+                    <div className="divide-y divide-slate-100 p-2">
                         {leadHistory.map(item => {
                             const statusMeta = getLeadHistoryStatus(item.status);
 
                             return (
-                                <div key={item.id} className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+                                <div key={item.id} className="grid gap-3 p-4 hover:bg-slate-50 rounded-lg transition sm:grid-cols-[1fr_auto] sm:items-center">
                                     <div className="min-w-0">
-                                        <p className="truncate text-sm font-extrabold text-slate-950">{item.display_name || formatPhone(item.phone)}</p>
-                                        <p className="mt-1 text-xs font-bold text-slate-500">
+                                        <p className="truncate text-base font-extrabold text-slate-950">{item.display_name || formatPhone(item.phone)}</p>
+                                        <p className="mt-1 text-sm font-bold text-slate-500">
                                             {formatPhone(item.phone)}{item.updated_at ? ` - ${formatDateTime(item.updated_at)}` : ''}
                                         </p>
                                     </div>
-                                    <span className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-extrabold ring-1 ${statusMeta.className}`}>
+                                    <span className={`inline-flex w-fit items-center rounded-full px-3 py-1.5 text-xs font-extrabold ring-1 ${statusMeta.className}`}>
                                         {statusMeta.label}
                                     </span>
                                 </div>
@@ -380,15 +386,18 @@ const WhatsappDashboard = () => {
                         })}
                     </div>
                 ) : (
-                    <div className="p-5 text-sm font-semibold text-slate-500">
+                    <div className="p-10 text-center text-base font-semibold text-slate-500">
                         Nenhum lead enviado para a Meta ainda.
                     </div>
                 )}
             </div>
-        </div>
+        </section>
     );
 
-    const renderLabelsView = () => (
+    const renderLabelsView = () => {
+        const lastLead = leadHistory.length > 0 ? leadHistory[0] : null;
+
+        return (
         <div className="flex h-full min-h-0 flex-col gap-4">
             <section className="shrink-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -468,25 +477,42 @@ const WhatsappDashboard = () => {
                                 </button>
                             </div>
                         </div>
-
-                        {renderLeadHistory()}
                     </div>
                 </section>
 
-                <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                    <h2 className="text-lg font-extrabold text-slate-950">Fluxo atual</h2>
-                    <div className="mt-4 space-y-3 text-sm font-semibold leading-6 text-slate-600">
-                        <p>1. Digite o telefone do cliente.</p>
-                        <p>2. Clique em Enviar Meta.</p>
-                        <p>3. Confira o registro no histórico.</p>
+                <aside className="flex flex-col gap-4">
+                    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <h2 className="text-lg font-extrabold text-slate-950">Último envio</h2>
+                        {lastLead ? (
+                            <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
+                                <p className="text-xs font-extrabold uppercase text-slate-400">Telefone</p>
+                                <strong className="mt-1 block text-lg text-slate-950">{formatPhone(lastLead.phone)}</strong>
+                                <p className="mt-3 text-xs font-extrabold uppercase text-slate-400">Status</p>
+                                <span className={`mt-2 inline-flex w-fit items-center rounded-full px-3 py-1.5 text-xs font-extrabold ring-1 ${getLeadHistoryStatus(lastLead.status).className}`}>
+                                    {getLeadHistoryStatus(lastLead.status).label}
+                                </span>
+                                <p className="mt-4 text-xs font-bold text-slate-500">
+                                    Enviado em: {formatDateTime(lastLead.updated_at || lastLead.created_at)}
+                                </p>
+                            </div>
+                        ) : (
+                            <p className="mt-4 text-sm font-semibold text-slate-500">Nenhum envio recente.</p>
+                        )}
                     </div>
-                    <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-800">
-                        O sistema não precisa importar conversas para enviar o lead manualmente.
+
+                    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                        <h2 className="text-lg font-extrabold text-slate-950">Fluxo atual</h2>
+                        <div className="mt-4 space-y-3 text-sm font-semibold leading-6 text-slate-600">
+                            <p>1. Digite o telefone do cliente.</p>
+                            <p>2. Clique em Enviar Meta.</p>
+                            <p>3. Veja o status acima ou no Histórico.</p>
+                        </div>
                     </div>
                 </aside>
             </div>
         </div>
-    );
+        );
+    };
 
     const renderSettingsView = () => (
         <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
@@ -650,6 +676,14 @@ const WhatsappDashboard = () => {
             return (
                 <div className="h-full overflow-y-auto">
                     {renderSettingsView()}
+                </div>
+            );
+        }
+
+        if (activeView === 'history') {
+            return (
+                <div className="h-full overflow-y-auto">
+                    {renderHistoryView()}
                 </div>
             );
         }
