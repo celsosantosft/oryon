@@ -48,6 +48,11 @@ const Icons = {
         <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M6.5 4.75 8.4 3.6a1.8 1.8 0 0 1 2.45.6l1.05 1.78a1.8 1.8 0 0 1-.35 2.25l-1.15 1.06a11.7 11.7 0 0 0 4.31 4.31l1.06-1.15a1.8 1.8 0 0 1 2.25-.35l1.78 1.05a1.8 1.8 0 0 1 .6 2.45l-1.15 1.9a2.5 2.5 0 0 1-2.64 1.16C10.96 17.7 6.3 13.04 5.34 7.39A2.5 2.5 0 0 1 6.5 4.75Z" />
         </svg>
+    ),
+    Check: (
+        <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m5 12 4.5 4.5L19 7" />
+        </svg>
     )
 };
 
@@ -114,16 +119,6 @@ function getLabelKey(label) {
     return String(label?.evolution_label_id || label?.id || label?.name || '').trim().toLowerCase();
 }
 
-function conversationHasLabel(conversation, label) {
-    const expected = getLabelKey(label);
-    if (!expected) return false;
-
-    return getConversationTags(conversation).some(tag => (
-        getLabelKey(tag) === expected
-        || normalizeText(tag.name) === normalizeText(label?.name)
-    ));
-}
-
 function getMetaCapiFeedback(metaCapi) {
     if (!metaCapi) return '';
     if (metaCapi.sent) return ' Evento enviado para a Meta.';
@@ -162,15 +157,10 @@ const WhatsappDashboard = () => {
     const [metaInfo, setMetaInfo] = useState(null);
     const [webhookInfo, setWebhookInfo] = useState(null);
     const [conversations, setConversations] = useState([]);
-    const [officialLabels, setOfficialLabels] = useState([]);
     const [selectedPhone, setSelectedPhone] = useState('');
     const [conversationSearch, setConversationSearch] = useState('');
     const [loadingConversations, setLoadingConversations] = useState(false);
     const [syncingLabels, setSyncingLabels] = useState(false);
-    const [labelActionLoading, setLabelActionLoading] = useState('');
-    const [syncReport, setSyncReport] = useState(null);
-    const [manualLead, setManualLead] = useState({ name: '', phone: '', email: '' });
-    const [manualLeadLoading, setManualLeadLoading] = useState(false);
     const [conversationLeadLoading, setConversationLeadLoading] = useState('');
 
     const authConfig = useMemo(() => ({
@@ -179,10 +169,8 @@ const WhatsappDashboard = () => {
 
     const currentStatus = STATUS_META[status] || STATUS_META.close;
     const isConnected = status === 'open';
-    const canSendManualLead = manualLead.phone.trim() || manualLead.email.trim();
-
-    const taggedConversations = useMemo(() => (
-        conversations.filter(conversation => getConversationTags(conversation).length > 0)
+    const metaSentContacts = useMemo(() => (
+        conversations.filter(conversation => conversation.meta_capi_status === 'sent').length
     ), [conversations]);
 
     const filteredConversations = useMemo(() => {
@@ -207,46 +195,10 @@ const WhatsappDashboard = () => {
         || filteredConversations[0]
         || null
     ), [filteredConversations, selectedPhone]);
-
-    const labelSummary = useMemo(() => {
-        const labelsByKey = new Map();
-
-        officialLabels.forEach(label => {
-            const key = getLabelKey(label);
-            if (!key) return;
-            labelsByKey.set(key, {
-                id: label.id,
-                name: label.name,
-                color: label.color || '#64748b',
-                evolution_label_id: label.evolution_label_id || label.id,
-                count: 0
-            });
-        });
-
-        conversations.forEach(conversation => {
-            getConversationTags(conversation).forEach(tag => {
-                const key = getLabelKey(tag);
-                if (!key) return;
-
-                const current = labelsByKey.get(key) || {
-                    id: tag.id,
-                    name: tag.name,
-                    color: tag.color || '#64748b',
-                    evolution_label_id: tag.evolution_label_id || tag.id,
-                    count: 0
-                };
-
-                current.count += 1;
-                labelsByKey.set(key, current);
-            });
-        });
-
-        return Array.from(labelsByKey.values())
-            .sort((first, second) => second.count - first.count || first.name.localeCompare(second.name));
-    }, [conversations, officialLabels]);
+    const selectedMetaSent = selectedConversation?.meta_capi_status === 'sent';
 
     const navigationItems = useMemo(() => ([
-        { id: 'labels', label: 'Etiquetas', icon: Icons.Tag },
+        { id: 'labels', label: 'Leads Meta', icon: Icons.Tag },
         { id: 'settings', label: 'Conexão', icon: Icons.Settings }
     ]), []);
 
@@ -272,21 +224,6 @@ const WhatsappDashboard = () => {
         }
     }, [API_BASE_URL, authConfig, token]);
 
-    const fetchOfficialLabels = useCallback(async () => {
-        if (!token) return;
-
-        try {
-            const response = await axios.get(`${API_BASE_URL}/whatsapp/labels`, authConfig);
-            const labels = Array.isArray(response.data?.labels)
-                ? response.data.labels
-                : response.data?.tags;
-            setOfficialLabels(Array.isArray(labels) ? labels : []);
-        } catch (requestError) {
-            console.error('Erro ao carregar etiquetas oficiais do WhatsApp:', requestError.response?.data || requestError);
-            setOfficialLabels([]);
-        }
-    }, [API_BASE_URL, authConfig, token]);
-
     const fetchConversations = useCallback(async (silent = false) => {
         if (!token) return;
         if (!silent) setLoadingConversations(true);
@@ -305,7 +242,7 @@ const WhatsappDashboard = () => {
                 return firstTagged?.phone || nextConversations[0]?.phone || '';
             });
         } catch (requestError) {
-            setError(requestError.response?.data?.error || 'Não foi possível carregar os contatos etiquetados.');
+            setError(requestError.response?.data?.error || 'Não foi possível carregar os contatos capturados.');
         } finally {
             if (!silent) setLoadingConversations(false);
         }
@@ -314,7 +251,6 @@ const WhatsappDashboard = () => {
     useEffect(() => {
         const initialLoad = window.setTimeout(() => {
             fetchStatus();
-            fetchOfficialLabels();
             fetchConversations();
         }, 0);
 
@@ -326,7 +262,7 @@ const WhatsappDashboard = () => {
             window.clearInterval(statusInterval);
             window.clearInterval(localRefreshInterval);
         };
-    }, [fetchConversations, fetchOfficialLabels, fetchStatus]);
+    }, [fetchConversations, fetchStatus]);
 
     const handleSyncLabels = async () => {
         if (!token || syncingLabels) return;
@@ -347,25 +283,17 @@ const WhatsappDashboard = () => {
             const warnings = Array.isArray(response.data?.warnings) ? response.data.warnings.length : 0;
             const disabledStorage = getDisabledEvolutionStorage(response.data?.config?.dataStorage);
 
-            setSyncReport({
-                labels,
-                labelAssociations,
-                importedChats,
-                metaSent,
-                warnings
-            });
             if (disabledStorage.length) {
                 setError(`A Evolution está com ${disabledStorage.join(', ')} desligado. Ligue essas variáveis no .env da VPS e reinicie a Evolution API.`);
             } else if (!labels && !labelAssociations && !importedChats) {
-                setError('A Evolution respondeu sem etiquetas e sem vínculos. Se você aplicou a etiqueta pelo WhatsApp Desktop, teste aplicar pelo app WhatsApp Business no celular e clique em sincronizar de novo.');
+                setError('A Evolution respondeu sem contatos novos. Confira a conexão do WhatsApp e tente atualizar de novo.');
             } else {
-                setSuccess(`Sincronização de etiquetas concluída: ${labels} etiqueta(s), ${labelAssociations} vínculo(s), ${importedChats} contato(s).${metaSent ? ` ${metaSent} evento(s) enviado(s) para a Meta.` : ''}${warnings ? ' Houve aviso(s) da Evolution API.' : ''}`);
+                setSuccess(`Atualização concluída: ${importedChats} contato(s) capturado(s).${metaSent ? ` ${metaSent} evento(s) enviado(s) para a Meta.` : ''}${warnings ? ' Houve aviso(s) da Evolution API.' : ''}`);
             }
-            await fetchOfficialLabels();
             await fetchConversations();
         } catch (requestError) {
             if (requestError.response?.data?.config) setEvolutionInfo(requestError.response.data.config);
-            setError(requestError.response?.data?.error || 'Não foi possível sincronizar as etiquetas agora.');
+            setError(requestError.response?.data?.error || 'Não foi possível atualizar os contatos agora.');
         } finally {
             setSyncingLabels(false);
         }
@@ -430,35 +358,10 @@ const WhatsappDashboard = () => {
         );
         const metaCapi = response.data?.meta_capi;
 
-        if (metaCapi?.sent) {
-            setSyncReport(previous => ({
-                ...(previous || {}),
-                metaSent: Number(previous?.metaSent || 0) + 1
-            }));
-        }
-
         setSuccess(`${response.data?.message || 'Lead qualificado processado.'}${getMetaCapiFeedback(metaCapi)}`);
         await fetchConversations(true);
 
         return response.data;
-    };
-
-    const handleManualQualifiedLead = async (event) => {
-        event.preventDefault();
-        if (!canSendManualLead || manualLeadLoading) return;
-
-        setManualLeadLoading(true);
-
-        try {
-            await sendQualifiedLeadPayload(manualLead);
-
-            setManualLead({ name: '', phone: '', email: '' });
-        } catch (requestError) {
-            const metaCapi = requestError.response?.data?.meta_capi;
-            setError(`${requestError.response?.data?.error || 'Não foi possível enviar o lead qualificado.'}${getMetaCapiFeedback(metaCapi)}`);
-        } finally {
-            setManualLeadLoading(false);
-        }
     };
 
     const handleSendConversationQualifiedLead = async (conversation) => {
@@ -483,46 +386,6 @@ const WhatsappDashboard = () => {
         }
     };
 
-    const handleApplyWhatsappLabel = async (label) => {
-        if (!selectedConversation || (!label?.id && !label?.name)) return;
-
-        const labelKey = getLabelKey(label) || label.name;
-        setLabelActionLoading(labelKey);
-        setError('');
-        setSuccess('');
-
-        try {
-            const response = await axios.post(
-                `${API_BASE_URL}/whatsapp/add-label`,
-                {
-                    phone: selectedConversation.phone,
-                    jid: selectedConversation.remote_jid,
-                    labelId: label.id,
-                    labelName: label.name
-                },
-                authConfig
-            );
-            const appliedLabel = response.data?.label || label;
-
-            setConversations(previous => previous.map(conversation => {
-                if (conversation.phone !== selectedConversation.phone || conversationHasLabel(conversation, appliedLabel)) {
-                    return conversation;
-                }
-
-                return {
-                    ...conversation,
-                    tags: [...getConversationTags(conversation), appliedLabel]
-                };
-            }));
-            setSuccess(`Etiqueta aplicada no WhatsApp Business.${getMetaCapiFeedback(response.data?.meta_capi)}`);
-            await fetchConversations(true);
-        } catch (requestError) {
-            setError(requestError.response?.data?.error || 'Não foi possível aplicar a etiqueta no WhatsApp Business.');
-        } finally {
-            setLabelActionLoading('');
-        }
-    };
-
     const renderTagPill = (tag, compact = false) => {
         const color = tag.color || '#64748b';
 
@@ -543,6 +406,7 @@ const WhatsappDashboard = () => {
         const displayName = getDisplayName(conversation);
         const initial = String(displayName || conversation.phone || '?').trim().charAt(0).toUpperCase() || '?';
         const tags = getConversationTags(conversation);
+        const metaSent = conversation.meta_capi_status === 'sent';
         const profileImage = conversation.profile_picture_url || conversation.profile_picture || conversation.picture_url || conversation.avatar_url || conversation.photo_url;
 
         return (
@@ -566,14 +430,16 @@ const WhatsappDashboard = () => {
                                 <p className="truncate text-sm font-extrabold text-slate-950">{displayName}</p>
                                 <p className="mt-1 text-xs font-bold text-slate-500">{formatPhone(conversation.phone)}</p>
                             </div>
-                            <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-extrabold uppercase text-emerald-700 ring-1 ring-emerald-100">
-                                Ativo
+                            <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-extrabold uppercase ring-1 ${metaSent ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-slate-50 text-slate-500 ring-slate-200'}`}>
+                                {metaSent ? 'Meta' : 'Ativo'}
                             </span>
                         </div>
 
                         <div className="mt-3 flex flex-wrap gap-1.5">
                             {tags.length ? tags.map(tag => renderTagPill(tag, true)) : (
-                                <span className="text-xs font-bold text-slate-400">Sem etiqueta sincronizada</span>
+                                <span className="text-xs font-bold text-slate-400">
+                                    {metaSent ? 'Enviado para Meta' : 'Aguardando Meta'}
+                                </span>
                             )}
                         </div>
                     </div>
@@ -592,12 +458,14 @@ const WhatsappDashboard = () => {
                             <strong className="mt-1 block text-2xl text-slate-950">{conversations.length}</strong>
                         </div>
                         <div>
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Com etiqueta</p>
-                            <strong className="mt-1 block text-2xl text-slate-950">{taggedConversations.length}</strong>
+                            <p className="text-xs font-extrabold uppercase text-slate-400">Leads Meta</p>
+                            <strong className="mt-1 block text-2xl text-slate-950">{metaSentContacts}</strong>
                         </div>
                         <div>
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Meta CAPI</p>
-                            <strong className="mt-1 block text-2xl text-slate-950">{syncReport?.metaSent || 0}</strong>
+                            <p className="text-xs font-extrabold uppercase text-slate-400">WhatsApp</p>
+                            <strong className={`mt-1 block text-lg ${isConnected ? 'text-emerald-700' : 'text-red-700'}`}>
+                                {currentStatus.label}
+                            </strong>
                         </div>
                     </div>
 
@@ -606,56 +474,12 @@ const WhatsappDashboard = () => {
                         onClick={handleSyncLabels}
                         disabled={syncingLabels}
                         className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        title="Sincronizar etiquetas"
+                        title="Atualizar contatos"
                     >
                         {syncingLabels ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : Icons.Refresh}
-                        Sincronizar etiquetas
+                        Atualizar contatos
                     </button>
                 </div>
-            </section>
-
-            <section className="shrink-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                <form onSubmit={handleManualQualifiedLead} className="grid gap-3 xl:grid-cols-[1fr_180px] xl:items-end">
-                    <div className="grid gap-3 md:grid-cols-3">
-                        <label className="block">
-                            <span className="mb-1 block text-xs font-extrabold uppercase text-slate-400">Nome</span>
-                            <input
-                                value={manualLead.name}
-                                onChange={(event) => setManualLead(previous => ({ ...previous, name: event.target.value }))}
-                                placeholder="Cliente"
-                                className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-                            />
-                        </label>
-                        <label className="block">
-                            <span className="mb-1 block text-xs font-extrabold uppercase text-slate-400">Telefone</span>
-                            <input
-                                value={manualLead.phone}
-                                onChange={(event) => setManualLead(previous => ({ ...previous, phone: event.target.value }))}
-                                placeholder="DDD e número"
-                                inputMode="tel"
-                                className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-                            />
-                        </label>
-                        <label className="block">
-                            <span className="mb-1 block text-xs font-extrabold uppercase text-slate-400">E-mail</span>
-                            <input
-                                value={manualLead.email}
-                                onChange={(event) => setManualLead(previous => ({ ...previous, email: event.target.value }))}
-                                placeholder="cliente@email.com"
-                                type="email"
-                                className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-                            />
-                        </label>
-                    </div>
-                    <button
-                        type="submit"
-                        disabled={!canSendManualLead || manualLeadLoading}
-                        className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        {manualLeadLoading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : Icons.Tag}
-                        Enviar Meta
-                    </button>
-                </form>
             </section>
 
             <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[380px_1fr]">
@@ -684,7 +508,7 @@ const WhatsappDashboard = () => {
                             <input
                                 value={conversationSearch}
                                 onChange={(event) => setConversationSearch(event.target.value)}
-                                placeholder="Buscar contato ou etiqueta"
+                                placeholder="Buscar nome ou telefone"
                                 className="h-full min-w-0 flex-1 border-0 bg-transparent text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-400"
                             />
                         </label>
@@ -706,7 +530,7 @@ const WhatsappDashboard = () => {
                 <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                     <div className="shrink-0 border-b border-slate-100 p-5">
                         {selectedConversation ? (
-                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
                                 <div>
                                     <h2 className="text-xl font-extrabold text-slate-950">{getDisplayName(selectedConversation)}</h2>
                                     <p className="mt-1 flex items-center gap-2 text-sm font-bold text-slate-500">
@@ -714,34 +538,10 @@ const WhatsappDashboard = () => {
                                         {formatPhone(selectedConversation.phone)}
                                     </p>
                                 </div>
-                                <div className="flex flex-wrap gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => handleSendConversationQualifiedLead(selectedConversation)}
-                                        disabled={conversationLeadLoading === String(selectedConversation.id || selectedConversation.phone)}
-                                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                        title="Enviar lead qualificado para a Meta"
-                                    >
-                                        {conversationLeadLoading === String(selectedConversation.id || selectedConversation.phone)
-                                            ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                                            : Icons.Tag}
-                                        Enviar Meta
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleSyncLabels}
-                                        disabled={syncingLabels}
-                                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-extrabold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                        title="Sincronizar etiquetas"
-                                    >
-                                        {syncingLabels ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" /> : Icons.Refresh}
-                                        Sync
-                                    </button>
-                                </div>
                             </div>
                         ) : (
                             <div>
-                                <h2 className="text-xl font-extrabold text-slate-950">Etiquetas do WhatsApp</h2>
+                                <h2 className="text-xl font-extrabold text-slate-950">Lead Meta</h2>
                                 <p className="mt-1 text-sm font-bold text-slate-500">Selecione um contato capturado.</p>
                             </div>
                         )}
@@ -749,72 +549,46 @@ const WhatsappDashboard = () => {
 
                     <div className="min-h-0 flex-1 overflow-y-auto p-5">
                         {selectedConversation ? (
-                            <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
-                                <div className="space-y-5">
-                                    <div>
-                                        <h3 className="mb-3 text-sm font-extrabold text-slate-700">Etiquetas aplicadas</h3>
-                                        <div className="flex flex-wrap gap-2">
-                                            {getConversationTags(selectedConversation).length ? (
-                                                getConversationTags(selectedConversation).map(tag => renderTagPill(tag))
-                                            ) : (
-                                                <span className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
-                                                    Sem etiqueta sincronizada.
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
+                            <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-5">
+                                    <p className="text-xs font-extrabold uppercase text-slate-400">Lead selecionado</p>
+                                    <h3 className="mt-2 text-2xl font-extrabold text-slate-950">{getDisplayName(selectedConversation)}</h3>
+                                    <p className="mt-2 flex items-center gap-2 text-base font-bold text-slate-600">
+                                        {Icons.Phone}
+                                        {formatPhone(selectedConversation.phone)}
+                                    </p>
 
-                                    <div>
-                                        <h3 className="mb-3 text-sm font-extrabold text-slate-700">Aplicar etiqueta oficial</h3>
-                                        {officialLabels.length ? (
-                                            <div className="flex flex-wrap gap-2">
-                                                {officialLabels.map(label => {
-                                                    const labelColor = label.color || '#64748b';
-                                                    const activeLabel = conversationHasLabel(selectedConversation, label);
-                                                    const loadingLabel = labelActionLoading === (getLabelKey(label) || label.name);
-
-                                                    return (
-                                                        <button
-                                                            key={getLabelKey(label) || label.name}
-                                                            type="button"
-                                                            onClick={() => handleApplyWhatsappLabel(label)}
-                                                            disabled={loadingLabel}
-                                                            className="inline-flex max-w-full items-center rounded-md border px-3 py-2 text-xs font-extrabold uppercase transition disabled:cursor-not-allowed disabled:opacity-60"
-                                                            style={activeLabel
-                                                                ? { backgroundColor: labelColor, borderColor: labelColor, color: '#fff' }
-                                                                : { borderColor: labelColor, color: labelColor, backgroundColor: `${labelColor}12` }}
-                                                        >
-                                                            <span className="truncate">{loadingLabel ? 'Aplicando...' : label.name}</span>
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        ) : (
-                                            <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-semibold leading-6 text-slate-500">
-                                                Nenhuma etiqueta oficial retornada pela Evolution API.
-                                            </p>
-                                        )}
+                                    <div className="mt-5 flex flex-wrap gap-2">
+                                        {getConversationTags(selectedConversation).map(tag => renderTagPill(tag, true))}
+                                        {!getConversationTags(selectedConversation).length ? (
+                                            <span className="rounded-md bg-white px-3 py-1 text-xs font-extrabold uppercase text-slate-500 ring-1 ring-slate-200">
+                                                Aguardando envio
+                                            </span>
+                                        ) : null}
                                     </div>
                                 </div>
 
-                                <aside className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                                    <h3 className="text-sm font-extrabold text-slate-700">Resumo de etiquetas</h3>
-                                    <div className="mt-4 space-y-2">
-                                        {labelSummary.length ? labelSummary.map(label => (
-                                            <div key={getLabelKey(label) || label.name} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200">
-                                                <span className="min-w-0 flex items-center gap-2 text-sm font-bold text-slate-700">
-                                                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: label.color || '#64748b' }} />
-                                                    <span className="truncate">{label.name}</span>
-                                                </span>
-                                                <strong className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{label.count}</strong>
-                                            </div>
-                                        )) : (
-                                            <p className="rounded-lg border border-dashed border-slate-200 bg-white p-4 text-sm font-semibold leading-6 text-slate-500">
-                                                Nenhuma etiqueta sincronizada ainda.
-                                            </p>
-                                        )}
-                                    </div>
-                                </aside>
+                                <div className={`rounded-lg border p-5 ${selectedMetaSent ? 'border-emerald-200 bg-emerald-50' : 'border-blue-200 bg-blue-50'}`}>
+                                    <p className={`text-xs font-extrabold uppercase ${selectedMetaSent ? 'text-emerald-700' : 'text-blue-700'}`}>Meta CAPI</p>
+                                    <p className={`mt-2 text-sm font-semibold leading-6 ${selectedMetaSent ? 'text-emerald-900' : 'text-blue-900'}`}>
+                                        {selectedMetaSent
+                                            ? 'Este telefone já foi enviado para o Pixel da Meta.'
+                                            : 'O evento usa o telefone capturado e envia os dados hasheados para o Pixel.'}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSendConversationQualifiedLead(selectedConversation)}
+                                        disabled={selectedMetaSent || conversationLeadLoading === String(selectedConversation.id || selectedConversation.phone)}
+                                        className={`mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-extrabold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-70 ${selectedMetaSent ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+                                    >
+                                        {selectedMetaSent
+                                            ? Icons.Check
+                                            : conversationLeadLoading === String(selectedConversation.id || selectedConversation.phone)
+                                            ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                                            : Icons.Tag}
+                                        {selectedMetaSent ? 'Já enviado' : 'Enviar Meta'}
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <div className="flex h-full min-h-[360px] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
@@ -861,7 +635,7 @@ const WhatsappDashboard = () => {
                             </div>
                             <h3 className="text-xl font-extrabold text-slate-950">Sessão ativa</h3>
                             <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-                                Pronta para sincronizar etiquetas.
+                                Pronta para atualizar contatos.
                             </p>
                         </div>
                     ) : (
@@ -935,7 +709,7 @@ const WhatsappDashboard = () => {
                             </p>
                         </div>
                         <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Etiquetas Meta</p>
+                            <p className="text-xs font-extrabold uppercase text-slate-400">Evento Meta</p>
                             <p className="mt-1 text-sm font-bold text-slate-700">
                                 {(metaInfo?.qualifiedLeadLabels || []).join(', ') || 'Não carregadas'}
                             </p>
@@ -978,7 +752,7 @@ const WhatsappDashboard = () => {
                 )}
 
                 <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-800">
-                    O modo atual sincroniza etiquetas e contatos associados, sem carregar histórico de mensagens.
+                    O modo atual atualiza contatos e envia leads qualificados para a Meta, sem carregar histórico de mensagens.
                 </div>
             </section>
         </div>

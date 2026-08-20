@@ -3027,6 +3027,7 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
     try {
         const search = String(req.query.search || '').trim();
         const params = [];
+        const metaEventName = getMetaCapiDiagnostics().qualifiedLeadEventName || 'Lead Qualificado';
         let whereClause = '';
 
         if (search) {
@@ -3052,13 +3053,23 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
             `SELECT
                 wc.*,
                 COALESCE(c.name, wc.client_name, wc.push_name, wc.phone) AS display_name,
-                c.name AS matched_client_name
+                c.name AS matched_client_name,
+                COALESCE(mce_manual.status, mce_auto.status) AS meta_capi_status,
+                COALESCE(mce_manual.updated_at, mce_auto.updated_at) AS meta_capi_updated_at
              FROM whatsapp_conversations wc
              LEFT JOIN clients c ON c.id = wc.client_id
+             LEFT JOIN meta_capi_events mce_manual
+                    ON mce_manual.source = 'whatsapp_manual'
+                   AND mce_manual.source_id = wc.phone
+                   AND mce_manual.event_name = ?
+             LEFT JOIN meta_capi_events mce_auto
+                    ON mce_auto.source = 'whatsapp'
+                   AND mce_auto.source_id = CAST(wc.id AS TEXT)
+                   AND mce_auto.event_name = ?
              ${whereClause}
              ORDER BY COALESCE(wc.last_message_at, wc.updated_at) DESC
              LIMIT 120`,
-            params
+            [metaEventName, metaEventName, ...params]
         );
 
         const visibleConversations = conversations.filter(item => (
