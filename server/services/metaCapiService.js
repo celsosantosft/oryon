@@ -283,6 +283,7 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
     const phoneHash = normalizedPhone ? sha256(normalizedPhone) : '';
     const eventTime = Math.floor(Date.now() / 1000);
     const eventId = options.eventId || `${source}:${sourceId}:${normalizeComparable(eventName)}`;
+    const testEventCode = String(process.env.META_TEST_EVENT_CODE || metaCapiConfig.testEventCode || '').trim();
 
     if (!sourceId) {
         return buildSkippedResult('missing_source_id');
@@ -347,7 +348,7 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
             {
                 event_name: eventName,
                 event_time: eventTime,
-                action_source: 'system_generated',
+                action_source: 'system',
                 event_id: eventId,
                 custom_data: {
                     lead_stage: 'qualified',
@@ -358,8 +359,8 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
         ]
     };
 
-    if (metaCapiConfig.testEventCode) {
-        payload.test_event_code = metaCapiConfig.testEventCode;
+    if (testEventCode) {
+        payload.test_event_code = testEventCode;
     }
 
     await upsertEventAttempt({
