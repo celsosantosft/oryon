@@ -29,12 +29,16 @@ try {
 }
 
 const EVOLUTION_WEBHOOK_EVENTS = [
+    'CHATS_SET',
     'CHATS_UPSERT',
     'CHATS_UPDATE',
+    'CONTACTS_SET',
     'CONTACTS_UPSERT',
     'CONTACTS_UPDATE',
+    'MESSAGES_SET',
     'MESSAGES_UPSERT',
     'MESSAGES_UPDATE',
+    'MESSAGES_DELETE',
     'SEND_MESSAGE',
     'LABELS_EDIT',
     'LABELS_ASSOCIATION',
@@ -1281,22 +1285,7 @@ async function processMessageContactWebhook(payload, eventName) {
         if (seenMessages.has(messageKey)) continue;
         seenMessages.add(messageKey);
 
-        const previewText = incoming.text
-            || outgoingDeviceFallbackText(incoming.type)
-            || (incoming.fromMe ? 'Mensagem enviada' : 'Mensagem recebida');
-        const conversation = await ensureConversation(incoming.phone, {
-            remoteJid: incoming.remoteJid,
-            pushName: incoming.pushName,
-            lastMessageText: previewText,
-            lastMessageAt: incoming.timestamp
-        });
-
-        results.push({
-            saved: true,
-            conversation_id: conversation.id,
-            phone: incoming.phone,
-            direction: incoming.fromMe ? 'outgoing' : 'incoming'
-        });
+        results.push(await persistMessageContactActivity(incoming));
     }
 
     return {
@@ -1304,6 +1293,25 @@ async function processMessageContactWebhook(payload, eventName) {
         event: eventName || 'MESSAGES_UPSERT',
         mode: 'contact_activity_only',
         results
+    };
+}
+
+async function persistMessageContactActivity(incoming) {
+    const previewText = incoming.text
+        || outgoingDeviceFallbackText(incoming.type)
+        || (incoming.fromMe ? 'Mensagem enviada' : 'Mensagem recebida');
+    const conversation = await ensureConversation(incoming.phone, {
+        remoteJid: incoming.remoteJid,
+        pushName: incoming.pushName,
+        lastMessageText: previewText,
+        lastMessageAt: incoming.timestamp
+    });
+
+    return {
+        saved: true,
+        conversation_id: conversation.id,
+        phone: incoming.phone,
+        direction: incoming.fromMe ? 'outgoing' : 'incoming'
     };
 }
 
@@ -1953,6 +1961,26 @@ function readEvolutionChats(payload) {
     return [];
 }
 
+function readEvolutionMessages(payload) {
+    const collected = collectMessagePayloads(payload);
+    if (collected.length) return collected;
+
+    const records = asArrayResponse(payload, [
+        'messages',
+        'records',
+        'data.messages',
+        'data.records',
+        'data.rows',
+        'response',
+        'response.messages',
+        'response.records',
+        'result',
+        'results'
+    ]);
+
+    return records.flatMap(record => collectMessagePayloads(record));
+}
+
 function collectLabelRefs(value, refs = []) {
     if (!value) return refs;
 
@@ -2308,6 +2336,33 @@ async function fetchEvolutionContactsWithLabels() {
     ], readEvolutionChats);
 
     return readEvolutionChats(contactsResult.response.data);
+}
+
+async function fetchEvolutionRecentMessages() {
+    const messagesResult = await callEvolutionFallbacksPreferData('Buscar mensagens recentes', [
+        {
+            name: 'findMessages recente',
+            url: `/chat/findMessages/${EVOLUTION_INSTANCE}`,
+            data: { where: {}, limit: 200, orderBy: { messageTimestamp: 'desc' } }
+        },
+        {
+            name: 'findMessages take skip',
+            url: `/chat/findMessages/${EVOLUTION_INSTANCE}`,
+            data: { where: {}, take: 200, skip: 0, orderBy: { messageTimestamp: 'desc' } }
+        },
+        {
+            name: 'findMessages vazio',
+            url: `/chat/findMessages/${EVOLUTION_INSTANCE}`,
+            data: {}
+        },
+        {
+            name: 'findMessages GET',
+            method: 'get',
+            url: `/chat/findMessages/${EVOLUTION_INSTANCE}`
+        }
+    ], readEvolutionMessages);
+
+    return readEvolutionMessages(messagesResult.response.data);
 }
 
 async function fetchEvolutionLabelsFromChats() {
@@ -2784,6 +2839,46 @@ async function persistEvolutionConversationTargets() {
     return summary;
 }
 
+async function persistEvolutionRecentMessageTargets() {
+    const summary = {
+        contacts: 0,
+        messages: 0,
+        changed: 0,
+        errors: []
+    };
+    const seenPhones = new Set();
+    const seenMessages = new Set();
+    const messages = await fetchEvolutionRecentMessages();
+
+    for (const messagePayload of messages.slice(0, 300)) {
+        const incoming = extractIncomingMessage(messagePayload, messagePayload);
+        const messageKey = incoming?.id || JSON.stringify(messagePayload?.key || {});
+
+        if (!incoming?.phone || !isLikelyWhatsappPhone(incoming.phone) || incoming.isGroup || incoming.isBroadcast) continue;
+        if (seenMessages.has(messageKey)) continue;
+        seenMessages.add(messageKey);
+
+        try {
+            const existingConversation = await findExistingConversationByPhone(incoming.phone);
+            await persistMessageContactActivity(incoming);
+
+            summary.messages += 1;
+            if (!seenPhones.has(incoming.phone)) {
+                seenPhones.add(incoming.phone);
+                summary.contacts += 1;
+                if (!existingConversation) summary.changed += 1;
+            }
+        } catch (error) {
+            summary.errors.push({
+                phone: incoming.phone,
+                error: error.message
+            });
+        }
+    }
+
+    return summary;
+}
+
 async function getKnownConversationTargets() {
     const rows = await dbAll(`
         SELECT phone, remote_jid, push_name FROM whatsapp_conversations
@@ -2875,6 +2970,12 @@ async function syncEvolutionLabelsAndContacts(userId = null) {
         changed: 0,
         errors: []
     };
+    let messageSync = {
+        contacts: 0,
+        messages: 0,
+        changed: 0,
+        errors: []
+    };
 
     try {
         const labelMirror = await getEvolutionLabelMirror({ force: true });
@@ -2916,21 +3017,46 @@ async function syncEvolutionLabelsAndContacts(userId = null) {
         });
     }
 
+    try {
+        messageSync = await persistEvolutionRecentMessageTargets();
+
+        if (!messageSync.contacts) {
+            warnings.push({
+                step: 'recent_messages',
+                message: 'A Evolution API não retornou mensagens recentes com telefone real para atualizar a lista.'
+            });
+        }
+    } catch (error) {
+        errors.push({
+            step: 'recent_messages',
+            message: 'Não foi possível importar contatos a partir de mensagens recentes da Evolution API.',
+            error: error.failures || summarizeEvolutionError(error)
+        });
+    }
+
+    const importedContacts = Math.max(
+        labelSync.conversations || 0,
+        contactSync.contacts || 0,
+        messageSync.contacts || 0
+    );
+
     return {
-        chats: Math.max(labelSync.conversations || 0, contactSync.contacts || 0),
+        chats: importedContacts,
         contacts: contactSync.contacts || 0,
-        imported_contacts: contactSync.contacts || 0,
-        messages: 0,
+        imported_contacts: importedContacts,
+        messages: messageSync.messages || 0,
         labels: labelSync.labels,
         label_associations: labelSync.associations,
         label_sync: labelSync,
         contact_sync: contactSync,
+        message_sync: messageSync,
         source: 'labels_contacts',
         warnings,
         errors: [
             ...errors,
             ...(Array.isArray(labelSync.errors) ? labelSync.errors : []),
-            ...(Array.isArray(contactSync.errors) ? contactSync.errors : [])
+            ...(Array.isArray(contactSync.errors) ? contactSync.errors : []),
+            ...(Array.isArray(messageSync.errors) ? messageSync.errors : [])
         ]
     };
 }
