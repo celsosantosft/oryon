@@ -449,8 +449,20 @@ function phoneLooksSame(left, right) {
 function isLikelyWhatsappPhone(value) {
     const digits = normalizePhone(value);
     if (!digits) return false;
-    if (digits.startsWith('55')) return digits.length === 12 || digits.length === 13;
-    return digits.length >= 10 && digits.length <= 14;
+    return digits.startsWith('55') && (digits.length === 12 || digits.length === 13);
+}
+
+function isLidJid(value) {
+    return String(value || '').includes('@lid');
+}
+
+function extractPhoneFromRemoteJid(remoteJid) {
+    const jid = String(remoteJid || '').trim();
+    if (!jid || isLidJid(jid) || jid.includes('@g.us') || jid.includes('status@broadcast')) return '';
+
+    const rawPhone = jid.includes('@') ? jid.split('@')[0] : jid;
+    const phone = normalizePhone(rawPhone);
+    return isLikelyWhatsappPhone(phone) ? phone : '';
 }
 
 async function findExistingConversationByPhone(phone) {
@@ -731,7 +743,7 @@ function extractIncomingMessage(payload, rootPayload = null) {
 
     const key = messagePayload.key || {};
     const remoteJid = key.remoteJid || messagePayload.remoteJid || messagePayload.from || '';
-    const phone = normalizePhone(remoteJid.split('@')[0]);
+    const phone = extractPhoneFromRemoteJid(remoteJid);
 
     return {
         id: key.id || messagePayload.id || '',
@@ -1732,7 +1744,7 @@ function findEvolutionLabel(labels, labelId, labelName = '') {
 
 async function applyEvolutionLabelToChat({ remoteJid, phone, label }) {
     const targetJid = normalizeWhatsappJid(remoteJid) || normalizeWhatsappJid(phone);
-    const targetPhone = normalizePhone(phone || targetJid.split('@')[0]);
+    const targetPhone = normalizePhone(phone || extractPhoneFromRemoteJid(targetJid));
     const labelId = String(label?.id || '').trim();
     const labelName = String(label?.name || '').trim();
 
@@ -1938,7 +1950,7 @@ function addTagToTargetMaps({ tagsByPhone, tagsByJid }, target, tag) {
     if (!tag?.name) return;
 
     const remoteJid = normalizeWhatsappJid(target?.remoteJid || target?.jid || '');
-    const phone = normalizePhone(target?.phone || target?.number || remoteJid.split('@')[0]);
+    const phone = normalizePhone(target?.phone || target?.number || extractPhoneFromRemoteJid(remoteJid));
 
     const addTag = (map, key) => {
         if (!key) return;
@@ -1978,7 +1990,9 @@ function collectChatTargets(value, targets = []) {
     if (typeof value === 'string' || typeof value === 'number') {
         const rawValue = String(value).trim();
         const remoteJid = normalizeWhatsappJid(rawValue);
-        const phone = normalizePhone(rawValue.includes('@') ? rawValue.split('@')[0] : rawValue);
+        const phone = rawValue.includes('@')
+            ? extractPhoneFromRemoteJid(rawValue)
+            : normalizePhone(rawValue);
 
         if (remoteJid || phone) {
             targets.push({ remoteJid, phone });
@@ -2007,7 +2021,7 @@ function collectChatTargets(value, targets = []) {
         || value.user
         || value.contact?.phone
         || value.contact?.number
-        || String(remoteJid || '').split('@')[0]
+        || extractPhoneFromRemoteJid(remoteJid)
     );
 
     if (remoteJid || phone) {
@@ -2386,7 +2400,9 @@ async function persistLabelAssociationTarget(linkedTag, action, userId = null) {
 
     if (!target) {
         const remoteJid = normalizeWhatsappJid(rawTarget.remoteJid || rawTarget.jid || rawTarget.id || rawTarget.chatId || rawTarget.chat_id || '');
-        const candidatePhone = normalizePhone(rawTarget.phone || rawTarget.number || (remoteJid.includes('@') ? remoteJid.split('@')[0] : remoteJid));
+        const explicitPhone = normalizePhone(rawTarget.phone || rawTarget.number || '');
+        const jidPhone = extractPhoneFromRemoteJid(remoteJid);
+        const candidatePhone = explicitPhone || jidPhone;
         const existingConversation = await findExistingConversationByRemoteJid(remoteJid).catch(() => null);
 
         if (existingConversation?.phone && isLikelyWhatsappPhone(existingConversation.phone)) {
@@ -2404,7 +2420,7 @@ async function persistLabelAssociationTarget(linkedTag, action, userId = null) {
         } else {
             return {
                 processed: false,
-                reason: remoteJid.includes('@lid') ? 'lid_without_known_phone' : 'invalid_target',
+                reason: isLidJid(remoteJid) ? 'lid_without_known_phone' : 'invalid_target',
                 remoteJid,
                 tag: linkedTag.tag
             };
@@ -2519,7 +2535,7 @@ async function persistLabelMirrorAssociations(labelMirror, userId = null) {
 
 function normalizeChatTarget(chat) {
     const remoteJid = extractChatRemoteJid(chat);
-    const phone = normalizePhone(
+    const explicitPhone = normalizePhone(
         chat?.phone
         || chat?.number
         || chat?.phoneNumber
@@ -2531,12 +2547,15 @@ function normalizeChatTarget(chat) {
         || chat?.contact?.number
         || chat?.contact?.phoneNumber
         || chat?.contact?.waId
-        || remoteJid.split('@')[0]
+        || ''
+    );
+    const phone = normalizePhone(
+        explicitPhone || extractPhoneFromRemoteJid(remoteJid)
     );
     const finalRemoteJid = remoteJid || (phone ? `${phone}@s.whatsapp.net` : '');
 
     if (!phone || !finalRemoteJid || !isLikelyWhatsappPhone(phone)) return null;
-    if (finalRemoteJid.includes('@g.us') || finalRemoteJid.includes('status@broadcast')) return null;
+    if (isLidJid(finalRemoteJid) || finalRemoteJid.includes('@g.us') || finalRemoteJid.includes('status@broadcast')) return null;
 
     return {
         phone,
@@ -3042,7 +3061,10 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
             params
         );
 
-        const visibleConversations = conversations.filter(item => isLikelyWhatsappPhone(item.phone));
+        const visibleConversations = conversations.filter(item => (
+            isLikelyWhatsappPhone(item.phone)
+            && !isLidJid(item.remote_jid)
+        ));
         const conversationIds = visibleConversations.map(item => item.id);
         const localTagsByConversation = await getLocalTagsForConversations(conversationIds);
 
@@ -3162,13 +3184,13 @@ router.post('/whatsapp/add-label', authenticateToken, async (req, res) => {
 
         const result = await applyEvolutionLabelToChat({
             remoteJid: finalRemoteJid,
-            phone: phone || finalRemoteJid.split('@')[0],
+            phone: phone || extractPhoneFromRemoteJid(finalRemoteJid),
             label: selectedLabel
         });
 
         clearEvolutionLabelMirrorCache();
 
-        const metaPhone = normalizePhone(phone || finalRemoteJid.split('@')[0]);
+        const metaPhone = normalizePhone(phone || extractPhoneFromRemoteJid(finalRemoteJid));
         let updatedConversation = null;
         let localTag = null;
         let metaCapi = {
