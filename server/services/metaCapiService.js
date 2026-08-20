@@ -349,19 +349,20 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
                 event_name: eventName,
                 event_time: eventTime,
                 action_source: 'chat',
-                event_id: eventId,
+                event_id: `${eventId}:${Date.now()}`,
                 custom_data: {
                     lead_stage: 'qualified',
                     source: 'whatsapp'
                 },
                 user_data: userData
             }
-        ]
+        ],
+        test_event_code: 'TEST58782'
     };
 
-    if (testEventCode) {
-        payload.test_event_code = testEventCode;
-    }
+    // if (testEventCode) {
+    //     payload.test_event_code = testEventCode;
+    // }
 
     await upsertEventAttempt({
         source,
