@@ -348,7 +348,7 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
             {
                 event_name: eventName,
                 event_time: eventTime,
-                action_source: 'system',
+                action_source: 'system_generated',
                 event_id: eventId,
                 custom_data: {
                     lead_stage: 'qualified',
