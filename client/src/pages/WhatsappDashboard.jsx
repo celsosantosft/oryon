@@ -90,13 +90,6 @@ function normalizeQrImage(value) {
     return `data:image/png;base64,${value.replace(/^base64,/, '')}`;
 }
 
-function normalizeText(value) {
-    return String(value || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase();
-}
-
 function formatPhone(phone) {
     const digits = String(phone || '').replace(/\D/g, '');
     const match = digits.match(/^55(\d{2})(\d{4,5})(\d{4})$/);
@@ -106,39 +99,6 @@ function formatPhone(phone) {
 
 function onlyDigits(value) {
     return String(value || '').replace(/\D/g, '');
-}
-
-function getPhoneSearchVariants(value) {
-    const digits = onlyDigits(value);
-    if (!digits) return [];
-
-    const variants = [digits];
-
-    if (digits.startsWith('55')) variants.push(digits.slice(2));
-    if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) variants.push(`55${digits}`);
-
-    if (digits.length === 11 && digits[2] === '9') {
-        variants.push(`${digits.slice(0, 2)}${digits.slice(3)}`);
-        variants.push(`55${digits.slice(0, 2)}${digits.slice(3)}`);
-    }
-
-    if (digits.length === 13 && digits.startsWith('55') && digits[4] === '9') {
-        variants.push(`${digits.slice(0, 4)}${digits.slice(5)}`);
-        variants.push(`${digits.slice(2, 4)}${digits.slice(5)}`);
-    }
-
-    return Array.from(new Set(variants.filter(item => item.length >= 4)));
-}
-
-function matchesPhoneSearch(phone, search) {
-    const phoneDigits = onlyDigits(phone);
-    if (!phoneDigits) return false;
-
-    return getPhoneSearchVariants(search).some(variant => (
-        phoneDigits.includes(variant)
-        || phoneDigits.endsWith(variant)
-        || variant.endsWith(phoneDigits)
-    ));
 }
 
 function getManualLeadPhone(value) {
@@ -186,21 +146,6 @@ function getLeadHistoryStatus(status) {
     };
 }
 
-function getConversationTags(conversation) {
-    return Array.isArray(conversation?.tags) ? conversation.tags : [];
-}
-
-function getDisplayName(conversation) {
-    return conversation?.display_name
-        || conversation?.client_name
-        || conversation?.push_name
-        || formatPhone(conversation?.phone);
-}
-
-function getLabelKey(label) {
-    return String(label?.evolution_label_id || label?.id || label?.name || '').trim().toLowerCase();
-}
-
 function getMetaCapiFeedback(metaCapi) {
     if (!metaCapi) return '';
     if (metaCapi.sent) return ' Evento enviado para a Meta.';
@@ -210,19 +155,6 @@ function getMetaCapiFeedback(metaCapi) {
     if (metaCapi.reason === 'label_not_qualified') return '';
     if (metaCapi.skipped) return ' Meta não enviada.';
     return ' Meta falhou; confira os logs do servidor.';
-}
-
-function getDisabledEvolutionStorage(dataStorage) {
-    const labels = {
-        messages: 'DATABASE_SAVE_DATA_NEW_MESSAGE',
-        chats: 'DATABASE_SAVE_DATA_CHATS',
-        contacts: 'DATABASE_SAVE_DATA_CONTACTS',
-        labels: 'DATABASE_SAVE_DATA_LABELS'
-    };
-
-    return Object.entries(labels)
-        .filter(([key]) => dataStorage?.[key]?.configured && dataStorage[key].value === false)
-        .map(([, envName]) => envName);
 }
 
 const WhatsappDashboard = () => {
@@ -239,11 +171,7 @@ const WhatsappDashboard = () => {
     const [evolutionInfo, setEvolutionInfo] = useState(null);
     const [metaInfo, setMetaInfo] = useState(null);
     const [webhookInfo, setWebhookInfo] = useState(null);
-    const [conversations, setConversations] = useState([]);
-    const [selectedPhone, setSelectedPhone] = useState('');
     const [conversationSearch, setConversationSearch] = useState('');
-    const [loadingConversations, setLoadingConversations] = useState(false);
-    const [syncingLabels, setSyncingLabels] = useState(false);
     const [conversationLeadLoading, setConversationLeadLoading] = useState('');
     const [leadHistory, setLeadHistory] = useState([]);
     const [leadHistorySummary, setLeadHistorySummary] = useState({ total: 0, sent: 0, failed: 0 });
@@ -255,38 +183,11 @@ const WhatsappDashboard = () => {
 
     const currentStatus = STATUS_META[status] || STATUS_META.close;
     const isConnected = status === 'open';
-    const metaSentContacts = useMemo(() => (
-        conversations.filter(conversation => conversation.meta_capi_status === 'sent').length
-    ), [conversations]);
-    const sentLeadsTotal = Number(leadHistorySummary.sent || metaSentContacts || 0);
-
-    const filteredConversations = useMemo(() => {
-        const rawSearch = conversationSearch.trim();
-        const search = normalizeText(rawSearch);
-        const source = conversations;
-
-        if (!search) return source;
-
-        return source.filter(conversation => {
-            const tags = getConversationTags(conversation).map(tag => tag.name).join(' ');
-            const phoneMatch = matchesPhoneSearch(conversation.phone, rawSearch);
-
-            return [
-                getDisplayName(conversation),
-                conversation.phone,
-                conversation.remote_jid,
-                tags
-            ].some(value => normalizeText(value).includes(search)) || phoneMatch;
-        });
-    }, [conversationSearch, conversations]);
-
-    const selectedConversation = useMemo(() => (
-        filteredConversations.find(item => item.phone === selectedPhone)
-        || filteredConversations[0]
-        || null
-    ), [filteredConversations, selectedPhone]);
-    const selectedMetaSent = selectedConversation?.meta_capi_status === 'sent';
+    const sentLeadsTotal = Number(leadHistorySummary.sent || 0);
     const manualLeadPhone = useMemo(() => getManualLeadPhone(conversationSearch), [conversationSearch]);
+    const manualLeadSent = useMemo(() => (
+        Boolean(manualLeadPhone) && leadHistory.some(item => onlyDigits(item.phone || item.source_id) === manualLeadPhone && item.status === 'sent')
+    ), [leadHistory, manualLeadPhone]);
 
     const navigationItems = useMemo(() => ([
         { id: 'labels', label: 'Leads Meta', icon: Icons.Tag },
@@ -315,33 +216,6 @@ const WhatsappDashboard = () => {
         }
     }, [API_BASE_URL, authConfig, token]);
 
-    const fetchConversations = useCallback(async (silent = false, searchTerm = '') => {
-        if (!token) return;
-        if (!silent) setLoadingConversations(true);
-
-        try {
-            const response = await axios.get(`${API_BASE_URL}/whatsapp/conversations`, {
-                ...authConfig,
-                params: searchTerm.trim() ? { search: searchTerm.trim() } : {}
-            });
-            const nextConversations = response.data?.conversations || [];
-
-            setConversations(nextConversations);
-            setSelectedPhone(previous => {
-                if (previous && nextConversations.some(conversation => conversation.phone === previous)) {
-                    return previous;
-                }
-
-                const firstTagged = nextConversations.find(conversation => getConversationTags(conversation).length > 0);
-                return firstTagged?.phone || nextConversations[0]?.phone || '';
-            });
-        } catch (requestError) {
-            setError(requestError.response?.data?.error || 'Não foi possível carregar os contatos capturados.');
-        } finally {
-            if (!silent) setLoadingConversations(false);
-        }
-    }, [API_BASE_URL, authConfig, token]);
-
     const fetchLeadHistory = useCallback(async (silent = false) => {
         if (!token) return;
         if (!silent) setLoadingLeadHistory(true);
@@ -365,78 +239,18 @@ const WhatsappDashboard = () => {
     useEffect(() => {
         const initialLoad = window.setTimeout(() => {
             fetchStatus();
-            fetchConversations();
             fetchLeadHistory();
         }, 0);
 
         const statusInterval = window.setInterval(fetchStatus, 30000);
-        const localRefreshInterval = window.setInterval(() => fetchConversations(true), 60000);
         const historyRefreshInterval = window.setInterval(() => fetchLeadHistory(true), 60000);
 
         return () => {
             window.clearTimeout(initialLoad);
             window.clearInterval(statusInterval);
-            window.clearInterval(localRefreshInterval);
             window.clearInterval(historyRefreshInterval);
         };
-    }, [fetchConversations, fetchLeadHistory, fetchStatus]);
-
-    useEffect(() => {
-        const search = conversationSearch.trim();
-        if (!search) {
-            const timeoutId = window.setTimeout(() => {
-                fetchConversations(true);
-            }, 150);
-
-            return () => window.clearTimeout(timeoutId);
-        }
-
-        if (search.length < 3 && onlyDigits(search).length < 4) return undefined;
-
-        const timeoutId = window.setTimeout(() => {
-            fetchConversations(true, search);
-        }, 350);
-
-        return () => window.clearTimeout(timeoutId);
-    }, [conversationSearch, fetchConversations]);
-
-    const handleSyncLabels = async () => {
-        if (!token || syncingLabels) return;
-
-        setSyncingLabels(true);
-        setError('');
-        setSuccess('');
-
-        try {
-            const response = await axios.post(`${API_BASE_URL}/whatsapp/sync`, {}, authConfig);
-            if (response.data?.config) setEvolutionInfo(response.data.config);
-            if (response.data?.meta) setMetaInfo(response.data.meta);
-
-            const importedChats = Number(response.data?.chats || response.data?.label_sync?.conversations || 0);
-            const labels = Number(response.data?.labels || 0);
-            const labelAssociations = Number(response.data?.label_associations || 0);
-            const metaSent = Number(response.data?.label_sync?.meta_sent || 0);
-            const warnings = Array.isArray(response.data?.warnings) ? response.data.warnings.length : 0;
-            const disabledStorage = getDisabledEvolutionStorage(response.data?.config?.dataStorage);
-
-            if (disabledStorage.length) {
-                setError(`A Evolution está com ${disabledStorage.join(', ')} desligado. Ligue essas variáveis no .env da VPS e reinicie a Evolution API.`);
-            } else if (!labels && !labelAssociations && !importedChats) {
-                setError('A Evolution respondeu sem contatos novos. Confira a conexão do WhatsApp e tente atualizar de novo.');
-            } else {
-                setSuccess(`Atualização concluída: ${importedChats} contato(s) capturado(s).${metaSent ? ` ${metaSent} evento(s) enviado(s) para a Meta.` : ''}${warnings ? ' Houve aviso(s) da Evolution API.' : ''}`);
-            }
-            await Promise.all([
-                fetchConversations(false, conversationSearch),
-                fetchLeadHistory(true)
-            ]);
-        } catch (requestError) {
-            if (requestError.response?.data?.config) setEvolutionInfo(requestError.response.data.config);
-            setError(requestError.response?.data?.error || 'Não foi possível atualizar os contatos agora.');
-        } finally {
-            setSyncingLabels(false);
-        }
-    };
+    }, [fetchLeadHistory, fetchStatus]);
 
     const handleConnect = async () => {
         setActionLoading('connect');
@@ -498,38 +312,13 @@ const WhatsappDashboard = () => {
         const metaCapi = response.data?.meta_capi;
 
         setSuccess(`${response.data?.message || 'Lead qualificado processado.'}${getMetaCapiFeedback(metaCapi)}`);
-        await Promise.all([
-            fetchConversations(true, conversationSearch),
-            fetchLeadHistory(true)
-        ]);
+        await fetchLeadHistory(true);
 
         return response.data;
     };
 
-    const handleSendConversationQualifiedLead = async (conversation) => {
-        if (!conversation?.phone) return;
-
-        const loadingKey = String(conversation.id || conversation.phone);
-        if (conversationLeadLoading) return;
-
-        setConversationLeadLoading(loadingKey);
-
-        try {
-            await sendQualifiedLeadPayload({
-                name: getDisplayName(conversation),
-                phone: conversation.phone,
-                email: ''
-            });
-        } catch (requestError) {
-            const metaCapi = requestError.response?.data?.meta_capi;
-            setError(`${requestError.response?.data?.error || 'Não foi possível enviar o lead qualificado.'}${getMetaCapiFeedback(metaCapi)}`);
-        } finally {
-            setConversationLeadLoading('');
-        }
-    };
-
     const handleSendSearchQualifiedLead = async () => {
-        if (!manualLeadPhone || conversationLeadLoading) return;
+        if (!manualLeadPhone || manualLeadSent || conversationLeadLoading) return;
 
         setConversationLeadLoading(`manual-${manualLeadPhone}`);
 
@@ -545,78 +334,6 @@ const WhatsappDashboard = () => {
         } finally {
             setConversationLeadLoading('');
         }
-    };
-
-    const renderTagPill = (tag, compact = false) => {
-        const color = tag.color || '#64748b';
-
-        return (
-            <span
-                key={getLabelKey(tag) || tag.name}
-                className={`inline-flex max-w-full items-center rounded-md border font-extrabold uppercase ${compact ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1 text-xs'}`}
-                style={{ borderColor: color, color, backgroundColor: `${color}18` }}
-                title={tag.name}
-            >
-                <span className="truncate">{tag.name}</span>
-            </span>
-        );
-    };
-
-    const renderContactItem = (conversation) => {
-        const active = conversation.phone === selectedConversation?.phone;
-        const displayName = getDisplayName(conversation);
-        const initial = String(displayName || conversation.phone || '?').trim().charAt(0).toUpperCase() || '?';
-        const tags = getConversationTags(conversation);
-        const metaSent = conversation.meta_capi_status === 'sent';
-        const lastActivity = formatDateTime(conversation.last_message_at || conversation.updated_at);
-        const lastMessageText = String(conversation.last_message_text || '').trim();
-        const profileImage = conversation.profile_picture_url || conversation.profile_picture || conversation.picture_url || conversation.avatar_url || conversation.photo_url;
-
-        return (
-            <button
-                key={conversation.id || conversation.phone}
-                type="button"
-                onClick={() => setSelectedPhone(conversation.phone)}
-                className={`w-full rounded-lg border p-4 text-left transition ${active ? 'border-blue-300 bg-blue-50 ring-2 ring-blue-100' : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50'}`}
-            >
-                <div className="flex items-start gap-3">
-                    {profileImage ? (
-                        <img src={profileImage} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-slate-200" />
-                    ) : (
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-extrabold text-slate-600">
-                            {initial}
-                        </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                                <p className="truncate text-sm font-extrabold text-slate-950">{displayName}</p>
-                                <p className="mt-1 text-xs font-bold text-slate-500">{formatPhone(conversation.phone)}</p>
-                                {lastMessageText ? (
-                                    <p className="mt-1 truncate text-xs font-semibold text-slate-500">{lastMessageText}</p>
-                                ) : null}
-                            </div>
-                            <div className="flex shrink-0 flex-col items-end gap-2">
-                                {lastActivity ? (
-                                    <span className="text-[10px] font-extrabold uppercase text-slate-400">{lastActivity}</span>
-                                ) : null}
-                                <span className={`rounded-full px-2 py-1 text-[10px] font-extrabold uppercase ring-1 ${metaSent ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-slate-50 text-slate-500 ring-slate-200'}`}>
-                                    {metaSent ? 'Meta' : 'Ativo'}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                            {tags.length ? tags.map(tag => renderTagPill(tag, true)) : (
-                                <span className="text-xs font-bold text-slate-400">
-                                    {metaSent ? 'Enviado para Meta' : 'Aguardando Meta'}
-                                </span>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </button>
-        );
     };
 
     const renderLeadHistory = () => (
@@ -677,8 +394,8 @@ const WhatsappDashboard = () => {
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                     <div className="grid gap-3 sm:grid-cols-3">
                         <div>
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Contatos capturados</p>
-                            <strong className="mt-1 block text-2xl text-slate-950">{conversations.length}</strong>
+                            <p className="text-xs font-extrabold uppercase text-slate-400">Modo</p>
+                            <strong className="mt-1 block text-lg text-slate-950">Manual</strong>
                         </div>
                         <div>
                             <p className="text-xs font-extrabold uppercase text-slate-400">Leads Meta</p>
@@ -691,187 +408,82 @@ const WhatsappDashboard = () => {
                             </strong>
                         </div>
                     </div>
-
-                    <button
-                        type="button"
-                        onClick={handleSyncLabels}
-                        disabled={syncingLabels}
-                        className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        title="Atualizar contatos"
-                    >
-                        {syncingLabels ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : Icons.Refresh}
-                        Atualizar contatos
-                    </button>
                 </div>
             </section>
 
-            <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[380px_1fr]">
-                <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                    <div className="shrink-0 border-b border-slate-100 p-4">
-                        <div className="flex items-center justify-between gap-3">
-                            <div>
-                                <h2 className="text-lg font-extrabold text-slate-950">Contatos capturados</h2>
-                                <p className="mt-1 text-xs font-bold text-slate-500">
-                                    {conversationSearch.trim() ? `${filteredConversations.length} resultado(s)` : `${conversations.length} contato(s)`}
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => fetchConversations(false, conversationSearch)}
-                                disabled={loadingConversations}
-                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                title="Atualizar lista"
-                            >
-                                {loadingConversations ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-slate-700" /> : Icons.Refresh}
-                            </button>
-                        </div>
-
-                        <label className="mt-4 flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-slate-400 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
-                            {Icons.Search}
-                            <input
-                                value={conversationSearch}
-                                onChange={(event) => setConversationSearch(event.target.value)}
-                                placeholder="Buscar nome ou telefone"
-                                className="h-full min-w-0 flex-1 border-0 bg-transparent text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-400"
-                            />
-                        </label>
-                    </div>
-
-                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
-                        {loadingConversations ? (
-                            <div className="flex h-44 items-center justify-center text-sm font-bold text-slate-500">Carregando contatos...</div>
-                        ) : filteredConversations.length ? (
-                            filteredConversations.map(renderContactItem)
-                        ) : manualLeadPhone ? (
-                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-semibold leading-6 text-blue-900">
-                                <p className="font-extrabold">Contato não encontrado</p>
-                                <p className="mt-1">Você pode enviar {formatPhone(manualLeadPhone)} direto para a Meta.</p>
-                                <button
-                                    type="button"
-                                    onClick={handleSendSearchQualifiedLead}
-                                    disabled={conversationLeadLoading === `manual-${manualLeadPhone}`}
-                                    className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-xs font-extrabold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                    {conversationLeadLoading === `manual-${manualLeadPhone}`
-                                        ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                                        : Icons.Tag}
-                                    Enviar este número
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm font-semibold leading-6 text-slate-500">
-                                {conversationSearch.trim() ? 'Nenhum contato encontrado para essa busca.' : 'Nenhum contato capturado ainda.'}
-                            </div>
-                        )}
-                    </div>
-                </section>
-
+            <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[1fr_360px]">
                 <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                     <div className="shrink-0 border-b border-slate-100 p-5">
-                        {selectedConversation ? (
-                            <div>
-                                <div>
-                                    <h2 className="text-xl font-extrabold text-slate-950">{getDisplayName(selectedConversation)}</h2>
-                                    <p className="mt-1 flex items-center gap-2 text-sm font-bold text-slate-500">
-                                        {Icons.Phone}
-                                        {formatPhone(selectedConversation.phone)}
-                                    </p>
-                                </div>
-                            </div>
-                        ) : (
-                            <div>
-                                <h2 className="text-xl font-extrabold text-slate-950">Lead Meta</h2>
-                                <p className="mt-1 text-sm font-bold text-slate-500">Selecione um contato capturado.</p>
-                            </div>
-                        )}
+                        <h2 className="text-xl font-extrabold text-slate-950">Enviar lead para Meta</h2>
+                        <p className="mt-1 text-sm font-bold text-slate-500">Digite o telefone do cliente com DDD.</p>
                     </div>
 
                     <div className="min-h-0 flex-1 overflow-y-auto p-5">
-                        {selectedConversation ? (
-                            <div>
-                                <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-                                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-5">
-                                        <p className="text-xs font-extrabold uppercase text-slate-400">Lead selecionado</p>
-                                        <h3 className="mt-2 text-2xl font-extrabold text-slate-950">{getDisplayName(selectedConversation)}</h3>
-                                        <p className="mt-2 flex items-center gap-2 text-base font-bold text-slate-600">
-                                            {Icons.Phone}
-                                            {formatPhone(selectedConversation.phone)}
-                                        </p>
-
-                                        <div className="mt-5 flex flex-wrap gap-2">
-                                            {getConversationTags(selectedConversation).map(tag => renderTagPill(tag, true))}
-                                            {!getConversationTags(selectedConversation).length ? (
-                                                <span className="rounded-md bg-white px-3 py-1 text-xs font-extrabold uppercase text-slate-500 ring-1 ring-slate-200">
-                                                    {selectedMetaSent ? 'Enviado para Meta' : 'Aguardando envio'}
-                                                </span>
-                                            ) : null}
-                                        </div>
-                                        {selectedConversation.meta_capi_updated_at ? (
-                                            <p className="mt-4 text-xs font-bold text-slate-500">
-                                                Último envio Meta: {formatDateTime(selectedConversation.meta_capi_updated_at)}
-                                            </p>
-                                        ) : null}
+                        <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-5">
+                                <label className="block">
+                                    <span className="text-xs font-extrabold uppercase text-slate-400">Telefone</span>
+                                    <div className="mt-2 flex h-12 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-slate-400 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
+                                        {Icons.Phone}
+                                        <input
+                                            value={conversationSearch}
+                                            onChange={(event) => setConversationSearch(event.target.value)}
+                                            placeholder="Ex: 81999999999"
+                                            inputMode="tel"
+                                            className="h-full min-w-0 flex-1 border-0 bg-transparent text-base font-extrabold text-slate-800 outline-none placeholder:text-slate-400"
+                                        />
                                     </div>
+                                </label>
 
-                                    <div className={`rounded-lg border p-5 ${selectedMetaSent ? 'border-emerald-200 bg-emerald-50' : 'border-blue-200 bg-blue-50'}`}>
-                                        <p className={`text-xs font-extrabold uppercase ${selectedMetaSent ? 'text-emerald-700' : 'text-blue-700'}`}>Meta CAPI</p>
-                                        <p className={`mt-2 text-sm font-semibold leading-6 ${selectedMetaSent ? 'text-emerald-900' : 'text-blue-900'}`}>
-                                            {selectedMetaSent
-                                                ? 'Este telefone já foi enviado para o Pixel da Meta.'
-                                                : 'O evento usa o telefone capturado e envia os dados hasheados para o Pixel.'}
-                                        </p>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSendConversationQualifiedLead(selectedConversation)}
-                                            disabled={selectedMetaSent || conversationLeadLoading === String(selectedConversation.id || selectedConversation.phone)}
-                                            className={`mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-extrabold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-70 ${selectedMetaSent ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'}`}
-                                        >
-                                            {selectedMetaSent
-                                                ? Icons.Check
-                                                : conversationLeadLoading === String(selectedConversation.id || selectedConversation.phone)
-                                                ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                                                : Icons.Tag}
-                                            {selectedMetaSent ? 'Já enviado' : 'Enviar Meta'}
-                                        </button>
-                                    </div>
-                                </div>
-                                {renderLeadHistory()}
-                            </div>
-                        ) : manualLeadPhone ? (
-                            <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-5">
-                                    <p className="text-xs font-extrabold uppercase text-slate-400">Número digitado</p>
-                                    <h3 className="mt-2 text-2xl font-extrabold text-slate-950">{formatPhone(manualLeadPhone)}</h3>
+                                <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-white p-4">
+                                    <p className="text-xs font-extrabold uppercase text-slate-400">Número que será enviado</p>
+                                    <h3 className="mt-2 text-2xl font-extrabold text-slate-950">
+                                        {manualLeadPhone ? formatPhone(manualLeadPhone) : 'Digite DDD e número'}
+                                    </h3>
                                     <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-                                        Este contato ainda não foi capturado pela Evolution, mas pode ser enviado manualmente para a Meta usando o telefone.
+                                        O envio é manual. Nenhuma conversa será importada para escolher o lead.
                                     </p>
                                 </div>
+                            </div>
 
-                                <div className="rounded-lg border border-blue-200 bg-blue-50 p-5">
-                                    <p className="text-xs font-extrabold uppercase text-blue-700">Meta CAPI</p>
-                                    <p className="mt-2 text-sm font-semibold leading-6 text-blue-900">
-                                        O número será normalizado e enviado com hash SHA-256 para o Pixel.
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={handleSendSearchQualifiedLead}
-                                        disabled={conversationLeadLoading === `manual-${manualLeadPhone}`}
-                                        className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
-                                    >
-                                        {conversationLeadLoading === `manual-${manualLeadPhone}`
-                                            ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                                            : Icons.Tag}
-                                        Enviar Meta
-                                    </button>
-                                </div>
+                            <div className={`rounded-lg border p-5 ${manualLeadSent ? 'border-emerald-200 bg-emerald-50' : 'border-blue-200 bg-blue-50'}`}>
+                                <p className={`text-xs font-extrabold uppercase ${manualLeadSent ? 'text-emerald-700' : 'text-blue-700'}`}>Meta CAPI</p>
+                                <p className={`mt-2 text-sm font-semibold leading-6 ${manualLeadSent ? 'text-emerald-900' : 'text-blue-900'}`}>
+                                    {manualLeadSent
+                                        ? 'Este telefone já foi enviado para o Pixel da Meta.'
+                                        : 'O telefone será normalizado, hasheado e enviado como evento padrão Lead.'}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={handleSendSearchQualifiedLead}
+                                    disabled={!manualLeadPhone || manualLeadSent || conversationLeadLoading === `manual-${manualLeadPhone}`}
+                                    className={`mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-extrabold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-70 ${manualLeadSent ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+                                >
+                                    {manualLeadSent
+                                        ? Icons.Check
+                                        : conversationLeadLoading === `manual-${manualLeadPhone}`
+                                        ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                                        : Icons.Tag}
+                                    {manualLeadSent ? 'Já enviado' : 'Enviar Meta'}
+                                </button>
                             </div>
-                        ) : (
-                            <div className="flex h-full min-h-[360px] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
-                                Selecione um contato capturado para enviar o lead qualificado para a Meta.
-                            </div>
-                        )}
+                        </div>
+
+                        {renderLeadHistory()}
                     </div>
                 </section>
+
+                <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                    <h2 className="text-lg font-extrabold text-slate-950">Fluxo atual</h2>
+                    <div className="mt-4 space-y-3 text-sm font-semibold leading-6 text-slate-600">
+                        <p>1. Digite o telefone do cliente.</p>
+                        <p>2. Clique em Enviar Meta.</p>
+                        <p>3. Confira o registro no histórico.</p>
+                    </div>
+                    <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-800">
+                        O sistema não precisa importar conversas para enviar o lead manualmente.
+                    </div>
+                </aside>
             </div>
         </div>
     );
@@ -910,7 +522,7 @@ const WhatsappDashboard = () => {
                             </div>
                             <h3 className="text-xl font-extrabold text-slate-950">Sessão ativa</h3>
                             <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-                                Pronta para atualizar contatos.
+                                Pronta para envio manual de leads.
                             </p>
                         </div>
                     ) : (
@@ -1027,7 +639,7 @@ const WhatsappDashboard = () => {
                 )}
 
                 <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-800">
-                    O modo atual atualiza contatos e envia leads qualificados para a Meta, sem carregar histórico de mensagens.
+                    O modo atual envia leads manualmente para a Meta, sem importar conversas ou carregar histórico de mensagens.
                 </div>
             </section>
         </div>
