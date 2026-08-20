@@ -3259,7 +3259,7 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
                    AND mce_auto.source_id = CAST(wc.id AS TEXT)
                    AND mce_auto.event_name = ?
              ${whereClause}
-             ORDER BY COALESCE(wc.last_message_at, wc.updated_at, wc.created_at) DESC
+             ORDER BY COALESCE(wc.last_message_at, wc.updated_at) DESC
              LIMIT 120`,
             [metaEventName, metaEventName, ...params]
         );
