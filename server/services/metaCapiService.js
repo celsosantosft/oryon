@@ -348,9 +348,11 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
             {
                 event_name: eventName,
                 event_time: eventTime,
-                action_source: 'chat',
+                action_source: 'system_generated',
                 event_id: `${eventId}:${Date.now()}`,
                 custom_data: {
+                    event_source: 'crm',
+                    lead_event_source: 'Oryon CRM',
                     lead_stage: 'qualified',
                     source: 'whatsapp'
                 },
