@@ -3537,6 +3537,21 @@ router.post('/whatsapp/meta/qualified-lead', authenticateToken, authorizeRole(['
     }
 });
 
+router.delete('/whatsapp/meta/qualified-leads/history', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(`DELETE FROM meta_capi_events`, function (err) {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+        res.json({ message: 'Histórico da Meta apagado com sucesso.' });
+    } catch (error) {
+        console.error('Erro ao limpar histórico da Meta:', error);
+        res.status(500).json({ error: 'Erro ao limpar histórico.' });
+    }
+});
+
 router.get('/whatsapp/meta/qualified-leads/history', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
     try {
         const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 50);

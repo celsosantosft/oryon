@@ -58,6 +58,11 @@ const Icons = {
         <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
         </svg>
+    ),
+    Trash: (
+        <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
     )
 };
 
@@ -342,24 +347,50 @@ const WhatsappDashboard = () => {
         }
     };
 
+    const handleClearHistory = async () => {
+        if (!window.confirm('Tem certeza que deseja apagar todo o histórico de testes da Meta?')) return;
+        
+        setActionLoading('clear_history');
+        try {
+            await axios.delete(`${API_BASE_URL}/whatsapp/meta/qualified-leads/history`, authConfig);
+            setSuccess('Histórico apagado com sucesso.');
+            await fetchLeadHistory(true);
+        } catch (requestError) {
+            setError(requestError.response?.data?.error || 'Erro ao apagar histórico.');
+        } finally {
+            setActionLoading('');
+        }
+    };
+
     const renderHistoryView = () => (
         <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="shrink-0 flex flex-col gap-2 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h2 className="text-xl font-extrabold text-slate-950">Histórico de envios Meta</h2>
+                    <h2 className="text-xl font-semibold text-slate-950">Histórico de envios Meta</h2>
                     <p className="mt-1 text-sm font-bold text-slate-500">
                         {leadHistorySummary.sent || 0} lead(s) processado(s)
                     </p>
                 </div>
-                <button
-                    type="button"
-                    onClick={() => fetchLeadHistory()}
-                    disabled={loadingLeadHistory}
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-extrabold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                    {loadingLeadHistory ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-slate-700" /> : Icons.Refresh}
-                    Atualizar Histórico
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={handleClearHistory}
+                        disabled={actionLoading === 'clear_history'}
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {actionLoading === 'clear_history' ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-700" /> : Icons.Trash}
+                        Limpar Histórico
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => fetchLeadHistory()}
+                        disabled={loadingLeadHistory}
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {loadingLeadHistory ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-slate-700" /> : Icons.Refresh}
+                        Atualizar
+                    </button>
+                </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -373,12 +404,12 @@ const WhatsappDashboard = () => {
                             return (
                                 <div key={item.id} className="grid gap-3 p-4 hover:bg-slate-50 rounded-lg transition sm:grid-cols-[1fr_auto] sm:items-center">
                                     <div className="min-w-0">
-                                        <p className="truncate text-base font-extrabold text-slate-950">{item.display_name || formatPhone(item.phone)}</p>
+                                        <p className="truncate text-base font-semibold text-slate-950">{item.display_name || formatPhone(item.phone)}</p>
                                         <p className="mt-1 text-sm font-bold text-slate-500">
                                             {formatPhone(item.phone)}{item.updated_at ? ` - ${formatDateTime(item.updated_at)}` : ''}
                                         </p>
                                     </div>
-                                    <span className={`inline-flex w-fit items-center rounded-full px-3 py-1.5 text-xs font-extrabold ring-1 ${statusMeta.className}`}>
+                                    <span className={`inline-flex w-fit items-center rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ${statusMeta.className}`}>
                                         {statusMeta.label}
                                     </span>
                                 </div>
@@ -403,15 +434,15 @@ const WhatsappDashboard = () => {
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                     <div className="grid gap-3 sm:grid-cols-3">
                         <div>
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Modo</p>
+                            <p className="text-xs font-semibold uppercase text-slate-400">Modo</p>
                             <strong className="mt-1 block text-lg text-slate-950">Manual</strong>
                         </div>
                         <div>
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Leads Meta</p>
+                            <p className="text-xs font-semibold uppercase text-slate-400">Leads Meta</p>
                             <strong className="mt-1 block text-2xl text-slate-950">{sentLeadsTotal}</strong>
                         </div>
                         <div>
-                            <p className="text-xs font-extrabold uppercase text-slate-400">WhatsApp</p>
+                            <p className="text-xs font-semibold uppercase text-slate-400">WhatsApp</p>
                             <strong className={`mt-1 block text-lg ${isConnected ? 'text-emerald-700' : 'text-red-700'}`}>
                                 {currentStatus.label}
                             </strong>
@@ -423,7 +454,7 @@ const WhatsappDashboard = () => {
             <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[1fr_360px]">
                 <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                     <div className="shrink-0 border-b border-slate-100 p-5">
-                        <h2 className="text-xl font-extrabold text-slate-950">Enviar lead para Meta</h2>
+                        <h2 className="text-xl font-semibold text-slate-950">Enviar lead para Meta</h2>
                         <p className="mt-1 text-sm font-bold text-slate-500">Digite o telefone do cliente com DDD.</p>
                     </div>
 
@@ -431,7 +462,7 @@ const WhatsappDashboard = () => {
                         <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
                             <div className="rounded-lg border border-slate-200 bg-slate-50 p-5">
                                 <label className="block">
-                                    <span className="text-xs font-extrabold uppercase text-slate-400">Telefone</span>
+                                    <span className="text-xs font-semibold uppercase text-slate-400">Telefone</span>
                                     <div className="mt-2 flex h-12 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-slate-400 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
                                         {Icons.Phone}
                                         <input
@@ -439,14 +470,14 @@ const WhatsappDashboard = () => {
                                             onChange={(event) => setConversationSearch(event.target.value)}
                                             placeholder="Ex: 81999999999"
                                             inputMode="tel"
-                                            className="h-full min-w-0 flex-1 border-0 bg-transparent text-base font-extrabold text-slate-800 outline-none placeholder:text-slate-400"
+                                            className="h-full min-w-0 flex-1 border-0 bg-transparent text-base font-semibold text-slate-800 outline-none placeholder:text-slate-400"
                                         />
                                     </div>
                                 </label>
 
                                 <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-white p-4">
-                                    <p className="text-xs font-extrabold uppercase text-slate-400">Número que será enviado</p>
-                                    <h3 className="mt-2 text-2xl font-extrabold text-slate-950">
+                                    <p className="text-xs font-semibold uppercase text-slate-400">Número que será enviado</p>
+                                    <h3 className="mt-2 text-2xl font-semibold text-slate-950">
                                         {manualLeadPhone ? formatPhone(manualLeadPhone) : 'Digite DDD e número'}
                                     </h3>
                                     <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
@@ -456,7 +487,7 @@ const WhatsappDashboard = () => {
                             </div>
 
                             <div className={`rounded-lg border p-5 ${manualLeadSent ? 'border-emerald-200 bg-emerald-50' : 'border-blue-200 bg-blue-50'}`}>
-                                <p className={`text-xs font-extrabold uppercase ${manualLeadSent ? 'text-emerald-700' : 'text-blue-700'}`}>Meta CAPI</p>
+                                <p className={`text-xs font-semibold uppercase ${manualLeadSent ? 'text-emerald-700' : 'text-blue-700'}`}>Meta CAPI</p>
                                 <p className={`mt-2 text-sm font-semibold leading-6 ${manualLeadSent ? 'text-emerald-900' : 'text-blue-900'}`}>
                                     {manualLeadSent
                                         ? 'Este telefone já foi enviado para o Pixel da Meta.'
@@ -466,7 +497,7 @@ const WhatsappDashboard = () => {
                                     type="button"
                                     onClick={handleSendSearchQualifiedLead}
                                     disabled={!manualLeadPhone || manualLeadSent || conversationLeadLoading === `manual-${manualLeadPhone}`}
-                                    className={`mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-extrabold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-70 ${manualLeadSent ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+                                    className={`mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-70 ${manualLeadSent ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'}`}
                                 >
                                     {manualLeadSent
                                         ? Icons.Check
@@ -482,13 +513,13 @@ const WhatsappDashboard = () => {
 
                 <aside className="flex flex-col gap-4">
                     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <h2 className="text-lg font-extrabold text-slate-950">Último envio</h2>
+                        <h2 className="text-lg font-semibold text-slate-950">Último envio</h2>
                         {lastLead ? (
                             <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
-                                <p className="text-xs font-extrabold uppercase text-slate-400">Telefone</p>
+                                <p className="text-xs font-semibold uppercase text-slate-400">Telefone</p>
                                 <strong className="mt-1 block text-lg text-slate-950">{formatPhone(lastLead.phone)}</strong>
-                                <p className="mt-3 text-xs font-extrabold uppercase text-slate-400">Status</p>
-                                <span className={`mt-2 inline-flex w-fit items-center rounded-full px-3 py-1.5 text-xs font-extrabold ring-1 ${getLeadHistoryStatus(lastLead.status).className}`}>
+                                <p className="mt-3 text-xs font-semibold uppercase text-slate-400">Status</p>
+                                <span className={`mt-2 inline-flex w-fit items-center rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ${getLeadHistoryStatus(lastLead.status).className}`}>
                                     {getLeadHistoryStatus(lastLead.status).label}
                                 </span>
                                 <p className="mt-4 text-xs font-bold text-slate-500">
@@ -501,7 +532,7 @@ const WhatsappDashboard = () => {
                     </div>
 
                     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                        <h2 className="text-lg font-extrabold text-slate-950">Fluxo atual</h2>
+                        <h2 className="text-lg font-semibold text-slate-950">Fluxo atual</h2>
                         <div className="mt-4 space-y-3 text-sm font-semibold leading-6 text-slate-600">
                             <p>1. Digite o telefone do cliente.</p>
                             <p>2. Clique em Enviar Meta.</p>
@@ -519,7 +550,7 @@ const WhatsappDashboard = () => {
             <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="mb-5 flex items-center justify-between gap-4">
                     <div>
-                        <h2 className="text-lg font-extrabold text-slate-950">Conexão WhatsApp</h2>
+                        <h2 className="text-lg font-semibold text-slate-950">Conexão WhatsApp</h2>
                         <p className="mt-1 text-sm font-bold text-slate-500">Instância AtosVendas</p>
                     </div>
                     <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${currentStatus.badge}`}>
@@ -529,7 +560,7 @@ const WhatsappDashboard = () => {
                 </div>
 
                 <div className={`mb-5 rounded-lg border px-4 py-4 ${currentStatus.panel}`}>
-                    <p className="text-xs font-extrabold uppercase opacity-80">Status</p>
+                    <p className="text-xs font-semibold uppercase opacity-80">Status</p>
                     <strong className="mt-1 block text-xl">{currentStatus.label}</strong>
                 </div>
 
@@ -546,7 +577,7 @@ const WhatsappDashboard = () => {
                             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
                                 {Icons.Power}
                             </div>
-                            <h3 className="text-xl font-extrabold text-slate-950">Sessão ativa</h3>
+                            <h3 className="text-xl font-semibold text-slate-950">Sessão ativa</h3>
                             <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
                                 Pronta para envio manual de leads.
                             </p>
@@ -556,7 +587,7 @@ const WhatsappDashboard = () => {
                             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700">
                                 {Icons.Qr}
                             </div>
-                            <h3 className="text-xl font-extrabold text-slate-950">Aguardando conexão</h3>
+                            <h3 className="text-xl font-semibold text-slate-950">Aguardando conexão</h3>
                             <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
                                 Gere um QR Code somente se a instância precisar conectar.
                             </p>
@@ -570,7 +601,7 @@ const WhatsappDashboard = () => {
                             type="button"
                             onClick={handleLogout}
                             disabled={actionLoading === 'logout'}
-                            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-5 py-3 text-sm font-extrabold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {actionLoading === 'logout' ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-700" /> : Icons.Power}
                             Desconectar
@@ -580,7 +611,7 @@ const WhatsappDashboard = () => {
                             type="button"
                             onClick={handleConnect}
                             disabled={actionLoading === 'connect'}
-                            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {actionLoading === 'connect' ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : Icons.Qr}
                             Gerar QR Code
@@ -590,30 +621,30 @@ const WhatsappDashboard = () => {
             </section>
 
             <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="text-lg font-extrabold text-slate-950">Configuração</h2>
+                <h2 className="text-lg font-semibold text-slate-950">Configuração</h2>
 
                 {evolutionInfo ? (
                     <div className="mt-5 grid gap-3">
                         <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Base</p>
+                            <p className="text-xs font-semibold uppercase text-slate-400">Base</p>
                             <p className="mt-1 break-all text-sm font-bold text-slate-700">{evolutionInfo.baseUrl || 'Não definida'}</p>
                         </div>
                         <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Instância</p>
+                            <p className="text-xs font-semibold uppercase text-slate-400">Instância</p>
                             <p className="mt-1 break-all text-sm font-bold text-slate-700">{evolutionInfo.instance || 'Não definida'}</p>
                         </div>
                         <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Webhook</p>
+                            <p className="text-xs font-semibold uppercase text-slate-400">Webhook</p>
                             <p className="mt-1 break-all text-sm font-bold text-slate-700">{evolutionInfo.webhookUrl || 'Não definido'}</p>
                         </div>
                         <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Chave</p>
+                            <p className="text-xs font-semibold uppercase text-slate-400">Chave</p>
                             <p className={`mt-1 text-sm font-bold ${evolutionInfo.hasApiKey ? 'text-emerald-700' : 'text-red-700'}`}>
                                 {evolutionInfo.hasApiKey ? `Carregada (${evolutionInfo.apiKeySource || 'ambiente'})` : 'Não encontrada'}
                             </p>
                         </div>
                         <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Webhook ativo</p>
+                            <p className="text-xs font-semibold uppercase text-slate-400">Webhook ativo</p>
                             <p className="mt-1 text-sm font-bold text-slate-700">
                                 {webhookInfo?.lastConfiguredAt || webhookInfo?.configured_at || 'Aguardando confirmação'}
                             </p>
@@ -622,7 +653,7 @@ const WhatsappDashboard = () => {
                             </p>
                         </div>
                         <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Evento Meta</p>
+                            <p className="text-xs font-semibold uppercase text-slate-400">Evento Meta</p>
                             <p className="mt-1 text-sm font-bold text-slate-700">
                                 {(metaInfo?.qualifiedLeadLabels || []).join(', ') || 'Não carregadas'}
                             </p>
@@ -636,7 +667,7 @@ const WhatsappDashboard = () => {
                             </p>
                         </div>
                         <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
-                            <p className="text-xs font-extrabold uppercase text-slate-400">Banco da Evolution</p>
+                            <p className="text-xs font-semibold uppercase text-slate-400">Banco da Evolution</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                                 {[
                                     ['labels', 'Labels'],
@@ -649,7 +680,7 @@ const WhatsappDashboard = () => {
                                     return (
                                         <span
                                             key={key}
-                                            className={`rounded-md px-2 py-1 text-xs font-extrabold ${enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}
+                                            className={`rounded-md px-2 py-1 text-xs font-semibold ${enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}
                                         >
                                             {label}: {configured ? (enabled ? 'ON' : 'OFF') : 'N/D'}
                                         </span>
@@ -693,7 +724,7 @@ const WhatsappDashboard = () => {
 
     return (
         <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-50 lg:w-screen lg:flex-row">
-            <aside className="flex shrink-0 flex-col bg-[#111827] px-3 py-3 text-slate-100 lg:h-full lg:w-64 lg:px-5 lg:py-6">
+            <aside className="flex shrink-0 flex-col bg-[#091A2D] px-3 py-3 text-slate-100 lg:h-full lg:w-64 lg:px-5 lg:py-6">
                 <div className="hidden shrink-0 border-b border-slate-800 pb-5 text-center lg:block">
                     <img
                         src="/logo-white.png"
@@ -705,7 +736,7 @@ const WhatsappDashboard = () => {
                             if (fallback) fallback.style.display = 'block';
                         }}
                     />
-                    <h1 id="whatsapp-sidebar-logo-text" className="mt-3 hidden text-lg font-extrabold tracking-wide text-white">ATOS</h1>
+                    <h1 id="whatsapp-sidebar-logo-text" className="mt-3 hidden text-lg font-semibold tracking-wide text-white">ATOS</h1>
                     <span className="mt-2 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
                         MÓDULO WHATSAPP
                     </span>
@@ -724,7 +755,7 @@ const WhatsappDashboard = () => {
                                 key={item.id}
                                 type="button"
                                 onClick={() => setActiveView(item.id)}
-                                className={`inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-extrabold transition lg:w-full lg:gap-3 lg:px-4 lg:py-3 lg:text-sm ${active ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
+                                className={`inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition lg:w-full lg:gap-3 lg:px-4 lg:py-3 lg:text-sm ${active ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
                             >
                                 {item.icon}
                                 <span>{item.label}</span>
@@ -737,7 +768,7 @@ const WhatsappDashboard = () => {
                     <button
                         type="button"
                         onClick={() => navigate('/')}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 px-4 py-3 text-sm font-extrabold text-slate-300 transition hover:border-blue-500 hover:bg-slate-800 hover:text-white"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-300 transition hover:border-blue-500 hover:bg-slate-800 hover:text-white"
                     >
                         {Icons.Back}
                         <span>Voltar ao ERP Principal</span>
