@@ -1570,14 +1570,20 @@ async function handleAutoReply(incoming) {
                     const base64Img = fs.readFileSync(imgPath, { encoding: 'base64' });
                     const dataUrl = `data:${mimeType};base64,${base64Img}`;
 
-                    await evolution.post(`/message/sendMedia/${EVOLUTION_INSTANCE}`, {
-                        number: remoteJid,
-                        mediatype: 'image',
-                        mimetype: mimeType,
-                        media: dataUrl,
-                        fileName: matchedRule.image_original_name || 'imagem.jpg',
-                        caption: matchedRule.reply_text || undefined
-                    });
+                    try {
+                        await evolution.post(`/message/sendMedia/${EVOLUTION_INSTANCE}`, {
+                            number: remoteJid,
+                            mediatype: 'image',
+                            mimetype: mimeType,
+                            media: dataUrl,
+                            fileName: matchedRule.image_original_name || 'imagem.jpg',
+                            caption: matchedRule.reply_text || undefined
+                        });
+                    } catch (e) {
+                        const errData = e.response?.data || e.message;
+                        require('fs').appendFileSync('c:/oryon/error_log.txt', JSON.stringify({ error: errData, step: 'sendMedia' }) + '\\n');
+                        console.error('Falha ao enviar imagem:', errData);
+                    }
                 } else {
                     console.warn(`Imagem não encontrada para a regra: ${imgPath}`);
                 }
