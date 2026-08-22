@@ -283,8 +283,12 @@ const WhatsappDashboard = () => {
         setLoadingTypebot(true);
         try {
             const response = await axios.get(`${API_BASE_URL}/whatsapp/typebot/config`, authConfig);
-            if (response.data?.typebot && response.data.typebot.length > 0) {
+            if (Array.isArray(response.data) && response.data.length > 0) {
+                setTypebotConfig(response.data[0]);
+            } else if (response.data?.typebot && Array.isArray(response.data.typebot) && response.data.typebot.length > 0) {
                 setTypebotConfig(response.data.typebot[0]);
+            } else if (response.data?.typebot && !Array.isArray(response.data.typebot)) {
+                setTypebotConfig(response.data.typebot);
             } else {
                 setTypebotConfig(null);
             }
@@ -705,7 +709,7 @@ const WhatsappDashboard = () => {
                             </div>
                         )}
 
-                        <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4" key={typebotConfig ? typebotConfig.enabled : 'empty'}>
+                        <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4">
                             <label className="flex cursor-pointer items-center gap-3">
                                 <input
                                     type="checkbox"
@@ -720,7 +724,7 @@ const WhatsappDashboard = () => {
                             </p>
                         </div>
 
-                        <div className="grid gap-4 sm:grid-cols-2" key={typebotConfig?.typebot || 'empty'}>
+                        <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-1.5">
                                 <label className="text-sm font-semibold text-slate-950">URL do Typebot</label>
                                 <input
