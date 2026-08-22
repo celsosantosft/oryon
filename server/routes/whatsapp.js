@@ -190,7 +190,11 @@ const upload = multer({
     storage,
     limits: { fileSize: 12 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        const extension = path.extname(file.originalname || '').toLowerCase();
+        if (!file.originalname) {
+            return cb(null, true); // Ignorar uploads vazios
+        }
+
+        const extension = path.extname(file.originalname).toLowerCase();
         
         if (file.fieldname === 'audio') {
             if (extension !== '.ogg') {
@@ -1569,7 +1573,9 @@ async function handleAutoReply(incoming) {
                     await evolution.post(`/message/sendMedia/${EVOLUTION_INSTANCE}`, {
                         number: remoteJid,
                         mediatype: 'image',
+                        mimetype: mimeType,
                         media: dataUrl,
+                        fileName: matchedRule.image_original_name || 'imagem.jpg',
                         caption: matchedRule.reply_text || undefined
                     });
                 } else {
