@@ -191,7 +191,7 @@ const upload = multer({
     limits: { fileSize: 12 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         if (!file.originalname) {
-            return cb(null, true); // Ignorar uploads vazios
+            return cb(null, false); // Ignorar uploads vazios sem salvar no disco
         }
 
         const extension = path.extname(file.originalname).toLowerCase();
@@ -1546,32 +1546,41 @@ async function handleAutoReply(incoming) {
             const remoteJid = incoming.remoteJid || incoming.phone;
             const delay = matchedRule.delay_seconds || 3;
             
-            if (matchedRule.simulate_recording) {
+            const debugLog = (msg) => {
+                const fs = require('fs');
+                try { fs.appendFileSync('c:/oryon/debug_reply.txt', new Date().toISOString() + ' - ' + msg + '\n'); } catch(e){}
+            };
+            
+            debugLog(`Executando regra ${matchedRule.id} para ${remoteJid}`);
+
+            if (delay > 0) {
                 try {
                     const presenceType = matchedRule.audio_filename ? 'recording' : 'composing';
+                    debugLog(`Enviando presence ${presenceType}...`);
                     await evolution.post(`/chat/sendPresence/${EVOLUTION_INSTANCE}`, {
                         number: remoteJid,
                         presence: presenceType,
                         delay: delay * 1000
                     });
                 } catch (e) {
-                    console.warn(`Falha ao enviar presence:`, summarizeEvolutionError(e));
+                    debugLog(`Erro presence: ${e.message}`);
                 }
-                
                 await wait(delay * 1000);
             }
             
-            // Enviar Imagem (+ Texto opcional no caption)
             if (matchedRule.image_filename) {
                 const imgPath = path.join(AUDIO_UPLOAD_DIR, matchedRule.image_filename);
+                debugLog(`Tentando enviar imagem: ${imgPath}`);
                 if (fs.existsSync(imgPath)) {
                     const ext = path.extname(imgPath).toLowerCase();
                     const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
                     const base64Img = fs.readFileSync(imgPath, { encoding: 'base64' });
                     const dataUrl = `data:${mimeType};base64,${base64Img}`;
+                    
+                    debugLog(`Tamanho da imagem base64: ${base64Img.length}`);
 
                     try {
-                        await evolution.post(`/message/sendMedia/${EVOLUTION_INSTANCE}`, {
+                        const res = await evolution.post(`/message/sendMedia/${EVOLUTION_INSTANCE}`, {
                             number: remoteJid,
                             mediatype: 'image',
                             mimetype: mimeType,
@@ -1579,41 +1588,52 @@ async function handleAutoReply(incoming) {
                             fileName: matchedRule.image_original_name || 'imagem.jpg',
                             caption: matchedRule.reply_text || undefined
                         });
+                        debugLog(`Imagem enviada. Resposta: ${JSON.stringify(res.data)}`);
                     } catch (e) {
-                        const errData = e.response?.data || e.message;
-                        require('fs').appendFileSync('c:/oryon/error_log.txt', JSON.stringify({ error: errData, step: 'sendMedia' }) + '\\n');
-                        console.error('Falha ao enviar imagem:', errData);
+                        debugLog(`Falha ao enviar imagem: ${e.response?.data ? JSON.stringify(e.response.data) : e.message}`);
                     }
                 } else {
-                    console.warn(`Imagem não encontrada para a regra: ${imgPath}`);
+                    debugLog(`ERRO: Imagem não encontrada no disco!`);
                 }
             } else if (matchedRule.reply_text) {
-                // Enviar Apenas Texto (se não tem imagem)
-                await evolution.post(`/message/sendText/${EVOLUTION_INSTANCE}`, {
-                    number: remoteJid,
-                    text: matchedRule.reply_text,
-                    linkPreview: true
-                });
+                debugLog(`Enviando texto: ${matchedRule.reply_text.substring(0, 20)}...`);
+                try {
+                    await evolution.post(`/message/sendText/${EVOLUTION_INSTANCE}`, {
+                        number: remoteJid,
+                        text: matchedRule.reply_text,
+                        linkPreview: true
+                    });
+                    debugLog(`Texto enviado com sucesso.`);
+                } catch (e) {
+                    debugLog(`Falha ao enviar texto: ${e.message}`);
+                }
             }
             
-            // Enviar Áudio
             if (matchedRule.audio_filename) {
                 const audioPath = path.join(AUDIO_UPLOAD_DIR, matchedRule.audio_filename);
+                debugLog(`Tentando enviar audio: ${audioPath}`);
                 if (fs.existsSync(audioPath)) {
                     const base64Audio = fs.readFileSync(audioPath, { encoding: 'base64' });
                     const dataUrl = `data:audio/ogg;base64,${base64Audio}`;
+                    debugLog(`Tamanho do audio base64: ${base64Audio.length}`);
 
-                    await evolution.post(`/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`, {
-                        number: remoteJid,
-                        audio: dataUrl,
-                        ptt: true
-                    });
+                    try {
+                        const res = await evolution.post(`/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`, {
+                            number: remoteJid,
+                            audio: dataUrl,
+                            ptt: true
+                        });
+                        debugLog(`Audio enviado. Resposta: ${JSON.stringify(res.data)}`);
+                    } catch (e) {
+                        debugLog(`Falha ao enviar audio: ${e.response?.data ? JSON.stringify(e.response.data) : e.message}`);
+                    }
                 } else {
-                    console.warn(`Arquivo de áudio não encontrado para a regra: ${audioPath}`);
+                    debugLog(`ERRO: Audio não encontrado no disco!`);
                 }
             }
         }
     } catch (error) {
+        require('fs').appendFileSync('c:/oryon/debug_reply.txt', 'ERRO GLOBAL: ' + error.message + '\n');
         console.error('Erro no processamento da resposta automática:', summarizeEvolutionError(error));
     }
 }
