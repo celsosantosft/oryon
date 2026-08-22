@@ -200,6 +200,8 @@ const WhatsappDashboard = () => {
     const [autoReplies, setAutoReplies] = useState([]);
     const [loadingAutoReplies, setLoadingAutoReplies] = useState(false);
     const [editingRule, setEditingRule] = useState(null);
+    const [typebotConfig, setTypebotConfig] = useState(null);
+    const [loadingTypebot, setLoadingTypebot] = useState(false);
 
     const authConfig = useMemo(() => ({
         headers: { Authorization: `Bearer ${token}` }
@@ -217,6 +219,7 @@ const WhatsappDashboard = () => {
         { id: 'labels', label: 'Novo Envio', icon: Icons.Tag },
         { id: 'history', label: 'Histórico', icon: Icons.List },
         { id: 'auto_reply', label: 'Robô de Áudio', icon: Icons.Audio },
+        { id: 'typebot', label: 'Typebot (Fluxos)', icon: Icons.List },
         { id: 'settings', label: 'Conexão', icon: Icons.Settings }
     ]), []);
 
@@ -275,11 +278,29 @@ const WhatsappDashboard = () => {
         }
     }, [API_BASE_URL, authConfig, token]);
 
+    const fetchTypebotConfig = useCallback(async () => {
+        if (!token) return;
+        setLoadingTypebot(true);
+        try {
+            const response = await axios.get(`${API_BASE_URL}/whatsapp/typebot/config`, authConfig);
+            if (response.data?.typebot && response.data.typebot.length > 0) {
+                setTypebotConfig(response.data.typebot[0]);
+            } else {
+                setTypebotConfig(null);
+            }
+        } catch (requestError) {
+            console.error('Erro ao buscar config typebot:', requestError);
+        } finally {
+            setLoadingTypebot(false);
+        }
+    }, [API_BASE_URL, authConfig, token]);
+
     useEffect(() => {
         const initialLoad = window.setTimeout(() => {
             fetchStatus();
             fetchLeadHistory();
             fetchAutoReplies();
+            fetchTypebotConfig();
         }, 0);
 
         const statusInterval = window.setInterval(fetchStatus, 30000);
@@ -290,7 +311,7 @@ const WhatsappDashboard = () => {
             window.clearInterval(statusInterval);
             window.clearInterval(historyRefreshInterval);
         };
-    }, [fetchLeadHistory, fetchStatus, fetchAutoReplies]);
+    }, [fetchLeadHistory, fetchStatus, fetchAutoReplies, fetchTypebotConfig]);
 
     const handleConnect = async () => {
         setActionLoading('connect');
@@ -448,6 +469,35 @@ const WhatsappDashboard = () => {
         setEditingRule(null);
         setError('');
         setSuccess('');
+    };
+
+    const handleSaveTypebotConfig = async (event) => {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        const payload = {
+            enabled: formData.get('enabled') === 'true',
+            url: formData.get('url'),
+            typebot: formData.get('typebot')
+        };
+
+        if (payload.enabled && (!payload.url || !payload.typebot)) {
+            setError('Preencha a URL e o Nome do Fluxo (Typebot ID) para ativar.');
+            return;
+        }
+
+        setActionLoading('save_typebot');
+        setError('');
+        setSuccess('');
+
+        try {
+            const response = await axios.post(`${API_BASE_URL}/whatsapp/typebot/config`, payload, authConfig);
+            setTypebotConfig(response.data?.typebot || payload);
+            setSuccess('Configurações do Typebot salvas com sucesso!');
+        } catch (requestError) {
+            setError(requestError.response?.data?.error || 'Erro ao salvar configurações do Typebot.');
+        } finally {
+            setActionLoading('');
+        }
     };
 
     const handleDeleteAutoReply = async (id) => {
@@ -628,6 +678,85 @@ const WhatsappDashboard = () => {
                 </div>
             </section>
         </div>
+    );
+
+    const renderTypebotView = () => (
+        <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="shrink-0 flex flex-col gap-2 border-b border-slate-100 p-5">
+                <h2 className="text-xl font-semibold text-slate-950">Integração Typebot</h2>
+                <p className="mt-1 text-sm font-bold text-slate-500">
+                    Crie fluxos de conversa complexos arrastando blocos e conecte-os aqui.
+                </p>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+                {loadingTypebot ? (
+                    <div className="flex h-40 items-center justify-center text-sm font-bold text-slate-500">Carregando configurações...</div>
+                ) : (
+                    <form onSubmit={handleSaveTypebotConfig} className="grid max-w-2xl gap-5">
+                        {error && (
+                            <div className="rounded-lg bg-red-50 p-4 text-sm font-semibold text-red-700">
+                                {error}
+                            </div>
+                        )}
+                        {success && (
+                            <div className="rounded-lg bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
+                                {success}
+                            </div>
+                        )}
+
+                        <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                            <label className="flex items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    name="enabled"
+                                    defaultChecked={typebotConfig?.enabled === true}
+                                    className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-600"
+                                />
+                                <span className="font-semibold text-slate-900">Ativar Integração Typebot</span>
+                            </label>
+                            <p className="pl-8 text-sm font-medium text-slate-500">
+                                Quando ativado, a Evolution API irá rotear as conversas para o seu Typebot.
+                            </p>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-semibold text-slate-950">URL do Typebot</label>
+                                <input
+                                    type="url"
+                                    name="url"
+                                    defaultValue={typebotConfig?.url || 'https://typebot.co'}
+                                    placeholder="https://typebot.co"
+                                    className="w-full rounded-lg border border-slate-300 px-3 py-2.5 font-medium transition focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-semibold text-slate-950">Nome do Fluxo (Typebot ID)</label>
+                                <input
+                                    type="text"
+                                    name="typebot"
+                                    defaultValue={typebotConfig?.typebot || ''}
+                                    placeholder="meu-fluxo-123"
+                                    className="w-full rounded-lg border border-slate-300 px-3 py-2.5 font-medium transition focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="pt-4">
+                            <button
+                                type="submit"
+                                disabled={actionLoading === 'save_typebot'}
+                                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60 sm:w-auto"
+                            >
+                                {actionLoading === 'save_typebot' ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white" /> : Icons.Check}
+                                Salvar Configuração Typebot
+                            </button>
+                        </div>
+                    </form>
+                )}
+            </div>
+        </section>
     );
 
     const renderHistoryView = () => (
@@ -983,6 +1112,14 @@ const WhatsappDashboard = () => {
             return (
                 <div className="h-full overflow-y-auto">
                     {renderAutoReplyView()}
+                </div>
+            );
+        }
+
+        if (activeView === 'typebot') {
+            return (
+                <div className="h-full overflow-y-auto">
+                    {renderTypebotView()}
                 </div>
             );
         }

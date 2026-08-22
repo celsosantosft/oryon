@@ -4491,5 +4491,42 @@ router.delete('/whatsapp/auto-replies/:id', authenticateToken, authorizeRole(['a
         res.status(500).json({ error: 'Erro ao excluir regra.' });
     }
 });
+// --- ROTAS DO TYPEBOT ---
+router.get('/whatsapp/typebot/config', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+    try {
+        const evolution = createEvolutionClient();
+        const response = await evolution.get(`/typebot/find/${EVOLUTION_INSTANCE}`);
+        res.json(response.data);
+    } catch (error) {
+        console.error('Erro ao buscar typebot config:', error.message);
+        // Evolution API pode retornar 404 se não houver typebot configurado ainda
+        res.status(200).json({ typebot: [] }); 
+    }
+});
+
+router.post('/whatsapp/typebot/config', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+    try {
+        const evolution = createEvolutionClient();
+        const payload = {
+            enabled: req.body.enabled,
+            url: req.body.url,
+            typebot: req.body.typebot,
+            expire: 0,
+            keywordFinish: "#SAIR",
+            delayMessage: 1000,
+            unknownMessage: "Mensagem não reconhecida",
+            listeningFromMe: false,
+            stopBotFromMe: false,
+            keepOpen: false,
+            debounceTime: 10,
+            ignoreJids: []
+        };
+        const response = await evolution.post(`/typebot/create/${EVOLUTION_INSTANCE}`, payload);
+        res.json(response.data);
+    } catch (error) {
+        console.error('Erro ao salvar typebot config:', error.response?.data || error.message);
+        res.status(500).json({ error: 'Erro ao salvar configurações do Typebot.' });
+    }
+});
 
 module.exports = router;
