@@ -1194,22 +1194,6 @@ const WhatsappDashboard = () => {
             </aside>
 
             <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50 lg:h-screen">
-                {error || success ? (
-                    <div className="shrink-0 space-y-3 px-5 pt-5">
-                        {error ? (
-                            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                                {error}
-                            </div>
-                        ) : null}
-
-                        {success ? (
-                            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-                                {success}
-                            </div>
-                        ) : null}
-                    </div>
-                ) : null}
-
                 <div className="min-h-0 flex-1 overflow-hidden p-3 lg:p-5">
                     {renderMainContent()}
                 </div>
