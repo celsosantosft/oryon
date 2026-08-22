@@ -4518,7 +4518,7 @@ router.post('/whatsapp/typebot/config', authenticateToken, authorizeRole(['admin
             listeningFromMe: false,
             stopBotFromMe: false,
             keepOpen: false,
-            debounceTime: 10,
+            debounceTime: 0,
             ignoreJids: [],
             triggerType: "all",
             triggerOperator: "contains",
