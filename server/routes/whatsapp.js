@@ -150,9 +150,22 @@ db.run(`
         audio_original_name TEXT,
         simulate_recording BOOLEAN DEFAULT 1,
         delay_seconds INTEGER DEFAULT 3,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        reply_text TEXT,
+        image_filename TEXT,
+        image_original_name TEXT
     )
 `);
+
+try {
+    db.run(`ALTER TABLE whatsapp_auto_replies ADD COLUMN reply_text TEXT`);
+} catch (e) {}
+try {
+    db.run(`ALTER TABLE whatsapp_auto_replies ADD COLUMN image_filename TEXT`);
+} catch (e) {}
+try {
+    db.run(`ALTER TABLE whatsapp_auto_replies ADD COLUMN image_original_name TEXT`);
+} catch (e) {}
 
 const evolution = createEvolutionClient();
 
@@ -1509,39 +1522,73 @@ async function handleAutoReply(incoming) {
         const rules = await dbAll(`SELECT * FROM whatsapp_auto_replies`);
         if (!rules || rules.length === 0) return;
 
-        const matchedRule = rules.find(rule => textLower.includes(rule.keyword.toLowerCase()));
+        // Split keyword by comma and trim, check if any keyword matches
+        const matchedRule = rules.find(rule => {
+            const keywords = rule.keyword.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+            return keywords.some(k => textLower.includes(k));
+        });
         
         if (matchedRule) {
             const remoteJid = incoming.remoteJid || incoming.phone;
             
             if (matchedRule.simulate_recording) {
                 try {
+                    const presenceType = matchedRule.audio_filename ? 'recording' : 'composing';
                     await evolution.post(`/chat/sendPresence/${EVOLUTION_INSTANCE}`, {
                         number: remoteJid,
-                        presence: 'recording',
+                        presence: presenceType,
                         delay: 0
                     });
                 } catch (e) {
-                    console.warn('Falha ao enviar presence recording:', summarizeEvolutionError(e));
+                    console.warn(`Falha ao enviar presence:`, summarizeEvolutionError(e));
                 }
                 
                 const delay = matchedRule.delay_seconds || 3;
                 await wait(delay * 1000);
             }
             
-            const filePath = path.join(AUDIO_UPLOAD_DIR, matchedRule.audio_filename);
-            
-            if (fs.existsSync(filePath)) {
-                const base64Audio = fs.readFileSync(filePath, { encoding: 'base64' });
-                const dataUrl = `data:audio/ogg;base64,${base64Audio}`;
+            // Enviar Imagem (+ Texto opcional no caption)
+            if (matchedRule.image_filename) {
+                const imgPath = path.join(AUDIO_UPLOAD_DIR, matchedRule.image_filename);
+                if (fs.existsSync(imgPath)) {
+                    const ext = path.extname(imgPath).toLowerCase();
+                    const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
+                    const base64Img = fs.readFileSync(imgPath, { encoding: 'base64' });
+                    const dataUrl = `data:${mimeType};base64,${base64Img}`;
 
-                await evolution.post(`/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`, {
+                    await evolution.post(`/message/sendMedia/${EVOLUTION_INSTANCE}`, {
+                        number: remoteJid,
+                        mediatype: 'image',
+                        media: dataUrl,
+                        caption: matchedRule.reply_text || undefined
+                    });
+                } else {
+                    console.warn(`Imagem não encontrada para a regra: ${imgPath}`);
+                }
+            } else if (matchedRule.reply_text) {
+                // Enviar Apenas Texto (se não tem imagem)
+                await evolution.post(`/message/sendText/${EVOLUTION_INSTANCE}`, {
                     number: remoteJid,
-                    audio: dataUrl,
-                    ptt: true
+                    text: matchedRule.reply_text,
+                    linkPreview: true
                 });
-            } else {
-                console.warn(`Arquivo de áudio não encontrado para a regra ${matchedRule.keyword}: ${filePath}`);
+            }
+            
+            // Enviar Áudio
+            if (matchedRule.audio_filename) {
+                const audioPath = path.join(AUDIO_UPLOAD_DIR, matchedRule.audio_filename);
+                if (fs.existsSync(audioPath)) {
+                    const base64Audio = fs.readFileSync(audioPath, { encoding: 'base64' });
+                    const dataUrl = `data:audio/ogg;base64,${base64Audio}`;
+
+                    await evolution.post(`/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`, {
+                        number: remoteJid,
+                        audio: dataUrl,
+                        ptt: true
+                    });
+                } else {
+                    console.warn(`Arquivo de áudio não encontrado para a regra: ${audioPath}`);
+                }
             }
         }
     } catch (error) {
@@ -4266,10 +4313,11 @@ router.get('/whatsapp/auto-replies', authenticateToken, async (req, res) => {
 });
 
 router.post('/whatsapp/auto-replies', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
-    upload.single('audio')(req, res, async (uploadErr) => {
+    upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'image', maxCount: 1 }])(req, res, async (uploadErr) => {
         if (uploadErr) return res.status(400).json({ error: uploadErr.message });
 
         const keyword = String(req.body.keyword || '').trim().toLowerCase();
+        const replyText = String(req.body.reply_text || '').trim();
         const simulateRecording = req.body.simulate_recording !== 'false' && req.body.simulate_recording !== false ? 1 : 0;
         const delaySeconds = Number(req.body.delay_seconds || 3);
 
@@ -4277,19 +4325,24 @@ router.post('/whatsapp/auto-replies', authenticateToken, authorizeRole(['admin',
             return res.status(400).json({ error: 'A palavra-chave é obrigatória.' });
         }
 
-        if (!req.file) {
-            return res.status(400).json({ error: 'Você precisa enviar um arquivo de áudio (.ogg).' });
+        const audioFile = req.files && req.files['audio'] ? req.files['audio'][0] : null;
+        const imageFile = req.files && req.files['image'] ? req.files['image'][0] : null;
+
+        if (!audioFile && !imageFile && !replyText) {
+            return res.status(400).json({ error: 'Você precisa enviar um áudio, imagem ou texto de resposta.' });
         }
 
-        const audioFilename = req.file.filename;
-        const audioOriginalName = req.file.originalname;
+        const audioFilename = audioFile ? audioFile.filename : '';
+        const audioOriginalName = audioFile ? audioFile.originalname : '';
+        const imageFilename = imageFile ? imageFile.filename : '';
+        const imageOriginalName = imageFile ? imageFile.originalname : '';
 
         try {
             await dbRun(
                 `INSERT INTO whatsapp_auto_replies 
-                    (keyword, audio_filename, audio_original_name, simulate_recording, delay_seconds)
-                 VALUES (?, ?, ?, ?, ?)`,
-                [keyword, audioFilename, audioOriginalName, simulateRecording, delaySeconds]
+                    (keyword, audio_filename, audio_original_name, simulate_recording, delay_seconds, reply_text, image_filename, image_original_name)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [keyword, audioFilename, audioOriginalName, simulateRecording, delaySeconds, replyText, imageFilename, imageOriginalName]
             );
             
             const rows = await dbAll(`SELECT * FROM whatsapp_auto_replies ORDER BY id DESC`);
@@ -4309,11 +4362,22 @@ router.delete('/whatsapp/auto-replies/:id', authenticateToken, authorizeRole(['a
             return res.status(404).json({ error: 'Regra não encontrada.' });
         }
 
-        // Try to delete the file
-        try {
-            fs.unlinkSync(path.join(AUDIO_UPLOAD_DIR, row.audio_filename));
-        } catch (e) {
-            console.warn('Não foi possível apagar o arquivo de áudio:', e.message);
+        // Try to delete the audio file
+        if (row.audio_filename) {
+            try {
+                fs.unlinkSync(path.join(AUDIO_UPLOAD_DIR, row.audio_filename));
+            } catch (e) {
+                console.warn('Não foi possível apagar o arquivo de áudio:', e.message);
+            }
+        }
+        
+        // Try to delete the image file
+        if (row.image_filename) {
+            try {
+                fs.unlinkSync(path.join(AUDIO_UPLOAD_DIR, row.image_filename));
+            } catch (e) {
+                console.warn('Não foi possível apagar o arquivo de imagem:', e.message);
+            }
         }
 
         await dbRun(`DELETE FROM whatsapp_auto_replies WHERE id = ?`, [id]);

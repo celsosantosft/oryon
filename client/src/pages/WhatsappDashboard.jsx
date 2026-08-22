@@ -389,9 +389,11 @@ const WhatsappDashboard = () => {
         const formData = new FormData(event.target);
         const keyword = formData.get('keyword');
         const audio = formData.get('audio');
+        const image = formData.get('image');
+        const replyText = formData.get('reply_text');
         
-        if (!keyword || !audio?.size) {
-            setError('Preencha a palavra-chave e selecione um áudio.');
+        if (!keyword || (!audio?.size && !image?.size && !replyText)) {
+            setError('Preencha a palavra-chave e pelo menos um tipo de resposta (áudio, texto ou imagem).');
             return;
         }
 
@@ -415,7 +417,7 @@ const WhatsappDashboard = () => {
     };
 
     const handleDeleteAutoReply = async (id) => {
-        if (!window.confirm('Tem certeza que deseja excluir esta regra? O áudio também será apagado do servidor.')) return;
+        if (!window.confirm('Tem certeza que deseja excluir esta regra? O áudio e/ou imagem também serão apagados do servidor.')) return;
         
         setActionLoading(`delete_auto_reply_${id}`);
         setError('');
@@ -436,53 +438,79 @@ const WhatsappDashboard = () => {
         <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
             <section className="shrink-0 rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-100 p-5">
-                    <h2 className="text-xl font-semibold text-slate-950">Robô de Áudio (Voice Notes)</h2>
-                    <p className="mt-1 text-sm font-bold text-slate-500">Responda automaticamente com áudios gravados por você.</p>
+                    <h2 className="text-xl font-semibold text-slate-950">Robô Híbrido de Respostas</h2>
+                    <p className="mt-1 text-sm font-bold text-slate-500">
+                        Responda automaticamente com áudios, textos ou imagens simulando que você está no celular.
+                    </p>
                 </div>
                 
-                <form onSubmit={handleSaveAutoReply} className="p-5 grid gap-4 lg:grid-cols-[1fr_1fr_120px_160px] items-end">
+                <form onSubmit={handleSaveAutoReply} className="p-5 flex flex-col gap-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <label className="block">
+                            <span className="text-xs font-semibold uppercase text-slate-400">Palavras-Chave (separadas por vírgula)</span>
+                            <input
+                                required
+                                name="keyword"
+                                type="text"
+                                placeholder="Ex: preço, valor, qt custa"
+                                className="mt-2 block w-full rounded-lg border border-slate-200 px-3 h-12 text-sm font-semibold text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition"
+                            />
+                        </label>
+
+                        <label className="block">
+                            <span className="text-xs font-semibold uppercase text-slate-400">Delay (segundos simulando gravação/digitação)</span>
+                            <input
+                                name="delay_seconds"
+                                type="number"
+                                defaultValue="3"
+                                min="0"
+                                max="60"
+                                className="mt-2 block w-full rounded-lg border border-slate-200 px-3 h-12 text-sm font-semibold text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition"
+                            />
+                        </label>
+                    </div>
+
                     <label className="block">
-                        <span className="text-xs font-semibold uppercase text-slate-400">Palavra-Chave</span>
-                        <input
-                            required
-                            name="keyword"
-                            type="text"
-                            placeholder="Ex: preço, valor"
-                            className="mt-2 block w-full rounded-lg border border-slate-200 px-3 h-12 text-sm font-semibold text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition"
-                        />
-                    </label>
-                    
-                    <label className="block">
-                        <span className="text-xs font-semibold uppercase text-slate-400">Arquivo de Áudio (.ogg)</span>
-                        <input
-                            required
-                            name="audio"
-                            type="file"
-                            accept=".ogg,audio/ogg"
-                            className="mt-2 block w-full rounded-lg border border-slate-200 px-3 h-12 text-sm font-semibold text-slate-500 file:mr-4 file:h-full file:border-0 file:bg-slate-50 file:px-4 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-slate-100 focus:outline-none"
+                        <span className="text-xs font-semibold uppercase text-slate-400">Mensagem de Texto (opcional)</span>
+                        <textarea
+                            name="reply_text"
+                            placeholder="Sua mensagem de texto que será enviada. (Pode ser usada sozinha ou como legenda para a imagem)"
+                            className="mt-2 block w-full rounded-lg border border-slate-200 p-3 h-24 text-sm font-semibold text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition resize-y"
                         />
                     </label>
 
-                    <label className="block">
-                        <span className="text-xs font-semibold uppercase text-slate-400">Delay (seg)</span>
-                        <input
-                            name="delay_seconds"
-                            type="number"
-                            defaultValue="3"
-                            min="0"
-                            max="60"
-                            className="mt-2 block w-full rounded-lg border border-slate-200 px-3 h-12 text-sm font-semibold text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition"
-                        />
-                    </label>
-                    
-                    <button
-                        type="submit"
-                        disabled={actionLoading === 'save_auto_reply'}
-                        className="h-12 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        {actionLoading === 'save_auto_reply' ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : Icons.Check}
-                        Salvar Regra
-                    </button>
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <label className="block">
+                            <span className="text-xs font-semibold uppercase text-slate-400">Arquivo de Áudio (.ogg - opcional)</span>
+                            <input
+                                name="audio"
+                                type="file"
+                                accept=".ogg,audio/ogg"
+                                className="mt-2 block w-full rounded-lg border border-slate-200 px-3 h-12 text-sm font-semibold text-slate-500 file:mr-4 file:h-full file:border-0 file:bg-slate-50 file:px-4 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-slate-100 focus:outline-none"
+                            />
+                        </label>
+
+                        <label className="block">
+                            <span className="text-xs font-semibold uppercase text-slate-400">Imagem (.jpg, .png - opcional)</span>
+                            <input
+                                name="image"
+                                type="file"
+                                accept="image/jpeg,image/png,image/jpg"
+                                className="mt-2 block w-full rounded-lg border border-slate-200 px-3 h-12 text-sm font-semibold text-slate-500 file:mr-4 file:h-full file:border-0 file:bg-slate-50 file:px-4 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-slate-100 focus:outline-none"
+                            />
+                        </label>
+                    </div>
+
+                    <div className="flex justify-end mt-2">
+                        <button
+                            type="submit"
+                            disabled={actionLoading === 'save_auto_reply'}
+                            className="h-12 w-full md:w-64 inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {actionLoading === 'save_auto_reply' ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : Icons.Check}
+                            Salvar Regra
+                        </button>
+                    </div>
                 </form>
             </section>
 
@@ -495,36 +523,44 @@ const WhatsappDashboard = () => {
                         <div className="flex h-32 items-center justify-center text-sm font-bold text-slate-500">Carregando...</div>
                     ) : autoReplies.length > 0 ? (
                         <div className="divide-y divide-slate-100">
-                            {autoReplies.map((reply) => (
-                                <div key={reply.id} className="grid sm:grid-cols-[200px_1fr_auto_auto] gap-4 p-5 items-center hover:bg-slate-50 transition">
-                                    <div>
-                                        <p className="text-xs font-semibold uppercase text-slate-400">Palavra-chave</p>
-                                        <p className="mt-1 text-base font-semibold text-slate-950">"{reply.keyword}"</p>
+                            {autoReplies.map((reply) => {
+                                const badges = [];
+                                if (reply.audio_filename) badges.push('Áudio');
+                                if (reply.image_filename) badges.push('Imagem');
+                                if (reply.reply_text) badges.push('Texto');
+                                
+                                return (
+                                    <div key={reply.id} className="grid sm:grid-cols-[1fr_auto_auto] gap-4 p-5 items-center hover:bg-slate-50 transition">
+                                        <div>
+                                            <p className="text-xs font-semibold uppercase text-slate-400">Palavras-chave</p>
+                                            <p className="mt-1 text-base font-semibold text-slate-950">"{reply.keyword}"</p>
+                                            <div className="mt-2 flex gap-2 flex-wrap">
+                                                {badges.map(b => (
+                                                    <span key={b} className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold uppercase">{b}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-semibold uppercase text-slate-400">Comportamento</p>
+                                            <p className="mt-1 text-sm font-bold text-slate-500">
+                                                Delay de {reply.delay_seconds}s
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDeleteAutoReply(reply.id)}
+                                            disabled={actionLoading === `delete_auto_reply_${reply.id}`}
+                                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                            title="Excluir"
+                                        >
+                                            {actionLoading === `delete_auto_reply_${reply.id}` ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-600" /> : Icons.Trash}
+                                        </button>
                                     </div>
-                                    <div>
-                                        <p className="text-xs font-semibold uppercase text-slate-400">Arquivo</p>
-                                        <p className="mt-1 text-sm font-semibold text-slate-600 truncate">{reply.audio_original_name || reply.audio_filename}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-semibold uppercase text-slate-400">Comportamento</p>
-                                        <p className="mt-1 text-sm font-bold text-slate-500">
-                                            {reply.simulate_recording ? `Gravando... por ${reply.delay_seconds}s` : `Envio direto`}
-                                        </p>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleDeleteAutoReply(reply.id)}
-                                        disabled={actionLoading === `delete_auto_reply_${reply.id}`}
-                                        className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                        title="Excluir"
-                                    >
-                                        {actionLoading === `delete_auto_reply_${reply.id}` ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-600" /> : Icons.Trash}
-                                    </button>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     ) : (
-                        <div className="p-10 text-center text-sm font-semibold text-slate-500">Nenhuma regra de áudio cadastrada.</div>
+                        <div className="p-10 text-center text-sm font-semibold text-slate-500">Nenhuma regra cadastrada.</div>
                     )}
                 </div>
             </section>
