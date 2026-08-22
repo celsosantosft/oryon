@@ -4521,11 +4521,22 @@ router.post('/whatsapp/typebot/config', authenticateToken, authorizeRole(['admin
             debounceTime: 10,
             ignoreJids: []
         };
-        const response = await evolution.post(`/typebot/create/${EVOLUTION_INSTANCE}`, payload);
+        let response;
+        try {
+            response = await evolution.post(`/typebot/create/${EVOLUTION_INSTANCE}`, payload);
+        } catch (firstError) {
+            if (firstError.response?.status === 404) {
+                // Tenta endpoint da v2 se a v1 não existir
+                response = await evolution.post(`/typebot/settings/${EVOLUTION_INSTANCE}`, payload);
+            } else {
+                throw firstError;
+            }
+        }
         res.json(response.data);
     } catch (error) {
-        console.error('Erro ao salvar typebot config:', error.response?.data || error.message);
-        res.status(500).json({ error: 'Erro ao salvar configurações do Typebot.' });
+        const evolutionError = error.response?.data?.response?.message || error.response?.data?.message || error.response?.data?.error;
+        console.error('Erro ao salvar typebot config:', evolutionError || error.message);
+        res.status(500).json({ error: evolutionError ? `Evolution API: ${evolutionError}` : 'Erro ao salvar configurações do Typebot. Verifique se a variável TYPEBOT_ENABLED=true está configurada no seu servidor da Evolution API.' });
     }
 });
 
