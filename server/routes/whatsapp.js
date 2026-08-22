@@ -172,14 +172,17 @@ const evolution = createEvolutionClient();
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, AUDIO_UPLOAD_DIR),
     filename: (req, file, cb) => {
-        const extension = path.extname(file.originalname || '').toLowerCase() || '.ogg';
+        const extension = path.extname(file.originalname || '').toLowerCase();
+        const fallbackExt = file.fieldname === 'image' ? '.jpg' : '.ogg';
+        const finalExt = extension || fallbackExt;
+        
         const baseName = path
-            .basename(file.originalname || 'audio', extension)
+            .basename(file.originalname || file.fieldname, finalExt)
             .replace(/[^a-zA-Z0-9-_]/g, '-')
             .replace(/-+/g, '-')
             .slice(0, 60);
 
-        cb(null, `${Date.now()}-${baseName || 'audio'}${extension}`);
+        cb(null, `${Date.now()}-${baseName || file.fieldname}${finalExt}`);
     }
 });
 
@@ -188,8 +191,15 @@ const upload = multer({
     limits: { fileSize: 12 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         const extension = path.extname(file.originalname || '').toLowerCase();
-        if (extension !== '.ogg') {
-            return cb(new Error('Envie apenas arquivos de áudio no formato .ogg.'));
+        
+        if (file.fieldname === 'audio') {
+            if (extension !== '.ogg') {
+                return cb(new Error('Envie apenas arquivos de áudio no formato .ogg.'));
+            }
+        } else if (file.fieldname === 'image') {
+            if (!['.jpg', '.jpeg', '.png'].includes(extension)) {
+                return cb(new Error('Envie apenas imagens no formato .jpg ou .png.'));
+            }
         }
 
         cb(null, true);
