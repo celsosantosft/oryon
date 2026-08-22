@@ -4524,6 +4524,24 @@ router.post('/whatsapp/typebot/config', authenticateToken, authorizeRole(['admin
             triggerOperator: "contains",
             triggerValue: ""
         };
+        // Buscar todos os typebots existentes e apagar
+        try {
+            const existing = await evolution.get(`/typebot/find/${EVOLUTION_INSTANCE}`);
+            if (existing.data && Array.isArray(existing.data)) {
+                for (const t of existing.data) {
+                    if (t.id) {
+                        try {
+                            await evolution.delete(`/typebot/delete/${EVOLUTION_INSTANCE}`, { data: { typebotId: t.id } });
+                        } catch (e) {
+                            console.log(`Erro ao deletar typebot antigo ${t.id}:`, e.message);
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.log('Erro ao buscar typebots antigos para limpar:', e.message);
+        }
+
         let response;
         try {
             response = await evolution.post(`/typebot/create/${EVOLUTION_INSTANCE}`, payload);
