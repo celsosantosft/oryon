@@ -475,7 +475,7 @@ const WhatsappDashboard = () => {
         event.preventDefault();
         const formData = new FormData(event.target);
         const payload = {
-            enabled: formData.get('enabled') === 'true',
+            enabled: formData.get('enabled') === 'on' || formData.get('enabled') === 'true',
             url: formData.get('url'),
             typebot: formData.get('typebot')
         };
