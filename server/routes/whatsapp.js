@@ -190,7 +190,8 @@ const upload = multer({
     storage,
     limits: { fileSize: 12 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        if (!file.originalname) {
+        const fakeNames = ['audio', 'image', 'blob', 'undefined', 'null', ''];
+        if (!file.originalname || fakeNames.includes(file.originalname.toLowerCase())) {
             return cb(null, false); // Ignorar uploads vazios sem salvar no disco
         }
 
