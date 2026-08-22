@@ -1576,7 +1576,6 @@ async function handleAutoReply(incoming) {
                     const ext = path.extname(imgPath).toLowerCase();
                     const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
                     const base64Img = fs.readFileSync(imgPath, { encoding: 'base64' });
-                    const dataUrl = `data:${mimeType};base64,${base64Img}`;
                     
                     debugLog(`Tamanho da imagem base64: ${base64Img.length}`);
 
@@ -1585,7 +1584,7 @@ async function handleAutoReply(incoming) {
                             number: remoteJid,
                             mediatype: 'image',
                             mimetype: mimeType,
-                            media: dataUrl,
+                            media: base64Img, // Envia base64 puro sem o prefixo dataUrl
                             fileName: matchedRule.image_original_name || 'imagem.jpg',
                             caption: matchedRule.reply_text || undefined
                         });
@@ -1615,13 +1614,12 @@ async function handleAutoReply(incoming) {
                 debugLog(`Tentando enviar audio: ${audioPath}`);
                 if (fs.existsSync(audioPath)) {
                     const base64Audio = fs.readFileSync(audioPath, { encoding: 'base64' });
-                    const dataUrl = `data:audio/ogg;base64,${base64Audio}`;
                     debugLog(`Tamanho do audio base64: ${base64Audio.length}`);
 
                     try {
                         const res = await evolution.post(`/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`, {
                             number: remoteJid,
-                            audio: dataUrl,
+                            audio: base64Audio, // Envia base64 puro sem prefixo dataUrl
                             ptt: true
                         });
                         debugLog(`Audio enviado. Resposta: ${JSON.stringify(res.data)}`);
