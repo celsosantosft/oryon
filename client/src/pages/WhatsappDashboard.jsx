@@ -68,6 +68,12 @@ const Icons = {
         <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
         </svg>
+    ),
+    Edit: (
+        <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.89 1.127l-3.196.853.853-3.196a4.5 4.5 0 0 1 1.127-1.89L16.862 4.487Z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 6.5l2.5 2.5" />
+        </svg>
     )
 };
 
@@ -193,6 +199,7 @@ const WhatsappDashboard = () => {
     const [loadingLeadHistory, setLoadingLeadHistory] = useState(false);
     const [autoReplies, setAutoReplies] = useState([]);
     const [loadingAutoReplies, setLoadingAutoReplies] = useState(false);
+    const [editingRule, setEditingRule] = useState(null);
 
     const authConfig = useMemo(() => ({
         headers: { Authorization: `Bearer ${token}` }
@@ -392,7 +399,11 @@ const WhatsappDashboard = () => {
         const image = formData.get('image');
         const replyText = formData.get('reply_text');
         
-        if (!keyword || (!audio?.size && !image?.size && !replyText)) {
+        // Em modo de edição, se já existia áudio/imagem e nenhum novo foi enviado, o backend manterá os antigos
+        const isEditing = !!editingRule;
+        const hasExistingMedia = isEditing && (editingRule.audio_filename || editingRule.image_filename);
+
+        if (!keyword || (!audio?.size && !image?.size && !replyText && !hasExistingMedia)) {
             setError('Preencha a palavra-chave e pelo menos um tipo de resposta (áudio, texto ou imagem).');
             return;
         }
@@ -402,18 +413,41 @@ const WhatsappDashboard = () => {
         setSuccess('');
 
         try {
-            const response = await axios.post(`${API_BASE_URL}/whatsapp/auto-replies`, formData, {
-                ...authConfig,
-                headers: { ...authConfig.headers, 'Content-Type': 'multipart/form-data' }
-            });
+            let response;
+            if (isEditing) {
+                response = await axios.put(`${API_BASE_URL}/whatsapp/auto-replies/${editingRule.id}`, formData, {
+                    ...authConfig,
+                    headers: { ...authConfig.headers, 'Content-Type': 'multipart/form-data' }
+                });
+                setEditingRule(null);
+            } else {
+                response = await axios.post(`${API_BASE_URL}/whatsapp/auto-replies`, formData, {
+                    ...authConfig,
+                    headers: { ...authConfig.headers, 'Content-Type': 'multipart/form-data' }
+                });
+            }
+            
             setAutoReplies(response.data.auto_replies || []);
-            setSuccess(response.data.message || 'Regra salva com sucesso.');
+            setSuccess(response.data.message || (isEditing ? 'Regra atualizada com sucesso.' : 'Regra salva com sucesso.'));
             event.target.reset();
         } catch (requestError) {
-            setError(requestError.response?.data?.error || 'Erro ao salvar a regra de áudio.');
+            setError(requestError.response?.data?.error || 'Erro ao salvar a regra.');
         } finally {
             setActionLoading('');
         }
+    };
+
+    const handleEditAutoReply = (rule) => {
+        setEditingRule(rule);
+        setError('');
+        setSuccess('');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancelEditAutoReply = () => {
+        setEditingRule(null);
+        setError('');
+        setSuccess('');
     };
 
     const handleDeleteAutoReply = async (id) => {
@@ -427,6 +461,9 @@ const WhatsappDashboard = () => {
             const response = await axios.delete(`${API_BASE_URL}/whatsapp/auto-replies/${id}`, authConfig);
             setAutoReplies(response.data.auto_replies || []);
             setSuccess(response.data.message || 'Regra excluída com sucesso.');
+            if (editingRule && editingRule.id === id) {
+                setEditingRule(null);
+            }
         } catch (requestError) {
             setError(requestError.response?.data?.error || 'Erro ao excluir a regra.');
         } finally {
@@ -444,7 +481,7 @@ const WhatsappDashboard = () => {
                     </p>
                 </div>
                 
-                <form onSubmit={handleSaveAutoReply} className="p-5 flex flex-col gap-4">
+                <form key={editingRule ? editingRule.id : 'new'} onSubmit={handleSaveAutoReply} className="p-5 flex flex-col gap-4">
                     <div className="grid gap-4 md:grid-cols-2">
                         <label className="block">
                             <span className="text-xs font-semibold uppercase text-slate-400">Palavras-Chave (separadas por vírgula)</span>
@@ -452,6 +489,7 @@ const WhatsappDashboard = () => {
                                 required
                                 name="keyword"
                                 type="text"
+                                defaultValue={editingRule?.keyword || ''}
                                 placeholder="Ex: preço, valor, qt custa"
                                 className="mt-2 block w-full rounded-lg border border-slate-200 px-3 h-12 text-sm font-semibold text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition"
                             />
@@ -462,7 +500,7 @@ const WhatsappDashboard = () => {
                             <input
                                 name="delay_seconds"
                                 type="number"
-                                defaultValue="3"
+                                defaultValue={editingRule?.delay_seconds ?? 3}
                                 min="0"
                                 max="60"
                                 className="mt-2 block w-full rounded-lg border border-slate-200 px-3 h-12 text-sm font-semibold text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition"
@@ -474,6 +512,7 @@ const WhatsappDashboard = () => {
                         <span className="text-xs font-semibold uppercase text-slate-400">Mensagem de Texto (opcional)</span>
                         <textarea
                             name="reply_text"
+                            defaultValue={editingRule?.reply_text || ''}
                             placeholder="Sua mensagem de texto que será enviada. (Pode ser usada sozinha ou como legenda para a imagem)"
                             className="mt-2 block w-full rounded-lg border border-slate-200 p-3 h-24 text-sm font-semibold text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition resize-y"
                         />
@@ -481,7 +520,9 @@ const WhatsappDashboard = () => {
 
                     <div className="grid gap-4 md:grid-cols-2">
                         <label className="block">
-                            <span className="text-xs font-semibold uppercase text-slate-400">Arquivo de Áudio (.ogg - opcional)</span>
+                            <span className="text-xs font-semibold uppercase text-slate-400">
+                                Arquivo de Áudio (.ogg - opcional){editingRule?.audio_filename && ' (Deixe vazio para manter)'}
+                            </span>
                             <input
                                 name="audio"
                                 type="file"
@@ -491,7 +532,9 @@ const WhatsappDashboard = () => {
                         </label>
 
                         <label className="block">
-                            <span className="text-xs font-semibold uppercase text-slate-400">Imagem (.jpg, .png - opcional)</span>
+                            <span className="text-xs font-semibold uppercase text-slate-400">
+                                Imagem (.jpg, .png - opcional){editingRule?.image_filename && ' (Deixe vazio para manter)'}
+                            </span>
                             <input
                                 name="image"
                                 type="file"
@@ -501,14 +544,24 @@ const WhatsappDashboard = () => {
                         </label>
                     </div>
 
-                    <div className="flex justify-end mt-2">
+                    <div className="flex justify-end gap-3 mt-2">
+                        {editingRule && (
+                            <button
+                                type="button"
+                                onClick={handleCancelEditAutoReply}
+                                disabled={actionLoading === 'save_auto_reply'}
+                                className="h-12 w-full md:w-32 inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                Cancelar
+                            </button>
+                        )}
                         <button
                             type="submit"
                             disabled={actionLoading === 'save_auto_reply'}
                             className="h-12 w-full md:w-64 inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {actionLoading === 'save_auto_reply' ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : Icons.Check}
-                            Salvar Regra
+                            {editingRule ? 'Atualizar Regra' : 'Salvar Regra'}
                         </button>
                     </div>
                 </form>
@@ -546,15 +599,25 @@ const WhatsappDashboard = () => {
                                                 Delay de {reply.delay_seconds}s
                                             </p>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleDeleteAutoReply(reply.id)}
-                                            disabled={actionLoading === `delete_auto_reply_${reply.id}`}
-                                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                            title="Excluir"
-                                        >
-                                            {actionLoading === `delete_auto_reply_${reply.id}` ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-600" /> : Icons.Trash}
-                                        </button>
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleEditAutoReply(reply)}
+                                                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100"
+                                                title="Editar"
+                                            >
+                                                {Icons.Edit}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDeleteAutoReply(reply.id)}
+                                                disabled={actionLoading === `delete_auto_reply_${reply.id}`}
+                                                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                                title="Excluir"
+                                            >
+                                                {actionLoading === `delete_auto_reply_${reply.id}` ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-600" /> : Icons.Trash}
+                                            </button>
+                                        </div>
                                     </div>
                                 );
                             })}

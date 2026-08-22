@@ -1530,6 +1530,7 @@ async function handleAutoReply(incoming) {
         
         if (matchedRule) {
             const remoteJid = incoming.remoteJid || incoming.phone;
+            const delay = matchedRule.delay_seconds || 3;
             
             if (matchedRule.simulate_recording) {
                 try {
@@ -1537,13 +1538,12 @@ async function handleAutoReply(incoming) {
                     await evolution.post(`/chat/sendPresence/${EVOLUTION_INSTANCE}`, {
                         number: remoteJid,
                         presence: presenceType,
-                        delay: 0
+                        delay: delay * 1000
                     });
                 } catch (e) {
                     console.warn(`Falha ao enviar presence:`, summarizeEvolutionError(e));
                 }
                 
-                const delay = matchedRule.delay_seconds || 3;
                 await wait(delay * 1000);
             }
             
@@ -4349,6 +4349,68 @@ router.post('/whatsapp/auto-replies', authenticateToken, authorizeRole(['admin',
             res.json({ message: 'Regra cadastrada com sucesso.', auto_replies: rows });
         } catch (error) {
             res.status(500).json({ error: 'Erro ao salvar a regra no banco de dados.' });
+        }
+    });
+});
+
+router.put('/whatsapp/auto-replies/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+    upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'image', maxCount: 1 }])(req, res, async (uploadErr) => {
+        if (uploadErr) return res.status(400).json({ error: uploadErr.message });
+
+        const id = Number(req.params.id);
+        const keyword = String(req.body.keyword || '').trim().toLowerCase();
+        const replyText = String(req.body.reply_text || '').trim();
+        const simulateRecording = req.body.simulate_recording !== 'false' && req.body.simulate_recording !== false ? 1 : 0;
+        const delaySeconds = Number(req.body.delay_seconds || 3);
+
+        if (!keyword) {
+            return res.status(400).json({ error: 'A palavra-chave é obrigatória.' });
+        }
+
+        try {
+            const existingRow = await dbGet(`SELECT * FROM whatsapp_auto_replies WHERE id = ?`, [id]);
+            if (!existingRow) {
+                return res.status(404).json({ error: 'Regra não encontrada.' });
+            }
+
+            const audioFile = req.files && req.files['audio'] ? req.files['audio'][0] : null;
+            const imageFile = req.files && req.files['image'] ? req.files['image'][0] : null;
+
+            let audioFilename = existingRow.audio_filename;
+            let audioOriginalName = existingRow.audio_original_name;
+            if (audioFile) {
+                if (existingRow.audio_filename) {
+                    try { fs.unlinkSync(path.join(AUDIO_UPLOAD_DIR, existingRow.audio_filename)); } catch (e) {}
+                }
+                audioFilename = audioFile.filename;
+                audioOriginalName = audioFile.originalname;
+            }
+
+            let imageFilename = existingRow.image_filename;
+            let imageOriginalName = existingRow.image_original_name;
+            if (imageFile) {
+                if (existingRow.image_filename) {
+                    try { fs.unlinkSync(path.join(AUDIO_UPLOAD_DIR, existingRow.image_filename)); } catch (e) {}
+                }
+                imageFilename = imageFile.filename;
+                imageOriginalName = imageFile.originalname;
+            }
+
+            if (!audioFilename && !imageFilename && !replyText) {
+                return res.status(400).json({ error: 'Você precisa enviar um áudio, imagem ou texto de resposta.' });
+            }
+
+            await dbRun(
+                `UPDATE whatsapp_auto_replies 
+                 SET keyword = ?, audio_filename = ?, audio_original_name = ?, simulate_recording = ?, delay_seconds = ?, reply_text = ?, image_filename = ?, image_original_name = ?
+                 WHERE id = ?`,
+                [keyword, audioFilename, audioOriginalName, simulateRecording, delaySeconds, replyText, imageFilename, imageOriginalName, id]
+            );
+            
+            const rows = await dbAll(`SELECT * FROM whatsapp_auto_replies ORDER BY id DESC`);
+            res.json({ message: 'Regra atualizada com sucesso.', auto_replies: rows });
+        } catch (error) {
+            res.status(500).json({ error: 'Erro ao atualizar a regra no banco de dados.' });
         }
     });
 });
