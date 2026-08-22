@@ -705,8 +705,8 @@ const WhatsappDashboard = () => {
                             </div>
                         )}
 
-                        <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                            <label className="flex items-center gap-3">
+                        <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4" key={typebotConfig ? typebotConfig.enabled : 'empty'}>
+                            <label className="flex cursor-pointer items-center gap-3">
                                 <input
                                     type="checkbox"
                                     name="enabled"
@@ -720,14 +720,14 @@ const WhatsappDashboard = () => {
                             </p>
                         </div>
 
-                        <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="grid gap-4 sm:grid-cols-2" key={typebotConfig?.typebot || 'empty'}>
                             <div className="space-y-1.5">
                                 <label className="text-sm font-semibold text-slate-950">URL do Typebot</label>
                                 <input
                                     type="url"
                                     name="url"
-                                    defaultValue={typebotConfig?.url || 'https://typebot.co'}
-                                    placeholder="https://typebot.co"
+                                    defaultValue={typebotConfig?.url || 'https://viewer.typebot.io'}
+                                    placeholder="https://viewer.typebot.io"
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2.5 font-medium transition focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
                                 />
                             </div>

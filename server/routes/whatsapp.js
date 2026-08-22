@@ -4529,12 +4529,10 @@ router.post('/whatsapp/typebot/config', authenticateToken, authorizeRole(['admin
             const existing = await evolution.get(`/typebot/find/${EVOLUTION_INSTANCE}`);
             if (existing.data && Array.isArray(existing.data)) {
                 for (const t of existing.data) {
-                    if (t.id) {
-                        try {
-                            await evolution.delete(`/typebot/delete/${EVOLUTION_INSTANCE}`, { data: { typebotId: t.id } });
-                        } catch (e) {
-                            console.log(`Erro ao deletar typebot antigo ${t.id}:`, e.message);
-                        }
+                    if (t.typebot) {
+                        try { await evolution.delete(`/typebot/delete/${EVOLUTION_INSTANCE}?typebotName=${t.typebot}`); } catch(e) {}
+                        try { await evolution.delete(`/typebot/delete/${EVOLUTION_INSTANCE}?typebotId=${t.id}`); } catch(e) {}
+                        try { await evolution.delete(`/typebot/delete/${t.typebot}/${EVOLUTION_INSTANCE}`); } catch(e) {}
                     }
                 }
             }
