@@ -63,6 +63,11 @@ const Icons = {
         <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
         </svg>
+    ),
+    Audio: (
+        <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+        </svg>
     )
 };
 
@@ -186,6 +191,8 @@ const WhatsappDashboard = () => {
     const [leadHistory, setLeadHistory] = useState([]);
     const [leadHistorySummary, setLeadHistorySummary] = useState({ total: 0, sent: 0, failed: 0 });
     const [loadingLeadHistory, setLoadingLeadHistory] = useState(false);
+    const [autoReplies, setAutoReplies] = useState([]);
+    const [loadingAutoReplies, setLoadingAutoReplies] = useState(false);
 
     const authConfig = useMemo(() => ({
         headers: { Authorization: `Bearer ${token}` }
@@ -202,6 +209,7 @@ const WhatsappDashboard = () => {
     const navigationItems = useMemo(() => ([
         { id: 'labels', label: 'Novo Envio', icon: Icons.Tag },
         { id: 'history', label: 'Histórico', icon: Icons.List },
+        { id: 'auto_reply', label: 'Robô de Áudio', icon: Icons.Audio },
         { id: 'settings', label: 'Conexão', icon: Icons.Settings }
     ]), []);
 
@@ -247,10 +255,24 @@ const WhatsappDashboard = () => {
         }
     }, [API_BASE_URL, authConfig, token]);
 
+    const fetchAutoReplies = useCallback(async () => {
+        if (!token) return;
+        setLoadingAutoReplies(true);
+        try {
+            const response = await axios.get(`${API_BASE_URL}/whatsapp/auto-replies`, authConfig);
+            setAutoReplies(response.data?.auto_replies || []);
+        } catch (requestError) {
+            console.error('Erro ao buscar auto-replies:', requestError);
+        } finally {
+            setLoadingAutoReplies(false);
+        }
+    }, [API_BASE_URL, authConfig, token]);
+
     useEffect(() => {
         const initialLoad = window.setTimeout(() => {
             fetchStatus();
             fetchLeadHistory();
+            fetchAutoReplies();
         }, 0);
 
         const statusInterval = window.setInterval(fetchStatus, 30000);
@@ -261,7 +283,7 @@ const WhatsappDashboard = () => {
             window.clearInterval(statusInterval);
             window.clearInterval(historyRefreshInterval);
         };
-    }, [fetchLeadHistory, fetchStatus]);
+    }, [fetchLeadHistory, fetchStatus, fetchAutoReplies]);
 
     const handleConnect = async () => {
         setActionLoading('connect');
@@ -361,6 +383,153 @@ const WhatsappDashboard = () => {
             setActionLoading('');
         }
     };
+
+    const handleSaveAutoReply = async (event) => {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        const keyword = formData.get('keyword');
+        const audio = formData.get('audio');
+        
+        if (!keyword || !audio?.size) {
+            setError('Preencha a palavra-chave e selecione um áudio.');
+            return;
+        }
+
+        setActionLoading('save_auto_reply');
+        setError('');
+        setSuccess('');
+
+        try {
+            const response = await axios.post(`${API_BASE_URL}/whatsapp/auto-replies`, formData, {
+                ...authConfig,
+                headers: { ...authConfig.headers, 'Content-Type': 'multipart/form-data' }
+            });
+            setAutoReplies(response.data.auto_replies || []);
+            setSuccess(response.data.message || 'Regra salva com sucesso.');
+            event.target.reset();
+        } catch (requestError) {
+            setError(requestError.response?.data?.error || 'Erro ao salvar a regra de áudio.');
+        } finally {
+            setActionLoading('');
+        }
+    };
+
+    const handleDeleteAutoReply = async (id) => {
+        if (!window.confirm('Tem certeza que deseja excluir esta regra? O áudio também será apagado do servidor.')) return;
+        
+        setActionLoading(`delete_auto_reply_${id}`);
+        setError('');
+        setSuccess('');
+
+        try {
+            const response = await axios.delete(`${API_BASE_URL}/whatsapp/auto-replies/${id}`, authConfig);
+            setAutoReplies(response.data.auto_replies || []);
+            setSuccess(response.data.message || 'Regra excluída com sucesso.');
+        } catch (requestError) {
+            setError(requestError.response?.data?.error || 'Erro ao excluir a regra.');
+        } finally {
+            setActionLoading('');
+        }
+    };
+
+    const renderAutoReplyView = () => (
+        <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
+            <section className="shrink-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 p-5">
+                    <h2 className="text-xl font-semibold text-slate-950">Robô de Áudio (Voice Notes)</h2>
+                    <p className="mt-1 text-sm font-bold text-slate-500">Responda automaticamente com áudios gravados por você.</p>
+                </div>
+                
+                <form onSubmit={handleSaveAutoReply} className="p-5 grid gap-4 lg:grid-cols-[1fr_1fr_120px_160px] items-end">
+                    <label className="block">
+                        <span className="text-xs font-semibold uppercase text-slate-400">Palavra-Chave</span>
+                        <input
+                            required
+                            name="keyword"
+                            type="text"
+                            placeholder="Ex: preço, valor"
+                            className="mt-2 block w-full rounded-lg border border-slate-200 px-3 h-12 text-sm font-semibold text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition"
+                        />
+                    </label>
+                    
+                    <label className="block">
+                        <span className="text-xs font-semibold uppercase text-slate-400">Arquivo de Áudio (.ogg)</span>
+                        <input
+                            required
+                            name="audio"
+                            type="file"
+                            accept=".ogg,audio/ogg"
+                            className="mt-2 block w-full rounded-lg border border-slate-200 px-3 h-12 text-sm font-semibold text-slate-500 file:mr-4 file:h-full file:border-0 file:bg-slate-50 file:px-4 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-slate-100 focus:outline-none"
+                        />
+                    </label>
+
+                    <label className="block">
+                        <span className="text-xs font-semibold uppercase text-slate-400">Delay (seg)</span>
+                        <input
+                            name="delay_seconds"
+                            type="number"
+                            defaultValue="3"
+                            min="0"
+                            max="60"
+                            className="mt-2 block w-full rounded-lg border border-slate-200 px-3 h-12 text-sm font-semibold text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition"
+                        />
+                    </label>
+                    
+                    <button
+                        type="submit"
+                        disabled={actionLoading === 'save_auto_reply'}
+                        className="h-12 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {actionLoading === 'save_auto_reply' ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : Icons.Check}
+                        Salvar Regra
+                    </button>
+                </form>
+            </section>
+
+            <section className="flex flex-col flex-1 min-h-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="shrink-0 border-b border-slate-100 p-5">
+                    <h2 className="text-lg font-semibold text-slate-950">Regras Ativas</h2>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                    {loadingAutoReplies ? (
+                        <div className="flex h-32 items-center justify-center text-sm font-bold text-slate-500">Carregando...</div>
+                    ) : autoReplies.length > 0 ? (
+                        <div className="divide-y divide-slate-100">
+                            {autoReplies.map((reply) => (
+                                <div key={reply.id} className="grid sm:grid-cols-[200px_1fr_auto_auto] gap-4 p-5 items-center hover:bg-slate-50 transition">
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase text-slate-400">Palavra-chave</p>
+                                        <p className="mt-1 text-base font-semibold text-slate-950">"{reply.keyword}"</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase text-slate-400">Arquivo</p>
+                                        <p className="mt-1 text-sm font-semibold text-slate-600 truncate">{reply.audio_original_name || reply.audio_filename}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase text-slate-400">Comportamento</p>
+                                        <p className="mt-1 text-sm font-bold text-slate-500">
+                                            {reply.simulate_recording ? `Gravando... por ${reply.delay_seconds}s` : `Envio direto`}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleDeleteAutoReply(reply.id)}
+                                        disabled={actionLoading === `delete_auto_reply_${reply.id}`}
+                                        className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                        title="Excluir"
+                                    >
+                                        {actionLoading === `delete_auto_reply_${reply.id}` ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-600" /> : Icons.Trash}
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="p-10 text-center text-sm font-semibold text-slate-500">Nenhuma regra de áudio cadastrada.</div>
+                    )}
+                </div>
+            </section>
+        </div>
+    );
 
     const renderHistoryView = () => (
         <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -707,6 +876,14 @@ const WhatsappDashboard = () => {
             return (
                 <div className="h-full overflow-y-auto">
                     {renderSettingsView()}
+                </div>
+            );
+        }
+
+        if (activeView === 'auto_reply') {
+            return (
+                <div className="h-full overflow-y-auto">
+                    {renderAutoReplyView()}
                 </div>
             );
         }

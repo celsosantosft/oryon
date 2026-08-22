@@ -142,6 +142,18 @@ db.run(`
     )
 `);
 
+db.run(`
+    CREATE TABLE IF NOT EXISTS whatsapp_auto_replies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        keyword TEXT NOT NULL,
+        audio_filename TEXT NOT NULL,
+        audio_original_name TEXT,
+        simulate_recording BOOLEAN DEFAULT 1,
+        delay_seconds INTEGER DEFAULT 3,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+`);
+
 const evolution = createEvolutionClient();
 
 const storage = multer.diskStorage({
@@ -1474,6 +1486,11 @@ async function processMessageContactWebhook(payload, eventName) {
         seenMessages.add(messageKey);
 
         results.push(await persistMessageContactActivity(incoming));
+
+        // Disparar resposta automática em áudio, se houver
+        if (!incoming.fromMe) {
+            await handleAutoReply(incoming);
+        }
     }
 
     return {
@@ -1482,6 +1499,54 @@ async function processMessageContactWebhook(payload, eventName) {
         mode: 'contact_activity_only',
         results
     };
+}
+
+async function handleAutoReply(incoming) {
+    if (!incoming.text) return;
+    const textLower = incoming.text.toLowerCase();
+    
+    try {
+        const rules = await dbAll(`SELECT * FROM whatsapp_auto_replies`);
+        if (!rules || rules.length === 0) return;
+
+        const matchedRule = rules.find(rule => textLower.includes(rule.keyword.toLowerCase()));
+        
+        if (matchedRule) {
+            const remoteJid = incoming.remoteJid || incoming.phone;
+            
+            if (matchedRule.simulate_recording) {
+                try {
+                    await evolution.post(`/chat/sendPresence/${EVOLUTION_INSTANCE}`, {
+                        number: remoteJid,
+                        presence: 'recording',
+                        delay: 0
+                    });
+                } catch (e) {
+                    console.warn('Falha ao enviar presence recording:', summarizeEvolutionError(e));
+                }
+                
+                const delay = matchedRule.delay_seconds || 3;
+                await wait(delay * 1000);
+            }
+            
+            const filePath = path.join(AUDIO_UPLOAD_DIR, matchedRule.audio_filename);
+            
+            if (fs.existsSync(filePath)) {
+                const base64Audio = fs.readFileSync(filePath, { encoding: 'base64' });
+                const dataUrl = `data:audio/ogg;base64,${base64Audio}`;
+
+                await evolution.post(`/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`, {
+                    number: remoteJid,
+                    audio: dataUrl,
+                    ptt: true
+                });
+            } else {
+                console.warn(`Arquivo de áudio não encontrado para a regra ${matchedRule.keyword}: ${filePath}`);
+            }
+        }
+    } catch (error) {
+        console.error('Erro no processamento da resposta automática:', summarizeEvolutionError(error));
+    }
 }
 
 async function persistMessageContactActivity(incoming) {
@@ -4189,6 +4254,75 @@ router.post('/whatsapp/save-automation', authenticateToken, authorizeRole(['admi
             }
         );
     });
+});
+
+router.get('/whatsapp/auto-replies', authenticateToken, async (req, res) => {
+    try {
+        const rows = await dbAll(`SELECT * FROM whatsapp_auto_replies ORDER BY id DESC`);
+        res.json({ auto_replies: rows });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao buscar respostas automáticas.' });
+    }
+});
+
+router.post('/whatsapp/auto-replies', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+    upload.single('audio')(req, res, async (uploadErr) => {
+        if (uploadErr) return res.status(400).json({ error: uploadErr.message });
+
+        const keyword = String(req.body.keyword || '').trim().toLowerCase();
+        const simulateRecording = req.body.simulate_recording !== 'false' && req.body.simulate_recording !== false ? 1 : 0;
+        const delaySeconds = Number(req.body.delay_seconds || 3);
+
+        if (!keyword) {
+            return res.status(400).json({ error: 'A palavra-chave é obrigatória.' });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({ error: 'Você precisa enviar um arquivo de áudio (.ogg).' });
+        }
+
+        const audioFilename = req.file.filename;
+        const audioOriginalName = req.file.originalname;
+
+        try {
+            await dbRun(
+                `INSERT INTO whatsapp_auto_replies 
+                    (keyword, audio_filename, audio_original_name, simulate_recording, delay_seconds)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [keyword, audioFilename, audioOriginalName, simulateRecording, delaySeconds]
+            );
+            
+            const rows = await dbAll(`SELECT * FROM whatsapp_auto_replies ORDER BY id DESC`);
+            res.json({ message: 'Regra cadastrada com sucesso.', auto_replies: rows });
+        } catch (error) {
+            res.status(500).json({ error: 'Erro ao salvar a regra no banco de dados.' });
+        }
+    });
+});
+
+router.delete('/whatsapp/auto-replies/:id', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const row = await dbGet(`SELECT * FROM whatsapp_auto_replies WHERE id = ?`, [id]);
+        
+        if (!row) {
+            return res.status(404).json({ error: 'Regra não encontrada.' });
+        }
+
+        // Try to delete the file
+        try {
+            fs.unlinkSync(path.join(AUDIO_UPLOAD_DIR, row.audio_filename));
+        } catch (e) {
+            console.warn('Não foi possível apagar o arquivo de áudio:', e.message);
+        }
+
+        await dbRun(`DELETE FROM whatsapp_auto_replies WHERE id = ?`, [id]);
+        
+        const rows = await dbAll(`SELECT * FROM whatsapp_auto_replies ORDER BY id DESC`);
+        res.json({ message: 'Regra excluída com sucesso.', auto_replies: rows });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao excluir regra.' });
+    }
 });
 
 module.exports = router;
