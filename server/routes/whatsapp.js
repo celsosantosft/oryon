@@ -158,13 +158,13 @@ db.run(`
 `);
 
 try {
-    db.run(`ALTER TABLE whatsapp_auto_replies ADD COLUMN reply_text TEXT`);
+    db.run(`ALTER TABLE whatsapp_auto_replies ADD COLUMN reply_text TEXT`, () => {});
 } catch (e) {}
 try {
-    db.run(`ALTER TABLE whatsapp_auto_replies ADD COLUMN image_filename TEXT`);
+    db.run(`ALTER TABLE whatsapp_auto_replies ADD COLUMN image_filename TEXT`, () => {});
 } catch (e) {}
 try {
-    db.run(`ALTER TABLE whatsapp_auto_replies ADD COLUMN image_original_name TEXT`);
+    db.run(`ALTER TABLE whatsapp_auto_replies ADD COLUMN image_original_name TEXT`, () => {});
 } catch (e) {}
 
 const evolution = createEvolutionClient();
