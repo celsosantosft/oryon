@@ -1,10 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const { appConfig } = require('./appConfig');
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8080';
 const DEFAULT_INSTANCE = 'AtosVendas';
-const DEFAULT_PUBLIC_APP_URL = 'https://atosfardamentos.com.br';
+const DEFAULT_PUBLIC_APP_URL = appConfig.publicAppUrl;
 
 const SERVER_ROOT = path.resolve(__dirname, '..');
 const PROJECT_ROOT = path.resolve(SERVER_ROOT, '..');

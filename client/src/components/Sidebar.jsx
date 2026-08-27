@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
+import { appConfig, normalizeTrackingCode } from '../config/appConfig';
 
 const fireSidebarAlert = async (...args) => {
     const Swal = (await import('sweetalert2')).default;
@@ -73,7 +74,7 @@ const Sidebar = ({ setIsMenuOpen, isMobile }) => {
             title: 'Portal do Cliente',
             text: 'Digite apenas o número do pedido ou o código completo:',
             input: 'text',
-            inputPlaceholder: 'Ex: 6620 ou #ATOS-6620',
+            inputPlaceholder: `Ex: 6620 ou #${appConfig.orderPrefix}-6620`,
             icon: 'info',
             showCancelButton: true,
             confirmButtonColor: '#2563EB',
@@ -83,14 +84,7 @@ const Sidebar = ({ setIsMenuOpen, isMobile }) => {
         });
 
         if (code) {
-            let safeCode = code.trim().toUpperCase();
-            
-            // ⭐ INTELIGÊNCIA SUPREMA: Autocompleta se o admin digitar só os números
-            if (/^\d+$/.test(safeCode)) {
-                safeCode = `#ATOS-${safeCode}`;
-            } else if (!safeCode.startsWith('#')) {
-                safeCode = '#' + safeCode;
-            }
+            const safeCode = normalizeTrackingCode(code);
             
             try {
                 const response = await axios.get(
@@ -177,8 +171,8 @@ const Sidebar = ({ setIsMenuOpen, isMobile }) => {
             )}
 
             <div style={styles.logoContainer}>
-                <img src="/logo-white.png" alt="Logo" width="581" height="581" decoding="async" style={styles.logoImage} onError={(e) => { e.target.style.display = 'none'; document.getElementById('sidebar-logo-text').style.display = 'block'; }} />
-                <h2 id="sidebar-logo-text" style={styles.logoText}>Atos System</h2>
+                <img src={appConfig.logoWhiteUrl} alt={appConfig.brandName} width="581" height="581" decoding="async" style={styles.logoImage} onError={(e) => { e.target.style.display = 'none'; document.getElementById('sidebar-logo-text').style.display = 'block'; }} />
+                <h2 id="sidebar-logo-text" style={styles.logoText}>{appConfig.systemName}</h2>
                 <span style={styles.systemSubtitle}>
                     {isFinanceModule ? 'MÓDULO FINANCEIRO' : (userRole === 'admin' ? 'ADMINISTRADOR' : (userRole === 'corte' ? 'CORTE' : 'GESTÃO'))}
                 </span>

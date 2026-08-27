@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { appConfig } from '../config/appConfig';
 
 const Icons = {
     Tag: (
@@ -952,7 +953,7 @@ const WhatsappDashboard = () => {
                 <div className="mb-5 flex items-center justify-between gap-4">
                     <div>
                         <h2 className="text-lg font-semibold text-slate-950">Conexão WhatsApp</h2>
-                        <p className="mt-1 text-sm font-bold text-slate-500">Instância AtosVendas</p>
+                        <p className="mt-1 text-sm font-bold text-slate-500">Instância {evolutionInfo?.instance || 'configurada'}</p>
                     </div>
                     <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${currentStatus.badge}`}>
                         <span className={`h-2 w-2 rounded-full ${currentStatus.dot}`} />
@@ -1144,8 +1145,8 @@ const WhatsappDashboard = () => {
             <aside className="flex shrink-0 flex-col bg-[#091A2D] px-3 py-3 text-slate-100 lg:h-full lg:w-64 lg:px-5 lg:py-6">
                 <div className="hidden shrink-0 border-b border-slate-800 pb-5 text-center lg:block">
                     <img
-                        src="/logo-white.png"
-                        alt="ATOS"
+                        src={appConfig.logoWhiteUrl}
+                        alt={appConfig.brandName}
                         className="mx-auto h-12 max-w-[180px] object-contain"
                         onError={(event) => {
                             event.currentTarget.style.display = 'none';
@@ -1153,7 +1154,7 @@ const WhatsappDashboard = () => {
                             if (fallback) fallback.style.display = 'block';
                         }}
                     />
-                    <h1 id="whatsapp-sidebar-logo-text" className="mt-3 hidden text-lg font-semibold tracking-wide text-white">ATOS</h1>
+                    <h1 id="whatsapp-sidebar-logo-text" className="mt-3 hidden text-lg font-semibold tracking-wide text-white">{appConfig.orderPrefix}</h1>
                     <span className="mt-2 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
                         MÓDULO WHATSAPP
                     </span>

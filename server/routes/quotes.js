@@ -5,6 +5,7 @@ const multer = require('multer');
 const fs = require('fs');
 const crypto = require('crypto');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
+const { appConfig, buildTrackingCode } = require('../config/appConfig');
 db.run("ALTER TABLE quotes ADD COLUMN portal_token TEXT", () => {});
 db.run("ALTER TABLE orders ADD COLUMN portal_token TEXT", () => {});
 
@@ -36,11 +37,11 @@ function safeStringifyJSON(value) {
 }
 
 function generateQuoteTrackingCode() {
-    return `#ORC-${Math.floor(1000 + Math.random() * 9000)}`;
+    return buildTrackingCode(appConfig.quotePrefix);
 }
 
 function generateTrackingCode() {
-    return `#ATOS-${Math.floor(1000 + Math.random() * 9000)}`;
+    return buildTrackingCode(appConfig.orderPrefix);
 }
 
 function generatePortalToken() {

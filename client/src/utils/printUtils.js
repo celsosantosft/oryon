@@ -1,4 +1,5 @@
 // src/utils/printUtils.js
+import { appConfig } from '../config/appConfig';
 
 // --- FUNÇÃO AUXILIAR DE DATA ---
 const formatDateSafe = (dateString) => {
@@ -22,6 +23,13 @@ const formatMoney = (value) => new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL'
 }).format(Number(value || 0));
+
+const resolvePublicAssetUrl = (assetUrl) => {
+    const safeUrl = String(assetUrl || '').trim();
+    if (/^https?:\/\//i.test(safeUrl)) return safeUrl;
+    const path = safeUrl.startsWith('/') ? safeUrl : `/${safeUrl}`;
+    return window.location.origin + path;
+};
 
 const buildLineDescription = (productType, fabricType) => {
     const product = String(productType || '').trim();
@@ -307,7 +315,7 @@ const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printD
         </script>
         <div class="footer">
             <span>Impresso em ${printDate}</span>
-            <span>Atos Systems • Enterprise Edition</span>
+            <span>${escapeHtml(appConfig.systemName)} • Enterprise Edition</span>
         </div>
     </body>
     </html>`;
@@ -385,13 +393,13 @@ const buildPremiumQuotePrintLayout = ({ order, normalizedLines, printDate }) => 
                 <div class="quote-header">
                     <div>
                         <div class="brand-logo-wrap">
-                            <img src="/atos_logo.png" alt="Atos Fardamentos" class="brand-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
-                            <div class="brand-logo-fallback">ATOS FARDAMENTOS</div>
+                            <img src="${resolvePublicAssetUrl(appConfig.printLogoUrl)}" alt="${escapeHtml(appConfig.brandName)}" class="brand-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+                            <div class="brand-logo-fallback">${escapeHtml(appConfig.brandName.toUpperCase())}</div>
                         </div>
                         <div class="brand-meta">
                             <div><strong>CNPJ:</strong> 59.907.753/0001-28</div>
                             <div><strong>Endereço:</strong> R. Atlântica - Ouro Preto, Olinda - PE, 53370-530</div>
-                        <div><strong>E-mail:</strong> atosfardamentos@gmail.com</div>
+                        <div><strong>E-mail:</strong> ${escapeHtml(appConfig.supportEmail)}</div>
                         <div><strong>WhatsApp:</strong> (81) 98807-4760</div>
                     </div>
                 </div>
@@ -483,7 +491,7 @@ const buildPremiumQuotePrintLayout = ({ order, normalizedLines, printDate }) => 
 
             <div class="quote-print-footer">
                 <span>Documento emitido em ${printDate}</span>
-                <span>Atos Fardamentos</span>
+                <span>${escapeHtml(appConfig.brandName)}</span>
             </div>
         </div>
         <script>
@@ -500,7 +508,7 @@ const buildPremiumQuotePrintLayout = ({ order, normalizedLines, printDate }) => 
 // --- FUNÇÃO PRINCIPAL DE IMPRESSÃO ---
 export const printOrder = (order, apiBaseUrl) => {
     const printWindow = window.open('', '_blank', 'width=1000,height=800');
-    const logoUrl = window.location.origin + '/logo.png';
+    const logoUrl = resolvePublicAssetUrl(appConfig.logoUrl);
     const isQuote = String(order?.tracking_code || '').startsWith('#ORC-');
     const printDate = new Date().toLocaleString('pt-BR');
     const normalizedLines = buildNormalizedLines(order, apiBaseUrl);

@@ -1,12 +1,14 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+require('./config/env').loadEnv();
+const { appConfig } = require('./config/appConfig');
 
 // Inicializa o Banco de Dados
 require('./database');
 
 const app = express();
-const PORT = 3001;
+const PORT = appConfig.port;
 const corsOrigin = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean)
     : '*';

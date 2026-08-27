@@ -1,21 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { trackingService } from '../services/trackingService';
+import { appConfig, normalizeTrackingCode } from '../config/appConfig';
 
 const Icons = {
     Search: () => <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-};
-
-const normalizeCode = (value) => {
-    let safeCode = String(value || '').trim().toUpperCase();
-
-    if (/^\d+$/.test(safeCode)) {
-        safeCode = `#ATOS-${safeCode}`;
-    } else if (!safeCode.startsWith('#')) {
-        safeCode = '#' + safeCode;
-    }
-
-    return safeCode;
 };
 
 const parsePortalInput = (value) => {
@@ -28,7 +17,7 @@ const parsePortalInput = (value) => {
 
         if (codeFromPath) {
             return {
-                code: normalizeCode(decodeURIComponent(codeFromPath)),
+                code: normalizeTrackingCode(decodeURIComponent(codeFromPath)),
                 token: parsedUrl.searchParams.get('token') || ''
             };
         }
@@ -36,7 +25,7 @@ const parsePortalInput = (value) => {
         // Segue para o modo manual abaixo.
     }
 
-    return { code: normalizeCode(rawValue), token: '' };
+    return { code: normalizeTrackingCode(rawValue), token: '' };
 };
 
 const showSearchError = async () => {
@@ -158,10 +147,10 @@ const PortalHome = () => {
             <div className="login-card">
                 <div style={styles.logoWrapper}>
                     <img 
-                        src="/logo-240.png" 
-                        srcSet="/logo-120.png 120w, /logo-240.png 240w, /logo.png 580w"
+                        src={appConfig.logoMediumUrl}
+                        srcSet={`${appConfig.logoSmallUrl} 120w, ${appConfig.logoMediumUrl} 240w, ${appConfig.logoUrl} 580w`}
                         sizes="96px"
-                        alt="Atos System" 
+                        alt={appConfig.systemName}
                         width="240"
                         height="240"
                         decoding="async"
@@ -170,7 +159,7 @@ const PortalHome = () => {
                         onError={(e) => { 
                             e.target.onerror = null; 
                             e.target.style.display = 'none'; 
-                            e.target.parentNode.innerHTML = '<span style="color:#2563EB; font-weight:900; font-size:2rem; letter-spacing:1px;">ATOS</span>'; 
+                            e.target.parentNode.innerHTML = `<span style="color:#2563EB; font-weight:900; font-size:2rem; letter-spacing:1px;">${appConfig.orderPrefix}</span>`;
                             e.target.parentNode.style.backgroundColor = '#EFF6FF';
                             e.target.parentNode.style.borderRadius = '50%';
                         }}
@@ -186,7 +175,7 @@ const PortalHome = () => {
                         <input 
                             type="text" 
                             className="premium-input-login"
-                            placeholder="Ex: 7376 ou #ATOS-7376" 
+                            placeholder={`Ex: 7376 ou #${appConfig.orderPrefix}-7376`}
                             value={code}
                             onChange={(e) => setCode(e.target.value)}
                             disabled={isSearching}
@@ -200,7 +189,7 @@ const PortalHome = () => {
             </div>
 
             <div style={styles.footer}>
-                Tecnologia <strong style={{color: '#94A3B8'}}>Atos System</strong>
+                Tecnologia <strong style={{color: '#94A3B8'}}>{appConfig.systemName}</strong>
             </div>
         </div>
     );

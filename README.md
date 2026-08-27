@@ -39,6 +39,39 @@ npm start
 
 Configure as variaveis de ambiente usando `.env.example` como referencia.
 
+### Configuracao por instalacao/cliente
+
+O mesmo codigo pode rodar em mais de uma instalacao usando `.env` diferente em
+cada pasta do VPS. Para preservar o comportamento atual, os valores padrao ainda
+sao da Atos.
+
+Variaveis principais:
+
+- `PORT`: porta do backend Express. Exemplo: `3001` para a Atos e `3002` para outro cliente.
+- `PUBLIC_APP_URL`: dominio publico da instalacao.
+- `CORS_ORIGIN`: origem permitida no backend.
+- `VITE_API_BASE_URL`: URL da API usada no build do frontend.
+- `APP_BRAND_NAME` / `VITE_APP_BRAND_NAME`: nome exibido da empresa.
+- `APP_SYSTEM_NAME` / `VITE_APP_SYSTEM_NAME`: nome do sistema/marca tecnica.
+- `APP_ORDER_PREFIX` / `VITE_APP_ORDER_PREFIX`: prefixo dos pedidos, sem `#`. Exemplo: `ATOS`.
+- `APP_SUPPORT_EMAIL` / `VITE_APP_SUPPORT_EMAIL`: e-mail exibido em impressos.
+- `VITE_APP_LOGO_URL`, `VITE_APP_LOGO_SMALL_URL`, `VITE_APP_LOGO_MEDIUM_URL`, `VITE_APP_LOGO_WHITE_URL`, `VITE_APP_PRINT_LOGO_URL`: logos usadas pelo frontend.
+
+Exemplo de segunda instalacao:
+
+```env
+PORT=3002
+PUBLIC_APP_URL=https://cliente.com.br
+CORS_ORIGIN=https://cliente.com.br
+VITE_API_BASE_URL=https://cliente.com.br/api
+APP_BRAND_NAME=Cliente Exemplo
+APP_SYSTEM_NAME=Cliente Exemplo ERP
+APP_ORDER_PREFIX=CLI
+VITE_APP_BRAND_NAME=Cliente Exemplo
+VITE_APP_SYSTEM_NAME=Cliente Exemplo ERP
+VITE_APP_ORDER_PREFIX=CLI
+```
+
 ## Deploy automatico pelo GitHub
 
 O repositorio tem um workflow em `.github/workflows/deploy-production.yml`.

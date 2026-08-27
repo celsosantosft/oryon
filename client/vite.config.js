@@ -1,11 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Endereço IP do seu computador na rede local (confirmado no Passo 206)
-const NETWORK_HOST = 'https://atosfardamentos.com.br/api';
-
 export default defineConfig({
   plugins: [react()],
+  envDir: '..',
   server: {
     // Permite que qualquer interface de rede (IP) acesse o servidor de desenvolvimento
     host: true, 

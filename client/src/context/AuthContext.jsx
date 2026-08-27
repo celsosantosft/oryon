@@ -1,28 +1,17 @@
 import React, { createContext, useCallback, useState, useEffect, useContext } from 'react';
+import { resolveApiBaseUrl } from '../config/appConfig';
 
 const AuthContext = createContext();
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou. Faça login novamente.';
 const AUTH_NOTICE_KEY = 'auth_notice';
 const AUTH_API_BASE_URL_KEY = 'auth_api_base_url';
-const PRODUCTION_API_BASE_URL = 'https://atosfardamentos.com.br/api';
 
-const isProductionHost = (hostname) => (
-    hostname === 'atosfardamentos.com.br' || hostname === 'www.atosfardamentos.com.br'
+const isLocalDevHost = (hostname) => (
+    hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '0.0.0.0'
+    || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)
 );
-
-const resolveApiBaseUrl = () => {
-    const envUrl = import.meta.env.VITE_API_BASE_URL;
-    if (envUrl) return String(envUrl).replace(/\/+$/, '');
-
-    if (typeof window === 'undefined') return PRODUCTION_API_BASE_URL;
-
-    const { hostname } = window.location;
-    if (isProductionHost(hostname)) {
-        return PRODUCTION_API_BASE_URL;
-    }
-
-    return `http://${hostname || 'localhost'}:3001/api`;
-};
 
 const getTokenExpirationTime = (jwtToken) => {
     try {
@@ -96,7 +85,7 @@ export const AuthProvider = ({ children }) => {
                 const storedApiBaseUrl = sessionStorage.getItem(AUTH_API_BASE_URL_KEY);
 
                 if (storedToken && storedUser) {
-                    const isLocalHost = typeof window !== 'undefined' && !isProductionHost(window.location.hostname);
+                    const isLocalHost = typeof window !== 'undefined' && isLocalDevHost(window.location.hostname);
                     const sessionFromDifferentApi = storedApiBaseUrl && storedApiBaseUrl !== API_BASE_URL;
                     const legacyLocalSession = isLocalHost && !storedApiBaseUrl;
 

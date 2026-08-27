@@ -12,6 +12,7 @@ const {
     createEvolutionClient,
     buildEvolutionTextPayload
 } = require('../config/evolution');
+const { appConfig, buildTrackingCode, normalizeTrackingCode } = require('../config/appConfig');
 
 db.run("ALTER TABLE orders ADD COLUMN amount_paid REAL DEFAULT 0", (err) => { /* Ignora se já existir */ });
 db.run("ALTER TABLE orders ADD COLUMN client_id INTEGER", () => {});
@@ -50,8 +51,8 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 function safeParseJSON(jsonString) { try { if (!jsonString || jsonString === '[object Object]') return {}; return JSON.parse(jsonString); } catch (e) { return {}; } }
-function generateTrackingCode() { return `#ATOS-${Math.floor(1000 + Math.random() * 9000)}`; }
-function generateQuoteTrackingCode() { return `#ORC-${Math.floor(1000 + Math.random() * 9000)}`; }
+function generateTrackingCode() { return buildTrackingCode(appConfig.orderPrefix); }
+function generateQuoteTrackingCode() { return buildTrackingCode(appConfig.quotePrefix); }
 function generatePortalToken() { return crypto.randomBytes(24).toString('base64url'); }
 
 const ORDER_STATUS_VALUES = new Set([
@@ -95,10 +96,7 @@ function normalizePortalTrackingCode(value) {
         // Mantem o valor original se vier com encoding invalido.
     }
 
-    if (/^\d+$/.test(safeCode)) return `#ATOS-${safeCode}`;
-    if (!safeCode.startsWith('#')) return `#${safeCode}`;
-
-    return safeCode;
+    return normalizeTrackingCode(safeCode, appConfig.orderPrefix);
 }
 
 function getPortalToken(req) {
@@ -881,7 +879,7 @@ function buildOrderStatusMessage(order, newStatus) {
 
     return [
         `Olá, ${greetingName}!`,
-        `Seu pedido ${trackingCode} na Atos Fardamentos mudou de status para: ${newStatus}.`,
+        `Seu pedido ${trackingCode} na ${appConfig.brandName} mudou de status para: ${newStatus}.`,
         'Qualquer dúvida, pode responder por aqui.'
     ].join('\n');
 }

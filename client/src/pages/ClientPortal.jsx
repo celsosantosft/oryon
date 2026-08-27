@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { usePortalOrder } from '../hooks/usePortalOrder';
 import { useOrderItems } from '../hooks/useOrderItems';
 import { trackingService } from '../services/trackingService';
+import { appConfig } from '../config/appConfig';
 
 // Utilitários
 import { Icons } from '../components/Icons'; 
@@ -19,7 +20,7 @@ import { FinanceTab } from '../components/tabs/FinanceTab';
 import { BulkTab } from '../components/tabs/BulkTab';
 import { ListTab } from '../components/tabs/ListTab';
 
-const API_BASE_URL = 'https://atosfardamentos.com.br/api';
+const API_BASE_URL = appConfig.apiBaseUrl;
 
 const fireAlert = async (...args) => {
     const Swal = (await import('sweetalert2')).default;
@@ -332,10 +333,10 @@ const ClientPortal = () => {
             <div style={{ ...styles.header, padding: '24px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap' }}>
                 <div style={{ width: '56px', height: '56px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img 
-                        src="/logo-120.png" 
-                        srcSet="/logo-120.png 120w, /logo-240.png 240w, /logo.png 580w"
+                        src={appConfig.logoSmallUrl}
+                        srcSet={`${appConfig.logoSmallUrl} 120w, ${appConfig.logoMediumUrl} 240w, ${appConfig.logoUrl} 580w`}
                         sizes="56px"
-                        alt="ATOS" 
+                        alt={appConfig.brandName}
                         width="120"
                         height="120"
                         decoding="async"
@@ -343,7 +344,7 @@ const ClientPortal = () => {
                         onError={(e) => { 
                             e.target.onerror = null; 
                             e.target.style.display = 'none'; 
-                            e.target.parentNode.innerHTML = '<span style="color:white; font-weight:800; font-size:1.1rem; letter-spacing:1px;">ATOS</span>'; 
+                            e.target.parentNode.innerHTML = `<span style="color:white; font-weight:800; font-size:1.1rem; letter-spacing:1px;">${appConfig.orderPrefix}</span>`;
                         }}
                     />
                 </div>

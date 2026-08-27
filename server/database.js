@@ -1,6 +1,8 @@
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+require('./config/env').loadEnv();
+const { appConfig } = require('./config/appConfig');
 
 function generatePortalToken() {
     return crypto.randomBytes(24).toString('base64url');
@@ -656,7 +658,7 @@ function createTables() {
             const hash = await bcrypt.hash(adminPassword, 10);
             db.run(
                 `INSERT INTO users (name, email, password, role) VALUES (?,?,?,?)`,
-                ['Administrador atos', adminEmail, hash, 'admin']
+                [appConfig.adminName, adminEmail, hash, 'admin']
             );
         }
     });

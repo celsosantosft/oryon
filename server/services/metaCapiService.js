@@ -2,6 +2,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 const db = require('../database');
 const { metaCapiConfig, getMetaCapiDiagnostics } = require('../config/metaCapi');
+const { appConfig } = require('../config/appConfig');
 
 const META_CAPI_TIMEOUT_MS = 12000;
 
@@ -352,7 +353,7 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
                 event_id: `${eventId}:${Date.now()}`,
                 custom_data: {
                     event_source: 'crm',
-                    lead_event_source: 'Oryon CRM',
+                    lead_event_source: appConfig.metaLeadSource,
                     lead_stage: 'qualified',
                     source: 'whatsapp'
                 },

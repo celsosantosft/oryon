@@ -1,22 +1,11 @@
 import axios from 'axios';
+import { appConfig, normalizeTrackingCode } from '../config/appConfig';
 
-const API_BASE_URL = 'https://atosfardamentos.com.br/api';
+const API_BASE_URL = appConfig.apiBaseUrl;
 
 const portalParams = (token) => (
     token ? { params: { token } } : {}
 );
-
-const normalizeTrackingCode = (code) => {
-    let safeCode = String(code || '').trim().toUpperCase();
-
-    if (/^\d+$/.test(safeCode)) {
-        safeCode = `#ATOS-${safeCode}`;
-    } else if (!safeCode.startsWith('#')) {
-        safeCode = `#${safeCode}`;
-    }
-
-    return safeCode;
-};
 
 export const trackingService = {
     getPortalOrder: async (code, token) => {

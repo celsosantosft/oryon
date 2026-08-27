@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { appConfig } from '../config/appConfig';
 
 const AUTH_NOTICE_KEY = 'auth_notice';
 
@@ -20,6 +21,7 @@ const Login = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
+        document.title = appConfig.brandName;
         const storedNotice = sessionStorage.getItem(AUTH_NOTICE_KEY);
         if (storedNotice) {
             setNotice(storedNotice);
@@ -131,10 +133,10 @@ const Login = () => {
                 <div style={styles.logoHeader}>
                     <div style={styles.logoFrame}>
                         <img 
-                            src="/logo-240.png" 
-                            srcSet="/logo-120.png 120w, /logo-240.png 240w, /logo.png 580w"
+                            src={appConfig.logoMediumUrl}
+                            srcSet={`${appConfig.logoSmallUrl} 120w, ${appConfig.logoMediumUrl} 240w, ${appConfig.logoUrl} 580w`}
                             sizes="120px"
-                            alt="Logo" 
+                            alt={appConfig.brandName}
                             width="240"
                             height="240"
                             decoding="async"
@@ -143,7 +145,7 @@ const Login = () => {
                             onError={(e) => { e.target.style.display='none'; document.getElementById('fallback').style.display='block'; }}
                         />
                     </div>
-                    <h2 id="fallback" style={styles.titleFallback}>atos ERP</h2>
+                    <h2 id="fallback" style={styles.titleFallback}>{appConfig.systemName}</h2>
                 </div>
 
                 {notice && !error && <div style={styles.notice}>{notice}</div>}
@@ -190,7 +192,7 @@ const Login = () => {
                 </form>
                 
                 <div style={styles.footer}>
-                    &copy; 2026 Atos Systems
+                    &copy; 2026 {appConfig.systemName}
                 </div>
             </div>
         </div>

@@ -3,6 +3,11 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 import Swal from 'sweetalert2';
+import { appConfig } from '../config/appConfig';
+
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const ORDER_CODE_PATTERN = new RegExp(`(#${escapeRegExp(appConfig.orderPrefix)}-\\d+)`, 'i');
+const ORDER_CODE_WITH_CLIENT_PATTERN = new RegExp(`(#${escapeRegExp(appConfig.orderPrefix)}-\\d+)(?:\\s*(?:-|–)\\s*(.*))?`, 'i');
 
 const Icons = {
     Wallet: <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>,
@@ -282,8 +287,8 @@ const FinanceTransactions = () => {
             const avulsas = [];
 
             pendingReceitas.forEach(t => {
-                const match = t.description.match(/(#ATOS-\d+)/);
-                let orderId = match ? match[1] : null;
+                const match = t.description.match(ORDER_CODE_PATTERN);
+                let orderId = match ? match[1].toUpperCase() : null;
                 
                 let resolvedClientName = 'Cliente Avulso/Não Localizado';
 
@@ -292,7 +297,7 @@ const FinanceTransactions = () => {
                     if (linkedOrder && linkedOrder.client_name) {
                         resolvedClientName = linkedOrder.client_name;
                     } else {
-                        const regexFallback = t.description.match(/(#ATOS-\d+)(?:\s*(?:-|–)\s*(.*))?/);
+                        const regexFallback = t.description.match(ORDER_CODE_WITH_CLIENT_PATTERN);
                         if (regexFallback && regexFallback[2]) resolvedClientName = regexFallback[2].trim();
                     }
                 }
