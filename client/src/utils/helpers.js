@@ -1,3 +1,24 @@
+import imageCompression from 'browser-image-compression';
+
+export const compressImageSafe = async (file) => {
+    if (!file || !file.type.startsWith('image/')) return file;
+    try {
+        const options = {
+            maxSizeMB: 0.5,
+            maxWidthOrHeight: 1920,
+            useWebWorker: true,
+            fileType: 'image/webp'
+        };
+        const compressedFile = await imageCompression(file, options);
+        return new File([compressedFile], file.name.replace(/\.[^/.]+$/, "") + ".webp", {
+            type: 'image/webp',
+        });
+    } catch (error) {
+        console.warn('Erro ao comprimir imagem, enviando original:', error);
+        return file;
+    }
+};
+
 export const formatMoney = (val) => {
     return (parseFloat(val) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };

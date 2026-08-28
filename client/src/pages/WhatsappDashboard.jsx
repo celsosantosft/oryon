@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import Modal from '../components/Modal';
+import { compressImageSafe } from '../utils/helpers';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { appConfig } from '../config/appConfig';
@@ -420,9 +422,15 @@ const WhatsappDashboard = () => {
     const handleSaveAutoReply = async (event) => {
         event.preventDefault();
         const formData = new FormData(event.target);
+        let image = formData.get('image');
+        
+        if (image && image.size > 0) {
+            image = await compressImageSafe(image);
+            formData.set('image', image);
+        }
+
         const keyword = formData.get('keyword');
         const audio = formData.get('audio');
-        const image = formData.get('image');
         const replyText = formData.get('reply_text');
         
         // Em modo de edição, se já existia áudio/imagem e nenhum novo foi enviado, o backend manterá os antigos

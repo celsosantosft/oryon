@@ -5,6 +5,7 @@ import Swal from 'sweetalert2';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 import { printOrder as printQuote } from '../utils/printUtils';
+import { compressImageSafe } from '../utils/helpers';
 import {
     PRINTING_TYPE_PRESETS,
     buildProductionLabel,
@@ -691,11 +692,11 @@ const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, aux
             formData.append('cost_price', totalCost);
             formData.append('product_lines', JSON.stringify(serializedLines));
 
-            productLines.forEach((line) => {
+            for (const line of productLines) {
                 if (line.layout_file) {
-                    formData.append(`layout_file_${line.line_key}`, line.layout_file);
+                    formData.append(`layout_file_${line.line_key}`, await compressImageSafe(line.layout_file));
                 }
-            });
+            }
 
             if (isEditMode) {
                 await QuoteService.updateQuote(API_BASE_URL, token, quoteData.id, formData);
