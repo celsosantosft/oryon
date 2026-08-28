@@ -57,6 +57,7 @@ export const normalizeTrackingCode = (value, prefix = CONFIGURED_ORDER_PREFIX) =
 };
 
 export const appConfig = Object.freeze({
+    theme: readEnv('VITE_APP_THEME', 'default').trim().toLowerCase(),
     brandName: CONFIGURED_BRAND_NAME,
     systemName: CONFIGURED_SYSTEM_NAME,
     orderPrefix: CONFIGURED_ORDER_PREFIX,

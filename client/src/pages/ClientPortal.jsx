@@ -333,9 +333,9 @@ const ClientPortal = () => {
             <div style={{ ...styles.header, padding: '24px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap' }}>
                 <div style={{ width: '56px', height: '56px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img 
-                        src={appConfig.logoSmallUrl}
-                        srcSet={`${appConfig.logoSmallUrl} 120w, ${appConfig.logoMediumUrl} 240w, ${appConfig.logoUrl} 580w`}
-                        sizes="56px"
+                        src={appConfig.theme === 'monochrome' ? appConfig.logoWhiteUrl : appConfig.logoSmallUrl}
+                        srcSet={appConfig.theme === 'monochrome' ? undefined : `${appConfig.logoSmallUrl} 120w, ${appConfig.logoMediumUrl} 240w, ${appConfig.logoUrl} 580w`}
+                        sizes={appConfig.theme === 'monochrome' ? undefined : "56px"}
                         alt={appConfig.brandName}
                         width="120"
                         height="120"
@@ -378,10 +378,11 @@ const ClientPortal = () => {
                 <div style={{ ...styles.navPill, left: `calc(${navItems.findIndex(i => i.id === activeTab) * 20}% + 1%)`, width: '18%' }} />
                 {navItems.map((item) => {
                     const isActive = activeTab === item.id;
+                    const activeColor = appConfig.theme === 'monochrome' ? '#FFFFFF' : '#60A5FA';
                     return (
                         <div key={item.id} onClick={() => !item.disabled && setActiveTab(item.id)} style={{ ...styles.navItem, opacity: item.disabled ? 0.4 : 1, cursor: item.disabled ? 'default' : 'pointer' }}>
-                            <div style={{ color: isActive ? '#60A5FA' : '#9CA3AF', filter: isActive ? 'drop-shadow(0 0 6px rgba(96, 165, 250, 0.4))' : 'none', transition: 'all 0.4s' }}><item.icon /></div>
-                            <span style={{ fontSize: '0.65rem', fontWeight: isActive ? '700' : '500', color: isActive ? '#60A5FA' : '#9CA3AF', marginTop: '4px', transition: 'all 0.4s' }}>{item.label}</span>
+                            <div style={{ color: isActive ? activeColor : '#9CA3AF', filter: isActive ? `drop-shadow(0 0 6px ${appConfig.theme === 'monochrome' ? 'rgba(255, 255, 255, 0.4)' : 'rgba(96, 165, 250, 0.4)'})` : 'none', transition: 'all 0.4s' }}><item.icon /></div>
+                            <span style={{ fontSize: '0.65rem', fontWeight: isActive ? '700' : '500', color: isActive ? activeColor : '#9CA3AF', marginTop: '4px', transition: 'all 0.4s' }}>{item.label}</span>
                         </div>
                     );
                 })}
