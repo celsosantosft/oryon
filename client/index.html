@@ -6,7 +6,7 @@
     
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="__APP_DESCRIPTION__" />
-    <meta name="theme-color" content="#0f172a" />
+    <meta name="theme-color" content="__APP_THEME_DARK__" />
     <link rel="preload" as="image" href="__APP_LOGO_MEDIUM_URL__" imagesrcset="__APP_LOGO_SMALL_URL__ 120w, __APP_LOGO_MEDIUM_URL__ 240w, __APP_LOGO_URL__ 580w" imagesizes="120px" fetchpriority="high" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -18,12 +18,12 @@
       #root {
         min-height: 100%;
         margin: 0;
-        background: #091A2D;
+        background: __APP_THEME_DARK__;
       }
 
       #root:empty {
         min-height: 100vh;
-        background: linear-gradient(135deg, #091A2D 0%, #0D1F33 100%);
+        background: linear-gradient(135deg, __APP_THEME_DARK__ 0%, __APP_THEME_DARK_ALT__ 100%);
       }
     </style>
     

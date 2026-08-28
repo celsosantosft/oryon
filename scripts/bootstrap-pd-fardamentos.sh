@@ -113,6 +113,7 @@ VITE_APP_LOGO_SMALL_URL=/branding/logo.png
 VITE_APP_LOGO_MEDIUM_URL=/branding/logo.png
 VITE_APP_LOGO_WHITE_URL=/branding/logo-white.png
 VITE_APP_PRINT_LOGO_URL=/branding/logo.png
+VITE_APP_THEME=monochrome
 
 ADMIN_EMAIL=admin@$DOMAIN
 ADMIN_PASSWORD=$ADMIN_PASSWORD
@@ -141,6 +142,12 @@ fi
 
 # NODE_ENV is exported by the deploy script so Vite does not warn about it in .env.
 sed -i '/^NODE_ENV=production$/d' "$APP_DIR/.env"
+
+if grep -q '^VITE_APP_THEME=' "$APP_DIR/.env"; then
+    sed -i 's/^VITE_APP_THEME=.*/VITE_APP_THEME=monochrome/' "$APP_DIR/.env"
+else
+    printf '\nVITE_APP_THEME=monochrome\n' >> "$APP_DIR/.env"
+fi
 
 log "Building application and starting isolated backend"
 APP_DIR="$APP_DIR" \

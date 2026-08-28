@@ -122,6 +122,8 @@ somente para `root`.
 
 As logos da PD ficam versionadas em `deploy/branding/pd-fardamentos` e sao
 sincronizadas para `/var/lib/oryon/pd-fardamentos/branding` em cada deploy.
+O tema preto da PD e ativado por `VITE_APP_THEME=monochrome`; o deploy mantem
+essa variavel somente na instalacao secundaria.
 
 ## Arquivos que nao entram no Git
 

@@ -88,6 +88,7 @@ jobs:
               local healthcheck_url="$3"
               local branding_source="${4:-}"
               local branding_target="${5:-}"
+              local app_theme="${6:-}"
 
               cd "$app_dir"
               echo "Deploying commit $TARGET_COMMIT in $app_dir"
@@ -95,6 +96,14 @@ jobs:
               git fetch origin main
               git checkout main
               git reset --hard "$TARGET_COMMIT"
+
+              if [ -n "$app_theme" ]; then
+                  if grep -q '^VITE_APP_THEME=' .env; then
+                      sed -i "s/^VITE_APP_THEME=.*/VITE_APP_THEME=$app_theme/" .env
+                  else
+                      printf '\nVITE_APP_THEME=%s\n' "$app_theme" >> .env
+                  fi
+              fi
 
               APP_DIR="$app_dir" \
               PM2_APP_NAME="$pm2_name" \
@@ -117,7 +126,8 @@ jobs:
                   "pd-fardamentos-server" \
                   "https://pdfardamentos.com.br/login" \
                   "$SECONDARY_APP_DIR/deploy/branding/pd-fardamentos" \
-                  "/var/lib/oryon/pd-fardamentos/branding"
+                  "/var/lib/oryon/pd-fardamentos/branding" \
+                  "monochrome"
           else
               echo "Invalid secondary installation: $SECONDARY_APP_DIR" >&2
               exit 1
