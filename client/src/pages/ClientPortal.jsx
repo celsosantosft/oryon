@@ -269,9 +269,19 @@ const ClientPortal = () => {
         { id: 'bulk', label: 'Grade', icon: Icons.Box },
         { id: 'list', label: 'Nomes', icon: Icons.List, disabled: derivedData.isBulkOnly }
     ];
+    const isMonochrome = appConfig.isMonochrome;
+    const headerLogoUrl = isMonochrome ? appConfig.logoWhiteUrl : appConfig.logoSmallUrl;
+    const headerLogoSrcSet = isMonochrome
+        ? undefined
+        : `${appConfig.logoSmallUrl} 120w, ${appConfig.logoMediumUrl} 240w, ${appConfig.logoUrl} 580w`;
+    const activeNavColor = isMonochrome ? '#FFFFFF' : '#60A5FA';
+    const inactiveNavColor = isMonochrome ? '#A3A3A3' : '#9CA3AF';
+    const activeNavFilter = isMonochrome
+        ? 'drop-shadow(0 0 7px rgba(255, 255, 255, 0.28))'
+        : 'drop-shadow(0 0 6px rgba(96, 165, 250, 0.4))';
 
     return (
-        <div style={styles.container}>
+        <div style={{ ...styles.container, ...(isMonochrome ? styles.monochromeContainer : {}) }}>
             <style>{`
                 select {
                     appearance: none !important;
@@ -330,11 +340,11 @@ const ClientPortal = () => {
                 </div>
             )}
 
-            <div style={{ ...styles.header, padding: '24px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap' }}>
+            <div style={{ ...styles.header, ...(isMonochrome ? styles.monochromeHeader : {}), padding: '24px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap' }}>
                 <div style={{ width: '56px', height: '56px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img 
-                        src={appConfig.logoSmallUrl}
-                        srcSet={`${appConfig.logoSmallUrl} 120w, ${appConfig.logoMediumUrl} 240w, ${appConfig.logoUrl} 580w`}
+                        src={headerLogoUrl}
+                        srcSet={headerLogoSrcSet}
                         sizes="56px"
                         alt={appConfig.brandName}
                         width="120"
@@ -374,14 +384,14 @@ const ClientPortal = () => {
                 {activeTab === 'list' && <ListTab isLocked={derivedData.isLocked} items={derivedData.nominalItemsForTab} activeItems={derivedData.activeItems} confirmedItems={derivedData.nominalConfirmedItems} availableSizes={derivedData.availableSizes} summaryCounts={derivedData.summaryCounts} lastAddedItem={derivedData.lastAddedNominalItem} handleRemoveItem={handleRemoveItem} handleItemChange={updateItem} handleConfirmItem={handleConfirmItem} handleSubmit={handleSubmit} handleEditItem={setEditingItem} />}
             </div>
             
-            <div style={styles.bottomNav}>
-                <div style={{ ...styles.navPill, left: `calc(${navItems.findIndex(i => i.id === activeTab) * 20}% + 1%)`, width: '18%' }} />
+            <div style={{ ...styles.bottomNav, ...(isMonochrome ? styles.monochromeBottomNav : {}) }}>
+                <div style={{ ...styles.navPill, ...(isMonochrome ? styles.monochromeNavPill : {}), left: `calc(${navItems.findIndex(i => i.id === activeTab) * 20}% + 1%)`, width: '18%' }} />
                 {navItems.map((item) => {
                     const isActive = activeTab === item.id;
                     return (
                         <div key={item.id} onClick={() => !item.disabled && setActiveTab(item.id)} style={{ ...styles.navItem, opacity: item.disabled ? 0.4 : 1, cursor: item.disabled ? 'default' : 'pointer' }}>
-                            <div style={{ color: isActive ? '#60A5FA' : '#9CA3AF', filter: isActive ? 'drop-shadow(0 0 6px rgba(96, 165, 250, 0.4))' : 'none', transition: 'all 0.4s' }}><item.icon /></div>
-                            <span style={{ fontSize: '0.65rem', fontWeight: isActive ? '700' : '500', color: isActive ? '#60A5FA' : '#9CA3AF', marginTop: '4px', transition: 'all 0.4s' }}>{item.label}</span>
+                            <div style={{ color: isActive ? activeNavColor : inactiveNavColor, filter: isActive ? activeNavFilter : 'none', transition: 'all 0.4s' }}><item.icon /></div>
+                            <span style={{ fontSize: '0.65rem', fontWeight: isActive ? '700' : '500', color: isActive ? activeNavColor : inactiveNavColor, marginTop: '4px', transition: 'all 0.4s' }}>{item.label}</span>
                         </div>
                     );
                 })}
