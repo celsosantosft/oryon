@@ -6,6 +6,8 @@ CLIENT_DIR="$APP_DIR/client"
 SERVER_DIR="$APP_DIR/server"
 PM2_APP_NAME="${PM2_APP_NAME:-oryon-server}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-https://atosfardamentos.com.br/login}"
+BRANDING_SOURCE_DIR="${BRANDING_SOURCE_DIR:-}"
+BRANDING_TARGET_DIR="${BRANDING_TARGET_DIR:-}"
 
 log() {
     printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -22,6 +24,21 @@ require_command git
 require_command node
 require_command npm
 require_command pm2
+
+if [ -n "$BRANDING_SOURCE_DIR" ] || [ -n "$BRANDING_TARGET_DIR" ]; then
+    if [ ! -d "$BRANDING_SOURCE_DIR" ] || [ -z "$BRANDING_TARGET_DIR" ]; then
+        echo "Branding source or target is invalid." >&2
+        exit 1
+    fi
+
+    log "Synchronizing installation branding"
+    install -d -m 755 "$BRANDING_TARGET_DIR"
+    for branding_file in logo.png logo-white.png; do
+        if [ -f "$BRANDING_SOURCE_DIR/$branding_file" ]; then
+            install -m 644 "$BRANDING_SOURCE_DIR/$branding_file" "$BRANDING_TARGET_DIR/$branding_file"
+        fi
+    done
+fi
 
 NODE_MAJOR="$(node -p "Number(process.versions.node.split('.')[0])")"
 if [ "$NODE_MAJOR" -lt 20 ]; then

@@ -86,6 +86,8 @@ jobs:
               local app_dir="$1"
               local pm2_name="$2"
               local healthcheck_url="$3"
+              local branding_source="${4:-}"
+              local branding_target="${5:-}"
 
               cd "$app_dir"
               echo "Deploying commit $TARGET_COMMIT in $app_dir"
@@ -97,6 +99,8 @@ jobs:
               APP_DIR="$app_dir" \
               PM2_APP_NAME="$pm2_name" \
               HEALTHCHECK_URL="$healthcheck_url" \
+              BRANDING_SOURCE_DIR="$branding_source" \
+              BRANDING_TARGET_DIR="$branding_target" \
               bash scripts/deploy-production.sh
           }
 
@@ -108,7 +112,12 @@ jobs:
                   "$SECONDARY_APP_DIR" \
                   "$TARGET_COMMIT"
           elif [ -d "$SECONDARY_APP_DIR/.git" ]; then
-              deploy_target "$SECONDARY_APP_DIR" "pd-fardamentos-server" "https://pdfardamentos.com.br/login"
+              deploy_target \
+                  "$SECONDARY_APP_DIR" \
+                  "pd-fardamentos-server" \
+                  "https://pdfardamentos.com.br/login" \
+                  "$SECONDARY_APP_DIR/deploy/branding/pd-fardamentos" \
+                  "/var/lib/oryon/pd-fardamentos/branding"
           else
               echo "Invalid secondary installation: $SECONDARY_APP_DIR" >&2
               exit 1

@@ -144,6 +144,8 @@ log "Building application and starting isolated backend"
 APP_DIR="$APP_DIR" \
 PM2_APP_NAME="$PM2_APP_NAME" \
 HEALTHCHECK_URL="" \
+BRANDING_SOURCE_DIR="$APP_DIR/deploy/branding/pd-fardamentos" \
+BRANDING_TARGET_DIR="$DATA_DIR/branding" \
 bash "$APP_DIR/scripts/deploy-production.sh"
 
 find "$APP_DIR/client/dist" -type d -exec chmod 755 {} +

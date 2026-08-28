@@ -120,6 +120,9 @@ Os modelos da segunda instalacao estao em `deploy/pdfardamentos.env.example` e
 o acesso inicial em `/root/pd-fardamentos-initial-credentials.txt` com permissao
 somente para `root`.
 
+As logos da PD ficam versionadas em `deploy/branding/pd-fardamentos` e sao
+sincronizadas para `/var/lib/oryon/pd-fardamentos/branding` em cada deploy.
+
 ## Arquivos que nao entram no Git
 
 O repositorio ignora dados sensiveis e arquivos gerados:
