@@ -32,6 +32,10 @@ if [ -n "$BRANDING_SOURCE_DIR" ] || [ -n "$BRANDING_TARGET_DIR" ]; then
     fi
 
     log "Synchronizing installation branding"
+    branding_parent_dir="$(dirname "$BRANDING_TARGET_DIR")"
+    if [ -d "$branding_parent_dir" ]; then
+        chmod o+x "$branding_parent_dir"
+    fi
     install -d -m 755 "$BRANDING_TARGET_DIR"
     for branding_file in logo.png logo-white.png; do
         if [ -f "$BRANDING_SOURCE_DIR/$branding_file" ]; then

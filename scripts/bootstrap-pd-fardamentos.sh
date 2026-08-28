@@ -69,7 +69,9 @@ git -C "$APP_DIR" fetch origin main
 git -C "$APP_DIR" checkout main
 git -C "$APP_DIR" reset --hard "$TARGET_COMMIT"
 
-install -d -m 750 "$DATA_DIR" "$DATA_DIR/uploads" "$DATA_DIR/branding"
+install -d -m 751 "$DATA_DIR"
+install -d -m 750 "$DATA_DIR/uploads"
+install -d -m 755 "$DATA_DIR/branding"
 
 if [ ! -f "$APP_DIR/.env" ]; then
     JWT_SECRET="$(openssl rand -hex 48)"
