@@ -82,7 +82,7 @@ Sempre que houver `push` na branch `main`, o GitHub Actions:
 2. valida o build do Vite;
 3. acessa o VPS por SSH;
 4. atualiza `/var/www/oryon` para o commit enviado;
-5. quando existir, atualiza tambem `/var/www/pdfardamentos`;
+5. quando existir, atualiza tambem `/var/www/pd-fardamentos`;
 6. recompila cada frontend e reinicia seu processo PM2 separadamente.
 
 ### Segredos necessarios no GitHub
@@ -94,7 +94,7 @@ Cadastre em `Settings > Secrets and variables > Actions > New repository secret`
 - `DEPLOY_USER`: usuario SSH. Opcional, padrao `root`.
 - `DEPLOY_PORT`: porta SSH. Opcional, padrao `22`.
 - `DEPLOY_PATH`: caminho do projeto no VPS. Opcional, padrao `/var/www/oryon`.
-- `SECONDARY_DEPLOY_PATH`: caminho da segunda instalacao. Opcional, padrao `/var/www/pdfardamentos`.
+- `SECONDARY_DEPLOY_PATH`: caminho da segunda instalacao. Opcional, padrao `/var/www/pd-fardamentos`.
 
 No VPS, a chave publica correspondente precisa estar em `~/.ssh/authorized_keys`
 do usuario configurado em `DEPLOY_USER`.
@@ -106,13 +106,13 @@ do usuario configurado em `DEPLOY_USER`.
 - git.
 - pm2.
 - projeto ja clonado em `/var/www/oryon`.
-- segunda instalacao, quando ativa, clonada em `/var/www/pdfardamentos`.
-- processos PM2 `oryon-server` e `pdfardamentos-server`. O script cria o segundo automaticamente.
+- segunda instalacao, quando ativa, clonada em `/var/www/pd-fardamentos`.
+- processos PM2 `oryon-server` e `pd-fardamentos-server`. O script cria o segundo automaticamente.
 
 Arquivos de producao como `.env`, `server/.env`, `server/atos.db` e
 `server/uploads` ficam fora do Git e nao sao apagados pelo deploy. Para novas
 instalacoes, prefira `APP_DATA_DIR` fora do repositorio, como
-`/var/lib/oryon/pdfardamentos`.
+`/var/lib/oryon/pd-fardamentos`.
 
 Os modelos da segunda instalacao estao em `deploy/pdfardamentos.env.example` e
 `deploy/nginx/pdfardamentos.conf`.

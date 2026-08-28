@@ -70,7 +70,7 @@ jobs:
           DEPLOY_PORT="${DEPLOY_PORT:-22}"
           DEPLOY_USER="${DEPLOY_USER:-root}"
           DEPLOY_PATH="${DEPLOY_PATH:-/var/www/oryon}"
-          SECONDARY_DEPLOY_PATH="${SECONDARY_DEPLOY_PATH:-/var/www/pdfardamentos}"
+          SECONDARY_DEPLOY_PATH="${SECONDARY_DEPLOY_PATH:-/var/www/pd-fardamentos}"
 
           ssh -i ~/.ssh/oryon_deploy_key \
               -p "$DEPLOY_PORT" \
@@ -103,7 +103,7 @@ jobs:
           deploy_target "$PRIMARY_APP_DIR" "oryon-server" "https://atosfardamentos.com.br/login"
 
           if [ -d "$SECONDARY_APP_DIR/.git" ]; then
-              deploy_target "$SECONDARY_APP_DIR" "pdfardamentos-server" "https://pdfardamentos.com.br/login"
+              deploy_target "$SECONDARY_APP_DIR" "pd-fardamentos-server" "https://pdfardamentos.com.br/login"
           else
               echo "Secondary installation not initialized yet: $SECONDARY_APP_DIR"
           fi
