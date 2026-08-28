@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 require('./config/env').loadEnv();
 const { appConfig } = require('./config/appConfig');
+const { appPaths } = require('./config/paths');
 
 function generatePortalToken() {
     return crypto.randomBytes(24).toString('base64url');
@@ -28,7 +29,7 @@ function safeParseDbJson(jsonString) {
 }
 
 // Conexão com o arquivo do banco
-const db = new sqlite3.Database('./atos.db', (err) => {
+const db = new sqlite3.Database(appPaths.databasePath, (err) => {
     if (err) {
         console.error('Erro ao conectar ao SQLite:', err.message);
     } else {

@@ -62,6 +62,7 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          SECONDARY_DEPLOY_PATH: ${{ secrets.SECONDARY_DEPLOY_PATH }}
           TARGET_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
@@ -69,22 +70,41 @@ jobs:
           DEPLOY_PORT="${DEPLOY_PORT:-22}"
           DEPLOY_USER="${DEPLOY_USER:-root}"
           DEPLOY_PATH="${DEPLOY_PATH:-/var/www/oryon}"
+          SECONDARY_DEPLOY_PATH="${SECONDARY_DEPLOY_PATH:-/var/www/pdfardamentos}"
 
           ssh -i ~/.ssh/oryon_deploy_key \
               -p "$DEPLOY_PORT" \
               "$DEPLOY_USER@$DEPLOY_HOST" \
-              "bash -s -- '$TARGET_COMMIT' '$DEPLOY_PATH'" <<'REMOTE'
+              "bash -s -- '$TARGET_COMMIT' '$DEPLOY_PATH' '$SECONDARY_DEPLOY_PATH'" <<'REMOTE'
           set -euo pipefail
 
           TARGET_COMMIT="$1"
-          APP_DIR="$2"
+          PRIMARY_APP_DIR="$2"
+          SECONDARY_APP_DIR="$3"
 
-          cd "$APP_DIR"
-          echo "Deploying commit $TARGET_COMMIT in $APP_DIR"
+          deploy_target() {
+              local app_dir="$1"
+              local pm2_name="$2"
+              local healthcheck_url="$3"
 
-          git fetch origin main
-          git checkout main
-          git reset --hard "$TARGET_COMMIT"
+              cd "$app_dir"
+              echo "Deploying commit $TARGET_COMMIT in $app_dir"
 
-          bash scripts/deploy-production.sh
+              git fetch origin main
+              git checkout main
+              git reset --hard "$TARGET_COMMIT"
+
+              APP_DIR="$app_dir" \
+              PM2_APP_NAME="$pm2_name" \
+              HEALTHCHECK_URL="$healthcheck_url" \
+              bash scripts/deploy-production.sh
+          }
+
+          deploy_target "$PRIMARY_APP_DIR" "oryon-server" "https://atosfardamentos.com.br/login"
+
+          if [ -d "$SECONDARY_APP_DIR/.git" ]; then
+              deploy_target "$SECONDARY_APP_DIR" "pdfardamentos-server" "https://pdfardamentos.com.br/login"
+          else
+              echo "Secondary installation not initialized yet: $SECONDARY_APP_DIR"
+          fi
           REMOTE

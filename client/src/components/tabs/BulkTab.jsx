@@ -1,10 +1,11 @@
 import React from 'react';
 import { Icons } from '../Icons';
 import { styles } from '../../utils/ClientPortalStyles';
+import { appConfig } from '../../config/appConfig';
 
 export const BulkTab = ({
-    isQuote, isLocked, isUsingNominalList, hasAdminSizes, availableSizes, summaryCounts, 
-    totalConfirmed, bulkSizes, setBulkSizes, handleBulkSubmit
+    isQuote, isLocked, isUsingNominalList, hasAdminSizes, availableSizes, summaryCounts,
+    bulkSizes, setBulkSizes, handleBulkSubmit
 }) => {
     const adultSizes = availableSizes.filter(s => !s.includes('ANOS'));
     const kidsSizes = availableSizes.filter(s => s.includes('ANOS'));
@@ -43,7 +44,7 @@ export const BulkTab = ({
             {hasAdminSizes && !isLocked && !isUsingNominalList ? (
                 <div style={{...styles.receiptBox, backgroundColor: '#ECFDF5', borderColor: '#A7F3D0'}}>
                     <div style={styles.receiptHeader}><Icons.Check /> <span style={{ fontWeight: '800', fontSize: '0.95rem' }}>Grade já registrada</span></div>
-                    <p style={styles.receiptText}><strong>As quantidades deste {isQuote ? 'orçamento' : 'pedido'} já foram informadas pela Atos.</strong> Não é necessário enviar ou aprovar a grade novamente.</p>
+                    <p style={styles.receiptText}><strong>As quantidades deste {isQuote ? 'orçamento' : 'pedido'} já foram informadas pela {appConfig.brandName}.</strong> Não é necessário enviar ou aprovar a grade novamente.</p>
                 </div>
             ) : isQuote && !isLocked ? (
                 <div style={{...styles.infoAlert, backgroundColor: '#EFF6FF', color: '#1E3A8A', borderColor: '#BFDBFE'}}>

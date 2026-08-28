@@ -6,13 +6,14 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 const { appConfig, buildTrackingCode } = require('../config/appConfig');
+const { appPaths } = require('../config/paths');
 db.run("ALTER TABLE quotes ADD COLUMN portal_token TEXT", () => {});
 db.run("ALTER TABLE orders ADD COLUMN portal_token TEXT", () => {});
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const dir = './uploads';
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+        const dir = appPaths.uploadsDir;
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         cb(null, dir);
     },
     filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)

@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const db = require('../database');
+const { appPaths } = require('../config/paths');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 const {
     EVOLUTION_API_KEY,
@@ -64,7 +65,7 @@ let lastWebhookConfiguredAt = 0;
 
 const WEBHOOK_CONFIG_TTL_MS = 5 * 60 * 1000;
 
-const AUDIO_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'whatsapp');
+const AUDIO_UPLOAD_DIR = path.join(appPaths.uploadsDir, 'whatsapp');
 
 fs.mkdirSync(AUDIO_UPLOAD_DIR, { recursive: true });
 
@@ -1007,7 +1008,7 @@ async function sendWelcomeText(phone, text) {
 async function sendWelcomeAudio(phone, settings) {
     if (!settings?.audio_path) return null;
 
-    const audioFilePath = path.join(__dirname, '..', 'uploads', settings.audio_path);
+    const audioFilePath = path.join(appPaths.uploadsDir, settings.audio_path);
     if (!fs.existsSync(audioFilePath)) return null;
 
     const audioBase64 = fs.readFileSync(audioFilePath).toString('base64');

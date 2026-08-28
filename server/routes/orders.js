@@ -13,6 +13,7 @@ const {
     buildEvolutionTextPayload
 } = require('../config/evolution');
 const { appConfig, buildTrackingCode, normalizeTrackingCode } = require('../config/appConfig');
+const { appPaths } = require('../config/paths');
 
 db.run("ALTER TABLE orders ADD COLUMN amount_paid REAL DEFAULT 0", (err) => { /* Ignora se já existir */ });
 db.run("ALTER TABLE orders ADD COLUMN client_id INTEGER", () => {});
@@ -42,8 +43,8 @@ const evolution = createEvolutionClient();
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const dir = './uploads';
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+        const dir = appPaths.uploadsDir;
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         cb(null, dir);
     },
     filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)

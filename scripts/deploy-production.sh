@@ -48,7 +48,14 @@ cd "$SERVER_DIR"
 npm ci --omit=dev
 
 log "Restarting PM2 app: $PM2_APP_NAME"
-pm2 restart "$PM2_APP_NAME" --update-env
+if pm2 describe "$PM2_APP_NAME" >/dev/null 2>&1; then
+    pm2 restart "$PM2_APP_NAME" --update-env
+else
+    pm2 start "$SERVER_DIR/server.js" \
+        --name "$PM2_APP_NAME" \
+        --cwd "$SERVER_DIR" \
+        --time
+fi
 pm2 save || true
 
 if command -v curl >/dev/null 2>&1 && [ -n "$HEALTHCHECK_URL" ]; then

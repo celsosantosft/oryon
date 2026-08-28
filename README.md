@@ -56,6 +56,7 @@ Variaveis principais:
 - `APP_ORDER_PREFIX` / `VITE_APP_ORDER_PREFIX`: prefixo dos pedidos, sem `#`. Exemplo: `ATOS`.
 - `APP_SUPPORT_EMAIL` / `VITE_APP_SUPPORT_EMAIL`: e-mail exibido em impressos.
 - `VITE_APP_LOGO_URL`, `VITE_APP_LOGO_SMALL_URL`, `VITE_APP_LOGO_MEDIUM_URL`, `VITE_APP_LOGO_WHITE_URL`, `VITE_APP_PRINT_LOGO_URL`: logos usadas pelo frontend.
+- `APP_DATA_DIR`: pasta persistente e exclusiva da instalacao. O banco e os uploads ficam nela.
 
 Exemplo de segunda instalacao:
 
@@ -81,8 +82,8 @@ Sempre que houver `push` na branch `main`, o GitHub Actions:
 2. valida o build do Vite;
 3. acessa o VPS por SSH;
 4. atualiza `/var/www/oryon` para o commit enviado;
-5. roda `scripts/deploy-production.sh`;
-6. recompila o frontend e reinicia o PM2.
+5. quando existir, atualiza tambem `/var/www/pdfardamentos`;
+6. recompila cada frontend e reinicia seu processo PM2 separadamente.
 
 ### Segredos necessarios no GitHub
 
@@ -93,6 +94,7 @@ Cadastre em `Settings > Secrets and variables > Actions > New repository secret`
 - `DEPLOY_USER`: usuario SSH. Opcional, padrao `root`.
 - `DEPLOY_PORT`: porta SSH. Opcional, padrao `22`.
 - `DEPLOY_PATH`: caminho do projeto no VPS. Opcional, padrao `/var/www/oryon`.
+- `SECONDARY_DEPLOY_PATH`: caminho da segunda instalacao. Opcional, padrao `/var/www/pdfardamentos`.
 
 No VPS, a chave publica correspondente precisa estar em `~/.ssh/authorized_keys`
 do usuario configurado em `DEPLOY_USER`.
@@ -104,10 +106,16 @@ do usuario configurado em `DEPLOY_USER`.
 - git.
 - pm2.
 - projeto ja clonado em `/var/www/oryon`.
-- app PM2 com o nome `oryon-server`.
+- segunda instalacao, quando ativa, clonada em `/var/www/pdfardamentos`.
+- processos PM2 `oryon-server` e `pdfardamentos-server`. O script cria o segundo automaticamente.
 
 Arquivos de producao como `.env`, `server/.env`, `server/atos.db` e
-`server/uploads` ficam fora do Git e nao sao apagados pelo deploy.
+`server/uploads` ficam fora do Git e nao sao apagados pelo deploy. Para novas
+instalacoes, prefira `APP_DATA_DIR` fora do repositorio, como
+`/var/lib/oryon/pdfardamentos`.
+
+Os modelos da segunda instalacao estao em `deploy/pdfardamentos.env.example` e
+`deploy/nginx/pdfardamentos.conf`.
 
 ## Arquivos que nao entram no Git
 

@@ -1,22 +1,51 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
-  plugins: [react()],
-  envDir: '..',
-  server: {
-    // Permite que qualquer interface de rede (IP) acesse o servidor de desenvolvimento
-    host: true, 
-    // Porta padrão do Front-end
-    port: 5173, 
-    // Define a porta como estritamente 5173
-    strictPort: true, 
-    // Configuração para garantir que o Front-end use o IP correto na rede
-    cors: {
-      origin: '*', // Permite que o Front-end aceite requisições de qualquer origem (necessário para o celular)
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+const escapeHtmlAttribute = (value) => String(value || '')
+  .replace(/&/g, '&amp;')
+  .replace(/"/g, '&quot;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;');
+
+const brandHtmlPlugin = (env) => {
+  const brandName = env.VITE_APP_BRAND_NAME || 'Atos Fardamentos';
+  const logoUrl = env.VITE_APP_LOGO_URL || '/logo.png';
+  const logoSmallUrl = env.VITE_APP_LOGO_SMALL_URL || '/logo-120.png';
+  const logoMediumUrl = env.VITE_APP_LOGO_MEDIUM_URL || '/logo-240.png';
+  const replacements = {
+    '__APP_BRAND_NAME__': escapeHtmlAttribute(brandName),
+    '__APP_DESCRIPTION__': escapeHtmlAttribute(`${brandName}: sistema para gestao de pedidos, producao, financas e portal de acompanhamento do cliente.`),
+    '__APP_LOGO_URL__': escapeHtmlAttribute(logoUrl),
+    '__APP_LOGO_SMALL_URL__': escapeHtmlAttribute(logoSmallUrl),
+    '__APP_LOGO_MEDIUM_URL__': escapeHtmlAttribute(logoMediumUrl),
+  };
+
+  return {
+    name: 'brand-html-config',
+    transformIndexHtml(html) {
+      return Object.entries(replacements).reduce(
+        (result, [token, value]) => result.replaceAll(token, value),
+        html,
+      );
     },
-    // base base é útil para garantir que os caminhos sejam corretos
-  },
-  base: '/',
+  };
+};
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, '..', '');
+
+  return {
+    plugins: [react(), brandHtmlPlugin(env)],
+    envDir: '..',
+    server: {
+      host: true,
+      port: 5173,
+      strictPort: true,
+      cors: {
+        origin: '*',
+        methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      },
+    },
+    base: '/',
+  };
 });

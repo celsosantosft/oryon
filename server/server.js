@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 require('./config/env').loadEnv();
 const { appConfig } = require('./config/appConfig');
+const { appPaths } = require('./config/paths');
 
 // Inicializa o Banco de Dados
 require('./database');
@@ -21,7 +22,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
-app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api/uploads', express.static(appPaths.uploadsDir));
 
 // --- IMPORTA��O DAS GAVETAS (ROTAS) ---
 const usersRoutes = require('./routes/users');

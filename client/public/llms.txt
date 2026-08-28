@@ -1,9 +1,8 @@
-# Atos Fardamentos
+# Oryon ERP
 
-Sistema da Atos Fardamentos para gestão interna de pedidos, produção e finanças, com portal público para clientes acompanharem pedidos e enviarem listas de tamanhos.
+Sistema para gestão interna de pedidos, produção e finanças, com portal público para clientes acompanharem pedidos e enviarem listas de tamanhos.
 
 ## Links
 
-- [Portal do Cliente](https://atosfardamentos.com.br/portal)
-- [Entrar no Sistema](https://atosfardamentos.com.br/login)
-
+- [Portal do Cliente](/portal)
+- [Entrar no Sistema](/login)
