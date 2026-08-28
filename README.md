@@ -82,7 +82,7 @@ Sempre que houver `push` na branch `main`, o GitHub Actions:
 2. valida o build do Vite;
 3. acessa o VPS por SSH;
 4. atualiza `/var/www/oryon` para o commit enviado;
-5. quando existir, atualiza tambem `/var/www/pd-fardamentos`;
+5. inicializa `/var/www/pd-fardamentos` na primeira execucao e depois o atualiza;
 6. recompila cada frontend e reinicia seu processo PM2 separadamente.
 
 ### Segredos necessarios no GitHub
@@ -115,7 +115,10 @@ instalacoes, prefira `APP_DATA_DIR` fora do repositorio, como
 `/var/lib/oryon/pd-fardamentos`.
 
 Os modelos da segunda instalacao estao em `deploy/pdfardamentos.env.example` e
-`deploy/nginx/pdfardamentos.conf`.
+`deploy/nginx/pdfardamentos.conf`. A inicializacao automatica usa
+`scripts/bootstrap-pd-fardamentos.sh`, gera segredos diretamente na VPS e guarda
+o acesso inicial em `/root/pd-fardamentos-initial-credentials.txt` com permissao
+somente para `root`.
 
 ## Arquivos que nao entram no Git
 

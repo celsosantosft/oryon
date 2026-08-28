@@ -102,9 +102,15 @@ jobs:
 
           deploy_target "$PRIMARY_APP_DIR" "oryon-server" "https://atosfardamentos.com.br/login"
 
-          if [ -d "$SECONDARY_APP_DIR/.git" ]; then
+          if [ ! -f "/var/lib/oryon/pd-fardamentos/.bootstrap-complete" ]; then
+              bash "$PRIMARY_APP_DIR/scripts/bootstrap-pd-fardamentos.sh" \
+                  "$PRIMARY_APP_DIR" \
+                  "$SECONDARY_APP_DIR" \
+                  "$TARGET_COMMIT"
+          elif [ -d "$SECONDARY_APP_DIR/.git" ]; then
               deploy_target "$SECONDARY_APP_DIR" "pd-fardamentos-server" "https://pdfardamentos.com.br/login"
           else
-              echo "Secondary installation not initialized yet: $SECONDARY_APP_DIR"
+              echo "Invalid secondary installation: $SECONDARY_APP_DIR" >&2
+              exit 1
           fi
           REMOTE
