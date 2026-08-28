@@ -31,7 +31,6 @@ fi
 
 export NPM_CONFIG_AUDIT=false
 export NPM_CONFIG_FUND=false
-export NODE_ENV="${NODE_ENV:-production}"
 
 log "Repository"
 cd "$APP_DIR"
@@ -39,7 +38,7 @@ git rev-parse --short HEAD
 
 log "Installing frontend dependencies"
 cd "$CLIENT_DIR"
-npm ci
+npm ci --include=dev
 
 log "Building frontend"
 npm run build
@@ -49,6 +48,7 @@ cd "$SERVER_DIR"
 npm ci --omit=dev
 
 log "Restarting PM2 app: $PM2_APP_NAME"
+export NODE_ENV="${NODE_ENV:-production}"
 if pm2 describe "$PM2_APP_NAME" >/dev/null 2>&1; then
     pm2 restart "$PM2_APP_NAME" --update-env
 else
