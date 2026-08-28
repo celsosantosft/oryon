@@ -2,19 +2,16 @@
 
 export const styles = {
     container: { width: '100%', maxWidth: '600px', margin: '0 auto', padding: '16px', paddingBottom: '120px', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif", backgroundColor: '#F8FAFC', minHeight: '100vh' },
-    monochromeContainer: { background: 'linear-gradient(180deg, #F4F4F5 0%, #FAFAFA 46%, #F1F1F1 100%)' },
     loading: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontWeight: '600' },
     
     // ⭐ MENU INFERIOR (ILHA FLUTUANTE) ⭐
     bottomNav: { 
         position: 'fixed', bottom: 'calc(16px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 32px)', maxWidth: '568px', backgroundColor: '#1A2B4C', display: 'flex', justifyContent: 'space-between', padding: '8px 4px', boxShadow: '0 10px 30px rgba(26, 43, 76, 0.3)', borderRadius: '24px', zIndex: 1000 
     },
-    monochromeBottomNav: { background: 'linear-gradient(135deg, rgba(8, 8, 8, 0.96) 0%, rgba(35, 35, 35, 0.92) 100%)', backdropFilter: 'saturate(120%) blur(22px)', WebkitBackdropFilter: 'saturate(120%) blur(22px)', border: '1px solid rgba(255, 255, 255, 0.14)', boxShadow: '0 16px 36px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08)' },
     navItem: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 1, position: 'relative', padding: '6px 0', WebkitTapHighlightColor: 'transparent' },
     navPill: { 
         position: 'absolute', top: '8px', bottom: '8px', background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderTop: '1px solid rgba(255, 255, 255, 0.3)', boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255,255,255,0.1)', borderRadius: '16px', transition: 'left 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)' 
     },
-    monochromeNavPill: { background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.08) 100%)', border: '1px solid rgba(255, 255, 255, 0.2)', borderTop: '1px solid rgba(255, 255, 255, 0.38)', boxShadow: '0 8px 20px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.14)' },
 
     modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px', backdropFilter: 'blur(3px)' },
     modalContent: { width: '100%', maxWidth: '380px', background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.85) 100%)', backdropFilter: 'saturate(150%) blur(24px)', WebkitBackdropFilter: 'saturate(150%) blur(24px)', borderRadius: '24px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', border: '1px solid rgba(255,255,255,0.8)', boxSizing: 'border-box' },
@@ -22,7 +19,6 @@ export const styles = {
     modalCloseBtn: { background: '#F1F5F9', border: 'none', color: '#64748B', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' },
 
     header: { width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px', backgroundColor: '#1A2B4C', padding: '24px', borderRadius: '24px', color: 'white', boxShadow: '0 10px 15px -3px rgba(26, 43, 76, 0.3)' },
-    monochromeHeader: { background: 'linear-gradient(135deg, rgba(5, 5, 5, 0.96) 0%, rgba(38, 38, 38, 0.9) 100%)', backdropFilter: 'saturate(120%) blur(24px)', WebkitBackdropFilter: 'saturate(120%) blur(24px)', border: '1px solid rgba(255, 255, 255, 0.14)', boxShadow: '0 18px 38px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.1)' },
     logoCircle: { width: '48px', height: '48px', backgroundColor: '#2563EB', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0 },
     title: { margin: '0 0 4px 0', fontSize: '1.25rem', fontWeight: '800', letterSpacing: '-0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
     subtitle: { margin: 0, fontSize: '0.9rem', color: '#9CA3AF', fontWeight: '500' },

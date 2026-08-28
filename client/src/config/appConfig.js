@@ -22,7 +22,6 @@ const normalizePrefix = (value, fallback = DEFAULT_ORDER_PREFIX) => {
 const CONFIGURED_BRAND_NAME = readEnv('VITE_APP_BRAND_NAME', DEFAULT_BRAND_NAME);
 const CONFIGURED_SYSTEM_NAME = readEnv('VITE_APP_SYSTEM_NAME', DEFAULT_SYSTEM_NAME);
 const CONFIGURED_ORDER_PREFIX = normalizePrefix(readEnv('VITE_APP_ORDER_PREFIX', DEFAULT_ORDER_PREFIX));
-const CONFIGURED_THEME = readEnv('VITE_APP_THEME', 'default').toLowerCase();
 
 const isLocalDevHost = (hostname) => (
     hostname === 'localhost'
@@ -67,7 +66,5 @@ export const appConfig = Object.freeze({
     logoMediumUrl: readEnv('VITE_APP_LOGO_MEDIUM_URL', '/logo-240.png'),
     logoWhiteUrl: readEnv('VITE_APP_LOGO_WHITE_URL', '/logo-white.png'),
     printLogoUrl: readEnv('VITE_APP_PRINT_LOGO_URL', '/atos_logo.png'),
-    theme: CONFIGURED_THEME,
-    isMonochrome: CONFIGURED_THEME === 'monochrome',
     apiBaseUrl: resolveApiBaseUrl()
 });
