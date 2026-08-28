@@ -31,6 +31,7 @@ fi
 
 export NPM_CONFIG_AUDIT=false
 export NPM_CONFIG_FUND=false
+export NODE_ENV="${NODE_ENV:-production}"
 
 log "Repository"
 cd "$APP_DIR"
@@ -60,7 +61,7 @@ pm2 save || true
 
 if command -v curl >/dev/null 2>&1 && [ -n "$HEALTHCHECK_URL" ]; then
     log "Checking $HEALTHCHECK_URL"
-    curl -fsSI --max-time 20 "$HEALTHCHECK_URL" >/dev/null
+    curl -fsS --max-time 20 "$HEALTHCHECK_URL" >/dev/null
 fi
 
 log "Deploy complete"

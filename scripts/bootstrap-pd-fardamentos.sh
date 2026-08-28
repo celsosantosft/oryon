@@ -88,7 +88,6 @@ if [ ! -f "$APP_DIR/.env" ]; then
     log "Creating isolated environment"
     umask 077
     cat > "$APP_DIR/.env" <<ENV
-NODE_ENV=production
 PORT=3002
 JWT_SECRET=$JWT_SECRET
 CORS_ORIGIN=https://$DOMAIN,https://$WWW_DOMAIN
@@ -135,13 +134,20 @@ Usuario: admin@$DOMAIN
 Senha inicial: $ADMIN_PASSWORD
 CREDENTIALS
     chmod 600 "$CREDENTIALS_FILE"
+    umask 022
 fi
+
+# NODE_ENV is exported by the deploy script so Vite does not warn about it in .env.
+sed -i '/^NODE_ENV=production$/d' "$APP_DIR/.env"
 
 log "Building application and starting isolated backend"
 APP_DIR="$APP_DIR" \
 PM2_APP_NAME="$PM2_APP_NAME" \
 HEALTHCHECK_URL="" \
 bash "$APP_DIR/scripts/deploy-production.sh"
+
+find "$APP_DIR/client/dist" -type d -exec chmod 755 {} +
+find "$APP_DIR/client/dist" -type f -exec chmod 644 {} +
 
 log "Installing Nginx site"
 install -m 644 "$APP_DIR/deploy/nginx/pdfardamentos.conf" "$NGINX_AVAILABLE"
@@ -155,7 +161,7 @@ if ! nginx -t; then
 fi
 
 systemctl reload nginx
-curl -fsSI --max-time 20 "http://$DOMAIN/login" >/dev/null
+curl -fsS --max-time 20 "http://$DOMAIN/login" >/dev/null
 
 log "Issuing HTTPS certificate"
 certbot --nginx \
@@ -167,7 +173,7 @@ certbot --nginx \
     -d "$DOMAIN" \
     -d "$WWW_DOMAIN"
 
-curl -fsSI --max-time 20 "https://$DOMAIN/login" >/dev/null
+curl -fsS --max-time 20 "https://$DOMAIN/login" >/dev/null
 touch "$MARKER_FILE"
 
 log "PD Fardamentos bootstrap complete"
