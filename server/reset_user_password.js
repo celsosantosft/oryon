@@ -1,5 +1,8 @@
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
+require('./config/env').loadEnv();
+const { appPaths } = require('./config/paths');
+const { resolveMaintenanceDatabasePath } = require('./utils/adminMaintenance');
 
 const [, , emailArg, passwordArg] = process.argv;
 
@@ -11,7 +14,9 @@ if (!email || !newPassword) {
     process.exit(1);
 }
 
-const db = new sqlite3.Database('./atos.db', (err) => {
+const databasePath = resolveMaintenanceDatabasePath(appPaths);
+
+const db = new sqlite3.Database(databasePath, (err) => {
     if (err) {
         console.error('Erro ao conectar ao SQLite:', err.message);
         process.exit(1);

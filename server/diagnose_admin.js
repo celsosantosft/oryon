@@ -1,22 +1,33 @@
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
+require('./config/env').loadEnv();
+const { appConfig } = require('./config/appConfig');
+const { appPaths } = require('./config/paths');
+const {
+    getPasswordArg,
+    resolveMaintenanceDatabasePath,
+    shouldResetExistingAdminPassword
+} = require('./utils/adminMaintenance');
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@atos.com';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || process.argv[2];
-const ADMIN_NAME = 'Administrador atos';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || getPasswordArg(process.argv.slice(2));
+const ADMIN_NAME = appConfig.adminName;
 const ADMIN_ROLE = 'admin';
+const SHOULD_RESET_PASSWORD = shouldResetExistingAdminPassword(process.argv.slice(2), process.env);
 
 if (!ADMIN_PASSWORD) {
     console.error('Informe a senha com ADMIN_PASSWORD=... ou rode: node diagnose_admin.js novaSenhaSegura');
     process.exit(1);
 }
 
-const db = new sqlite3.Database('./atos.db', (err) => {
+const databasePath = resolveMaintenanceDatabasePath(appPaths);
+
+const db = new sqlite3.Database(databasePath, (err) => {
     if (err) {
         console.error('Erro ao conectar ao banco de dados:', err.message);
         return;
     }
-    console.log('Conectado ao banco de dados SQLite para diagnóstico.');
+    console.log(`Conectado ao banco de dados SQLite para diagnóstico: ${databasePath}`);
     checkOrCreateAdmin();
 });
 
@@ -30,7 +41,12 @@ async function checkOrCreateAdmin() {
 
         if (user) {
             console.log(`✅ Usuário Admin (${ADMIN_EMAIL}) encontrado no DB. Nome: ${user.name}.`);
-            // Se existir, atualizamos a senha para garantir que seja a padrão
+            if (!SHOULD_RESET_PASSWORD) {
+                console.log('Senha preservada. Use --reset ou RESET_ADMIN_PASSWORD=true para trocar a senha do admin.');
+                db.close();
+                return;
+            }
+
             const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
             db.run('UPDATE users SET password = ?, name = ?, role = ? WHERE email = ?',
                 [hashedPassword, ADMIN_NAME, ADMIN_ROLE, ADMIN_EMAIL],
@@ -46,7 +62,6 @@ async function checkOrCreateAdmin() {
             return;
         }
 
-        // Se o usuário não existe, criamos um novo
         console.log(`❌ Usuário Admin (${ADMIN_EMAIL}) NÃO ENCONTRADO. Criando agora...`);
         const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
         

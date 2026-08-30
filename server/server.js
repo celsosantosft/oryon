@@ -4,6 +4,7 @@ const path = require('path');
 require('./config/env').loadEnv();
 const { appConfig } = require('./config/appConfig');
 const { appPaths } = require('./config/paths');
+const { createSecurityMiddleware, resolveTrustProxyConfig } = require('./middlewares/security');
 
 // Inicializa o Banco de Dados
 require('./database');
@@ -15,12 +16,14 @@ const corsOrigin = process.env.CORS_ORIGIN
     : '*';
 
 // --- CONFIGURA��O B�SICA ---
+app.set('trust proxy', resolveTrustProxyConfig());
 app.use(cors({
     origin: corsOrigin,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
+app.use(createSecurityMiddleware());
 app.use(express.json());
 app.use('/api/uploads', express.static(appPaths.uploadsDir));
 
