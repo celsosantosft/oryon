@@ -1,10 +1,15 @@
 import React, { createContext, useCallback, useState, useEffect, useContext } from 'react';
 import { resolveApiBaseUrl } from '../config/appConfig';
+import {
+    AUTH_API_BASE_URL_KEY,
+    AUTH_NOTICE_KEY,
+    INACTIVITY_EXPIRED_MESSAGE,
+    LAST_ACTIVITY_KEY,
+    SESSION_EXPIRED_MESSAGE,
+    handleSessionActivity
+} from './authSession';
 
 const AuthContext = createContext();
-const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou. Faça login novamente.';
-const AUTH_NOTICE_KEY = 'auth_notice';
-const AUTH_API_BASE_URL_KEY = 'auth_api_base_url';
 
 const isLocalDevHost = (hostname) => (
     hostname === 'localhost'
@@ -59,6 +64,7 @@ export const AuthProvider = ({ children }) => {
         sessionStorage.removeItem('token');
         sessionStorage.removeItem('user');
         sessionStorage.removeItem(AUTH_API_BASE_URL_KEY);
+        sessionStorage.removeItem(LAST_ACTIVITY_KEY);
     };
 
     // 3. Função de Logout
@@ -139,6 +145,38 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         if (!token) return undefined;
 
+        const recordActivity = (event) => {
+            if (!sessionStorage.getItem('token')) return;
+
+            const lastActivity = Number(sessionStorage.getItem(LAST_ACTIVITY_KEY));
+            handleSessionActivity({
+                event,
+                lastActivityTime: lastActivity,
+                onExpired: () => logout(INACTIVITY_EXPIRED_MESSAGE),
+                onActive: () => sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()))
+            });
+        };
+
+        if (!sessionStorage.getItem(LAST_ACTIVITY_KEY)) {
+            sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+        }
+
+        const activityEvents = ['pointerdown', 'keydown', 'touchstart', 'scroll'];
+        const listenerOptions = { capture: true };
+        activityEvents.forEach((eventName) => {
+            window.addEventListener(eventName, recordActivity, listenerOptions);
+        });
+
+        return () => {
+            activityEvents.forEach((eventName) => {
+                window.removeEventListener(eventName, recordActivity, listenerOptions);
+            });
+        };
+    }, [token, logout]);
+
+    useEffect(() => {
+        if (!token) return undefined;
+
         let isMounted = true;
         let axiosInstance = null;
         let interceptorId = null;
@@ -180,6 +218,7 @@ export const AuthProvider = ({ children }) => {
             sessionStorage.setItem('token', newToken);
             sessionStorage.setItem('user', JSON.stringify(userData));
             sessionStorage.setItem(AUTH_API_BASE_URL_KEY, API_BASE_URL);
+            sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
             
             setToken(newToken);
             setUser(userData);

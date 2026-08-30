@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { appConfig } from '../config/appConfig';
-
-const AUTH_NOTICE_KEY = 'auth_notice';
+import { AUTH_NOTICE_KEY, getLoginErrorMessage, normalizeAuthNotice } from '../context/authSession';
 
 const Login = () => {
     // Estados de Dados
@@ -24,19 +23,10 @@ const Login = () => {
         document.title = appConfig.brandName;
         const storedNotice = sessionStorage.getItem(AUTH_NOTICE_KEY);
         if (storedNotice) {
-            setNotice(storedNotice);
+            setNotice(normalizeAuthNotice(storedNotice));
             sessionStorage.removeItem(AUTH_NOTICE_KEY);
         }
     }, []);
-
-    const getLoginErrorMessage = (message) => {
-        const normalizedMessage = String(message || '').trim().toLowerCase();
-        if (!normalizedMessage || normalizedMessage === 'inválido' || normalizedMessage === 'invalido') {
-            return 'E-mail ou senha incorretos.';
-        }
-
-        return message;
-    };
 
     // --- FUNÇÃO DE AJUDA PARA LER O CARGO ---
     // Transforma cargos complexos em strings simples para o código entender
@@ -104,7 +94,7 @@ const Login = () => {
 
         } catch (err) {
             console.error("Erro no login:", err);
-            setError(getLoginErrorMessage(err.message));
+            setError(getLoginErrorMessage(err.message || err));
         } finally {
             setLoading(false);
         }
