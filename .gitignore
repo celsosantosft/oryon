@@ -26,6 +26,7 @@ server/**/*.sqlite3
 
 # Local backups, deploy bundles and reports
 .backups/
+.worktrees/
 deploy_*/
 *.zip
 lighthouse-*.json
