@@ -66,7 +66,7 @@ npm run build
 
 log "Installing backend dependencies"
 cd "$SERVER_DIR"
-npm ci --omit dev
+npm ci
 
 log "Restarting PM2 app: $PM2_APP_NAME"
 export NODE_ENV="${NODE_ENV:-production}"
