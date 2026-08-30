@@ -46,7 +46,7 @@ router.put('/api/clients/:id', authenticateToken, (req, res) => {
 });
 
 // Excluir Cliente
-router.delete('/api/clients/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.delete('/api/clients/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     db.run(`DELETE FROM clients WHERE id=?`, [req.params.id], (err) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: 'Cliente excluído.' });

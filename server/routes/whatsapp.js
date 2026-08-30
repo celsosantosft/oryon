@@ -5,6 +5,7 @@ const fs = require('fs');
 const db = require('../database');
 const { appPaths } = require('../config/paths');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
+const { requireWebhookSecret } = require('../middlewares/webhookAuth');
 const {
     EVOLUTION_API_KEY,
     EVOLUTION_INSTANCE,
@@ -22,6 +23,7 @@ const {
 
 const router = express.Router();
 let QRCode = null;
+const WHATSAPP_ROLES = ['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes'];
 
 try {
     QRCode = require('qrcode');
@@ -227,6 +229,20 @@ function normalizeConnectionState(payload) {
     return 'close';
 }
 
+function buildEvolutionWebhookUrl() {
+    const secret = process.env.EVOLUTION_WEBHOOK_SECRET;
+    if (!secret || !EVOLUTION_WEBHOOK_URL) return EVOLUTION_WEBHOOK_URL;
+
+    try {
+        const url = new URL(EVOLUTION_WEBHOOK_URL);
+        url.searchParams.set('secret', secret);
+        return url.toString();
+    } catch (error) {
+        console.warn('EVOLUTION_WEBHOOK_URL inválida; usando valor original sem anexar segredo.', error.message);
+        return EVOLUTION_WEBHOOK_URL;
+    }
+}
+
 function getNestedValue(payload, paths) {
     for (const itemPath of paths) {
         const value = itemPath.split('.').reduce((current, key) => current?.[key], payload);
@@ -286,7 +302,7 @@ async function createInstance() {
         syncFullHistory: false,
         webhook: {
             enabled: true,
-            url: EVOLUTION_WEBHOOK_URL,
+            url: buildEvolutionWebhookUrl(),
             byEvents: false,
             base64: false,
             events: EVOLUTION_WEBHOOK_EVENTS
@@ -309,7 +325,7 @@ async function configureInstanceSettings() {
 async function configureInstanceWebhook() {
     const webhook = {
         enabled: true,
-        url: EVOLUTION_WEBHOOK_URL,
+        url: buildEvolutionWebhookUrl(),
         webhook_by_events: false,
         webhook_base64: false,
         byEvents: false,
@@ -3462,7 +3478,7 @@ async function syncEvolutionLabelsAndContacts(userId = null) {
     };
 }
 
-router.get('/whatsapp/status', authenticateToken, async (req, res) => {
+router.get('/whatsapp/status', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     if (!EVOLUTION_API_KEY) {
         return res.json({
             status: 'close',
@@ -3507,7 +3523,7 @@ router.get('/whatsapp/status', authenticateToken, async (req, res) => {
     }
 });
 
-router.post('/whatsapp/connect', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+router.post('/whatsapp/connect', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     if (requireEvolutionApiKey(res)) return;
 
     try {
@@ -3576,7 +3592,7 @@ router.post('/whatsapp/connect', authenticateToken, authorizeRole(['admin', 'ger
     }
 });
 
-router.post('/whatsapp/configure-webhook', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+router.post('/whatsapp/configure-webhook', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     if (requireEvolutionApiKey(res)) return;
 
     try {
@@ -3600,7 +3616,7 @@ router.post('/whatsapp/configure-webhook', authenticateToken, authorizeRole(['ad
     }
 });
 
-router.post('/whatsapp/sync', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+router.post('/whatsapp/sync', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     if (requireEvolutionApiKey(res)) return;
 
     try {
@@ -3634,7 +3650,7 @@ router.post('/whatsapp/sync', authenticateToken, authorizeRole(['admin', 'gerent
     }
 });
 
-router.post('/whatsapp/meta/qualified-lead', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+router.post('/whatsapp/meta/qualified-lead', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const phone = normalizePhone(req.body?.phone || '');
         const email = String(req.body?.email || '').trim().toLowerCase();
@@ -3691,7 +3707,7 @@ router.post('/whatsapp/meta/qualified-lead', authenticateToken, authorizeRole(['
     }
 });
 
-router.delete('/whatsapp/meta/qualified-leads/history', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+router.delete('/whatsapp/meta/qualified-leads/history', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         await new Promise((resolve, reject) => {
             db.run(`DELETE FROM meta_capi_events`, function (err) {
@@ -3706,7 +3722,7 @@ router.delete('/whatsapp/meta/qualified-leads/history', authenticateToken, autho
     }
 });
 
-router.get('/whatsapp/meta/qualified-leads/history', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+router.get('/whatsapp/meta/qualified-leads/history', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 50);
         const eventName = getMetaCapiDiagnostics().qualifiedLeadEventName || 'Lead Qualificado';
@@ -3784,7 +3800,7 @@ router.get('/whatsapp/meta/qualified-leads/history', authenticateToken, authoriz
     }
 });
 
-router.post('/whatsapp/webhook', async (req, res) => {
+router.post('/whatsapp/webhook', requireWebhookSecret, async (req, res) => {
     const eventName = normalizeWebhookEventName(req.body);
 
     try {
@@ -3800,7 +3816,7 @@ router.post('/whatsapp/webhook', async (req, res) => {
     }
 });
 
-router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
+router.get('/whatsapp/conversations', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const search = String(req.query.search || '').trim();
         const params = [];
@@ -3885,7 +3901,7 @@ router.get('/whatsapp/conversations', authenticateToken, async (req, res) => {
     }
 });
 
-router.get('/whatsapp/labels', authenticateToken, async (req, res) => {
+router.get('/whatsapp/labels', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     if (requireEvolutionApiKey(res)) return;
 
     try {
@@ -3896,7 +3912,7 @@ router.get('/whatsapp/labels', authenticateToken, async (req, res) => {
     }
 });
 
-router.get('/whatsapp/tags', authenticateToken, async (req, res) => {
+router.get('/whatsapp/tags', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     if (requireEvolutionApiKey(res)) return;
 
     try {
@@ -3907,7 +3923,7 @@ router.get('/whatsapp/tags', authenticateToken, async (req, res) => {
     }
 });
 
-router.get('/whatsapp/diagnostics', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+router.get('/whatsapp/diagnostics', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const [recentWebhooks, totalConversations, providerWebhook] = await Promise.all([
             dbAll(`
@@ -3945,7 +3961,7 @@ router.get('/whatsapp/diagnostics', authenticateToken, authorizeRole(['admin', '
     }
 });
 
-router.get('/whatsapp/labels/diagnostics', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+router.get('/whatsapp/labels/diagnostics', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const [localLabels, taggedConversations, recentWebhooks, recentAllWebhooks, providerWebhook] = await Promise.all([
             getLocalWhatsappLabels(),
@@ -3996,7 +4012,7 @@ router.get('/whatsapp/labels/diagnostics', authenticateToken, authorizeRole(['ad
     }
 });
 
-router.post('/whatsapp/add-label', authenticateToken, async (req, res) => {
+router.post('/whatsapp/add-label', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     if (requireEvolutionApiKey(res)) return;
 
     try {
@@ -4085,13 +4101,13 @@ router.post('/whatsapp/add-label', authenticateToken, async (req, res) => {
     }
 });
 
-router.post('/whatsapp/conversations/:phone/tags', authenticateToken, async (req, res) => {
+router.post('/whatsapp/conversations/:phone/tags', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     res.status(405).json({
         error: 'Etiquetas do WhatsApp agora são somente leitura no ERP. Gerencie as etiquetas pelo app WhatsApp Business.'
     });
 });
 
-router.get('/whatsapp/conversations/:phone/messages', authenticateToken, async (req, res) => {
+router.get('/whatsapp/conversations/:phone/messages', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const phone = normalizePhone(req.params.phone);
         const conversation = await findExistingConversationByPhone(phone);
@@ -4129,7 +4145,7 @@ router.get('/whatsapp/conversations/:phone/messages', authenticateToken, async (
     }
 });
 
-router.post('/whatsapp/conversations/:phone/send', authenticateToken, async (req, res) => {
+router.post('/whatsapp/conversations/:phone/send', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     if (requireEvolutionApiKey(res)) return;
 
     try {
@@ -4175,7 +4191,7 @@ router.patch('/whatsapp/conversations/:phone', authenticateToken, async (req, re
     }
 });
 
-router.post('/whatsapp/conversations/:phone/orders', authenticateToken, async (req, res) => {
+router.post('/whatsapp/conversations/:phone/orders', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const phone = normalizePhone(req.params.phone);
         const orderId = Number(req.body.order_id || req.body.orderId);
@@ -4232,7 +4248,7 @@ router.post('/whatsapp/conversations/:phone/orders', authenticateToken, async (r
     }
 });
 
-router.delete('/whatsapp/conversations/:phone/orders/:orderId', authenticateToken, async (req, res) => {
+router.delete('/whatsapp/conversations/:phone/orders/:orderId', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const phone = normalizePhone(req.params.phone);
         const orderId = Number(req.params.orderId);
@@ -4255,7 +4271,7 @@ router.delete('/whatsapp/conversations/:phone/orders/:orderId', authenticateToke
     }
 });
 
-router.delete('/whatsapp/logout', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+router.delete('/whatsapp/logout', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     if (requireEvolutionApiKey(res)) return;
 
     try {
@@ -4276,7 +4292,7 @@ router.delete('/whatsapp/logout', authenticateToken, authorizeRole(['admin', 'ge
     }
 });
 
-router.get('/whatsapp/automation', authenticateToken, (req, res) => {
+router.get('/whatsapp/automation', authenticateToken, authorizeRole(WHATSAPP_ROLES), (req, res) => {
     db.get(
         `SELECT welcome_message, delay_seconds, audio_path, audio_original_name, updated_at
          FROM whatsapp_automation_settings
@@ -4296,7 +4312,7 @@ router.get('/whatsapp/automation', authenticateToken, (req, res) => {
     );
 });
 
-router.post('/whatsapp/save-automation', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/whatsapp/save-automation', authenticateToken, authorizeRole(WHATSAPP_ROLES), (req, res) => {
     upload.single('audio')(req, res, (uploadErr) => {
         if (uploadErr) return res.status(400).json({ error: uploadErr.message });
 
@@ -4345,7 +4361,7 @@ router.post('/whatsapp/save-automation', authenticateToken, authorizeRole(['admi
     });
 });
 
-router.get('/whatsapp/auto-replies', authenticateToken, async (req, res) => {
+router.get('/whatsapp/auto-replies', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const rows = await dbAll(`SELECT * FROM whatsapp_auto_replies ORDER BY id DESC`);
         res.json({ auto_replies: rows });
@@ -4354,7 +4370,7 @@ router.get('/whatsapp/auto-replies', authenticateToken, async (req, res) => {
     }
 });
 
-router.post('/whatsapp/auto-replies', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/whatsapp/auto-replies', authenticateToken, authorizeRole(WHATSAPP_ROLES), (req, res) => {
     upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'image', maxCount: 1 }])(req, res, async (uploadErr) => {
         if (uploadErr) return res.status(400).json({ error: uploadErr.message });
 
@@ -4395,7 +4411,7 @@ router.post('/whatsapp/auto-replies', authenticateToken, authorizeRole(['admin',
     });
 });
 
-router.put('/whatsapp/auto-replies/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.put('/whatsapp/auto-replies/:id', authenticateToken, authorizeRole(WHATSAPP_ROLES), (req, res) => {
     upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'image', maxCount: 1 }])(req, res, async (uploadErr) => {
         if (uploadErr) return res.status(400).json({ error: uploadErr.message });
 
@@ -4457,7 +4473,7 @@ router.put('/whatsapp/auto-replies/:id', authenticateToken, authorizeRole(['admi
     });
 });
 
-router.delete('/whatsapp/auto-replies/:id', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+router.delete('/whatsapp/auto-replies/:id', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const id = Number(req.params.id);
         const row = await dbGet(`SELECT * FROM whatsapp_auto_replies WHERE id = ?`, [id]);
@@ -4493,7 +4509,7 @@ router.delete('/whatsapp/auto-replies/:id', authenticateToken, authorizeRole(['a
     }
 });
 // --- ROTAS DO TYPEBOT ---
-router.get('/whatsapp/typebot/config', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+router.get('/whatsapp/typebot/config', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const evolution = createEvolutionClient();
         const response = await evolution.get(`/typebot/find/${EVOLUTION_INSTANCE}`);
@@ -4505,7 +4521,7 @@ router.get('/whatsapp/typebot/config', authenticateToken, authorizeRole(['admin'
     }
 });
 
-router.post('/whatsapp/typebot/config', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+router.post('/whatsapp/typebot/config', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const evolution = createEvolutionClient();
         const payload = {

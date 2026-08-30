@@ -71,7 +71,7 @@ function isCottonProduction(row) {
     return productionDetails.includes('algodao');
 }
 
-router.get('/corte/pedidos', authenticateToken, authorizeRole(['admin', 'gerente', 'corte']), (req, res) => {
+router.get('/corte/pedidos', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_operacoes', 'corte']), (req, res) => {
     const isHistory = normalizeText(req.query.aba).trim() === 'historico';
     const statuses = isHistory ? HISTORICAL_CUTTING_STATUSES : ACTIVE_CUTTING_STATUSES;
     const statusPlaceholders = statuses.map(() => '?').join(', ');
@@ -222,10 +222,10 @@ const archiveCuttingLot = (req, res) => {
     });
 };
 
-router.post('/corte/finalizar', authenticateToken, authorizeRole(['admin', 'gerente', 'corte']), archiveCuttingLot);
-router.post('/corte/arquivar', authenticateToken, authorizeRole(['admin', 'gerente', 'corte']), archiveCuttingLot);
+router.post('/corte/finalizar', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_operacoes', 'corte']), archiveCuttingLot);
+router.post('/corte/arquivar', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_operacoes', 'corte']), archiveCuttingLot);
 
-router.get('/corte/progresso', authenticateToken, authorizeRole(['admin', 'gerente', 'corte']), (req, res) => {
+router.get('/corte/progresso', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_operacoes', 'corte']), (req, res) => {
     ensureProgressTable((tableErr) => {
         if (tableErr) return res.status(500).json({ error: tableErr.message });
 
@@ -240,7 +240,7 @@ router.get('/corte/progresso', authenticateToken, authorizeRole(['admin', 'geren
     });
 });
 
-router.post('/corte/salvar-progresso', authenticateToken, authorizeRole(['admin', 'gerente', 'corte']), (req, res) => {
+router.post('/corte/salvar-progresso', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_operacoes', 'corte']), (req, res) => {
     const loteId = String(req.body.lote_id || req.body.id_pedido || '').trim();
     const tamanho = String(req.body.tamanho || '').trim().toUpperCase();
     const tipoPeca = normalizeText(req.body.tipo_peca).trim();

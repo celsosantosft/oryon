@@ -3,6 +3,8 @@ const router = express.Router();
 const db = require('../database');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 
+const FINANCE_ROLES = ['admin', 'gerente', 'gerente_operacoes'];
+
 function ensureDefaultFinanceAccounts() {
     const defaults = [
         { name: 'Marketing', type: 'Despesa' }
@@ -187,14 +189,14 @@ function syncOrderAmounts(orderIds, callback = () => {}) {
 // ==========================================
 // 0. OBJETIVOS E CONFIGURAÇÕES
 // ==========================================
-router.get('/api/finance/goal-settings', authenticateToken, (req, res) => {
+router.get('/api/finance/goal-settings', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     db.get(`SELECT revenue, revenue_annual, pieces, efficiency, updated_at FROM finance_goal_settings WHERE id = 1`, [], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(row || { revenue: 25000, revenue_annual: 300000, pieces: 500, efficiency: 95 });
     });
 });
 
-router.put('/api/finance/goal-settings', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.put('/api/finance/goal-settings', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const revenue = Number(req.body.revenue);
     const revenueAnnual = Number(req.body.revenue_annual);
     const pieces = Number(req.body.pieces);
@@ -224,14 +226,14 @@ router.put('/api/finance/goal-settings', authenticateToken, authorizeRole(['admi
     );
 });
 
-router.get('/api/finance/objective-accounts', authenticateToken, (req, res) => {
+router.get('/api/finance/objective-accounts', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     db.all(`SELECT * FROM financial_accounts ORDER BY is_default DESC, name ASC`, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
     });
 });
 
-router.post('/api/finance/objective-accounts', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/finance/objective-accounts', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const payload = validateObjectiveAccountPayload(req.body);
     if (payload.error) return res.status(400).json({ error: payload.error });
 
@@ -270,7 +272,7 @@ router.post('/api/finance/objective-accounts', authenticateToken, authorizeRole(
     });
 });
 
-router.put('/api/finance/objective-accounts/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.put('/api/finance/objective-accounts/:id', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const payload = validateObjectiveAccountPayload(req.body);
     if (payload.error) return res.status(400).json({ error: payload.error });
 
@@ -314,7 +316,7 @@ router.put('/api/finance/objective-accounts/:id', authenticateToken, authorizeRo
     });
 });
 
-router.delete('/api/finance/objective-accounts/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.delete('/api/finance/objective-accounts/:id', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     db.get(`SELECT * FROM financial_accounts WHERE id = ?`, [req.params.id], (findErr, currentRow) => {
         if (findErr) return res.status(500).json({ error: findErr.message });
         if (!currentRow) return res.status(404).json({ error: 'Conta não encontrada.' });
@@ -363,11 +365,11 @@ router.delete('/api/finance/objective-accounts/:id', authenticateToken, authoriz
     });
 });
 
-router.get('/api/finance/objectives', authenticateToken, (req, res) => {
+router.get('/api/finance/objectives', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     fetchObjectivesResponse(res);
 });
 
-router.post('/api/finance/objectives', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/finance/objectives', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const validationError = validateObjectivePayload(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
 
@@ -396,7 +398,7 @@ router.post('/api/finance/objectives', authenticateToken, authorizeRole(['admin'
     );
 });
 
-router.put('/api/finance/objectives/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.put('/api/finance/objectives/:id', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const validationError = validateObjectivePayload(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
 
@@ -438,7 +440,7 @@ router.put('/api/finance/objectives/:id', authenticateToken, authorizeRole(['adm
     );
 });
 
-router.delete('/api/finance/objectives/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.delete('/api/finance/objectives/:id', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     db.run(`DELETE FROM finance_objectives WHERE id = ?`, [req.params.id], function(err) {
         if (err) return res.status(500).json({ error: err.message });
         if (this.changes === 0) return res.status(404).json({ error: 'Objetivo não encontrado.' });
@@ -446,7 +448,7 @@ router.delete('/api/finance/objectives/:id', authenticateToken, authorizeRole(['
     });
 });
 
-router.post('/api/finance/objectives/:id/deposits', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/finance/objectives/:id/deposits', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const amount = Number(req.body.amount);
     const depositDate = req.body.deposit_date;
     const note = typeof req.body.note === 'string' ? req.body.note.trim() : '';
@@ -464,7 +466,7 @@ router.post('/api/finance/objectives/:id/deposits', authenticateToken, authorize
     );
 });
 
-router.delete('/api/finance/objective-deposits/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.delete('/api/finance/objective-deposits/:id', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     db.run(`DELETE FROM finance_objective_deposits WHERE id = ?`, [req.params.id], function(err) {
         if (err) return res.status(500).json({ error: err.message });
         if (this.changes === 0) return res.status(404).json({ error: 'Depósito não encontrado.' });
@@ -475,7 +477,7 @@ router.delete('/api/finance/objective-deposits/:id', authenticateToken, authoriz
 // ==========================================
 // 1. PLANO DE CONTAS (Receitas / Despesas)
 // ==========================================
-router.post('/api/finance/accounts', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/finance/accounts', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const { name, type } = req.body;
     db.run(`INSERT INTO chart_of_accounts (name, type) VALUES (?, ?)`, [name, type], function(err) {
         if (err) return res.status(500).json({ error: err.message });
@@ -483,14 +485,14 @@ router.post('/api/finance/accounts', authenticateToken, authorizeRole(['admin', 
     });
 });
 
-router.get('/api/finance/accounts', authenticateToken, (req, res) => {
+router.get('/api/finance/accounts', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     db.all(`SELECT * FROM chart_of_accounts ORDER BY type, name`, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
     });
 });
 
-router.put('/api/finance/accounts/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.put('/api/finance/accounts/:id', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const { name, type } = req.body;
     const safeName = typeof name === 'string' ? name.trim() : '';
 
@@ -508,7 +510,7 @@ router.put('/api/finance/accounts/:id', authenticateToken, authorizeRole(['admin
     );
 });
 
-router.delete('/api/finance/accounts/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.delete('/api/finance/accounts/:id', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     db.serialize(() => {
         db.run('BEGIN TRANSACTION');
         db.run(`UPDATE transactions SET chart_of_account_id = NULL WHERE chart_of_account_id = ?`, [req.params.id], (updateErr) => {
@@ -537,7 +539,7 @@ router.delete('/api/finance/accounts/:id', authenticateToken, authorizeRole(['ad
 // ==========================================
 // 2. CENTROS DE CUSTOS (Produção, Comercial...)
 // ==========================================
-router.post('/api/finance/cost-centers', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/finance/cost-centers', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const { name } = req.body;
     db.run(`INSERT INTO cost_centers (name) VALUES (?)`, [name], function(err) {
         if (err) return res.status(500).json({ error: err.message });
@@ -545,7 +547,7 @@ router.post('/api/finance/cost-centers', authenticateToken, authorizeRole(['admi
     });
 });
 
-router.get('/api/finance/cost-centers', authenticateToken, (req, res) => {
+router.get('/api/finance/cost-centers', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     db.all(`SELECT * FROM cost_centers ORDER BY name`, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
@@ -555,7 +557,7 @@ router.get('/api/finance/cost-centers', authenticateToken, (req, res) => {
 // ==========================================
 // 3. TRANSAÇÕES (Contas a Pagar e Receber)
 // ==========================================
-router.post('/api/finance/transactions', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/finance/transactions', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const { description, type, status, amount, due_date, payment_date, payment_method, order_id, cost_center_id, chart_of_account_id } = req.body;
 
     db.run(`
@@ -572,7 +574,7 @@ router.post('/api/finance/transactions', authenticateToken, authorizeRole(['admi
     });
 });
 
-router.get('/api/finance/transactions', authenticateToken, (req, res) => {
+router.get('/api/finance/transactions', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const { type, status, start_date, end_date } = req.query;
     let sql = `
         SELECT t.*, COALESCE(t.payment_date, t.due_date) AS movement_date, c.name as cost_center_name, a.name as account_name
@@ -595,7 +597,7 @@ router.get('/api/finance/transactions', authenticateToken, (req, res) => {
     });
 });
 
-router.put('/api/finance/transactions/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.put('/api/finance/transactions/:id', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const {
         description,
         type,
@@ -652,7 +654,7 @@ router.put('/api/finance/transactions/:id', authenticateToken, authorizeRole(['a
     });
 });
 
-router.put('/api/finance/transactions/:id/pay', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.put('/api/finance/transactions/:id/pay', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const { payment_date, payment_method, paid_amount } = req.body;
 
     db.get(`SELECT * FROM transactions WHERE id = ?`, [req.params.id], (fetchErr, transaction) => {
@@ -740,7 +742,7 @@ router.put('/api/finance/transactions/:id/pay', authenticateToken, authorizeRole
     });
 });
 
-router.delete('/api/finance/transactions/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.delete('/api/finance/transactions/:id', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     db.get(`SELECT order_id FROM transactions WHERE id = ?`, [req.params.id], (fetchErr, transaction) => {
         if (fetchErr) return res.status(500).json({ error: fetchErr.message });
         if (!transaction) return res.status(404).json({ error: 'Transação não encontrada.' });
@@ -755,7 +757,7 @@ router.delete('/api/finance/transactions/:id', authenticateToken, authorizeRole(
     });
 });
 
-router.get('/api/finance/expense-report', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.get('/api/finance/expense-report', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const { start_date, end_date, account_id, status, payment_method, search } = req.query;
 
     let sql = `
@@ -895,7 +897,7 @@ router.get('/api/finance/expense-report', authenticateToken, authorizeRole(['adm
 // ==========================================
 // ⭐ 4. DRE & INDICADORES BI (Motor de Gráficos)
 // ==========================================
-router.get('/api/finance/dre', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
+router.get('/api/finance/dre', authenticateToken, authorizeRole(FINANCE_ROLES), async (req, res) => {
     const { start_date, end_date } = req.query;
 
     let dateFilter = '';

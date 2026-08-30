@@ -67,7 +67,7 @@ function insertProductConsumption(productId, consumptionArray, res, successMsg) 
 }
 
 // --- ROTAS DE TECIDOS ---
-router.post('/api/fabrics', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/fabrics', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     const { name, description } = req.body;
     if (!name || name.trim() === '') return res.status(400).json({ error: "Nome do tecido é obrigatório." });
     db.run(`INSERT INTO fabrics (name, description) VALUES (?, ?)`, [name.trim(), description || null], function (err) {
@@ -81,13 +81,13 @@ router.get('/api/fabrics', authenticateToken, (req, res) => {
         res.json({ fabrics: rows });
     });
 });
-router.put('/api/fabrics/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.put('/api/fabrics/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     db.run(`UPDATE fabrics SET name=?, description=? WHERE id=?`, [req.body.name.trim(), req.body.description || null, req.params.id], (err) => {
         if (err) return res.status(500).json({ error: "Erro ao atualizar tecido." });
         res.json({ message: "Tecido atualizado com sucesso!" });
     });
 });
-router.delete('/api/fabrics/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.delete('/api/fabrics/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     db.run(`DELETE FROM fabrics WHERE id=?`, [req.params.id], err => {
         if (err) return res.status(500).json({ error: "Erro ao excluir tecido." });
         res.json({ message: "Tecido excluído!" });
@@ -95,7 +95,7 @@ router.delete('/api/fabrics/:id', authenticateToken, authorizeRole(['admin', 'ge
 });
 
 // --- ROTAS DE ROLOS DE MALHA ---
-router.post('/api/fabric-rolls', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/fabric-rolls', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     const { descricao_tecido, tipo_tecido, largura_metros, metros_total, custo_total, fornecedor, data_entrada } = req.body;
     const metros = parseFloat(metros_total) || 0;
     const custo = parseFloat(custo_total) || 0;
@@ -106,7 +106,7 @@ router.post('/api/fabric-rolls', authenticateToken, authorizeRole(['admin', 'ger
             res.status(201).json({ message: 'Rolo de malha cadastrado!', id: this.lastID });
         });
 });
-router.get('/api/fabric-rolls', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.get('/api/fabric-rolls', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     const search = req.query.search || '';
     let sql = `SELECT * FROM fabric_rolls`;
     let params = [];
@@ -119,7 +119,7 @@ router.get('/api/fabric-rolls', authenticateToken, authorizeRole(['admin', 'gere
         res.json({ rolls: rows });
     });
 });
-router.delete('/api/fabric-rolls/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.delete('/api/fabric-rolls/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     db.run(`DELETE FROM fabric_rolls WHERE id = ?`, [req.params.id], (err) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: 'Rolo excluído.' });
@@ -127,7 +127,7 @@ router.delete('/api/fabric-rolls/:id', authenticateToken, authorizeRole(['admin'
 });
 
 // --- ROTAS DE PRODUTOS ---
-router.post('/api/products', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/products', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     let { name, type_peca, type_gola, printing_types_json, production_cost, sale_price, margem_lucro, supplier, production_days, observations, tecido_principal_id, consumption, category, size, color, current_stock, min_stock } = req.body;
     if (!name) return res.status(400).json({ error: "Nome do produto é obrigatório." });
     if (!type_peca && category) type_peca = category;
@@ -166,7 +166,7 @@ router.get('/api/products/:id', authenticateToken, (req, res) => {
     });
 });
 
-router.put('/api/products/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.put('/api/products/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     let { name, type_peca, type_gola, printing_types_json, production_cost, sale_price, margem_lucro, supplier, production_days, observations, tecido_principal_id, consumption, category, size, color, current_stock, min_stock } = req.body;
     if (!name) return res.status(400).json({ error: "Nome é obrigatório." });
     const normalizedPrintingTypes = parseStringArray(printing_types_json);
@@ -181,7 +181,7 @@ router.put('/api/products/:id', authenticateToken, authorizeRole(['admin', 'gere
         });
 });
 
-router.delete('/api/products/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.delete('/api/products/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     db.run(`DELETE FROM product_consumption WHERE product_id=?`, [req.params.id], () => {
         db.run(`DELETE FROM products WHERE id=?`, [req.params.id], err => {
             if (err) return res.status(500).json({ error: err.message });

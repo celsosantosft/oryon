@@ -1,24 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const multer = require('multer');
-const fs = require('fs');
 const crypto = require('crypto');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 const { appConfig, buildTrackingCode } = require('../config/appConfig');
-const { appPaths } = require('../config/paths');
+const { createLayoutUpload } = require('../utils/layoutUpload');
 db.run("ALTER TABLE quotes ADD COLUMN portal_token TEXT", () => {});
 db.run("ALTER TABLE orders ADD COLUMN portal_token TEXT", () => {});
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const dir = appPaths.uploadsDir;
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
-    },
-    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
-});
-const upload = multer({ storage });
+const upload = createLayoutUpload();
 
 function safeParseJSON(jsonString) {
     try {
@@ -484,7 +474,7 @@ function copyQuoteProductLinesToOrder(quoteId, orderId, callback) {
     });
 }
 
-router.post('/api/quotes', authenticateToken, authorizeRole(['admin', 'gerente', 'designer']), upload.any(), (req, res) => {
+router.post('/api/quotes', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes', 'designer']), upload.any(), (req, res) => {
     const {
         client_name,
         category,
@@ -563,7 +553,7 @@ router.post('/api/quotes', authenticateToken, authorizeRole(['admin', 'gerente',
     );
 });
 
-router.put('/api/quotes/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'designer']), upload.any(), (req, res) => {
+router.put('/api/quotes/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes', 'designer']), upload.any(), (req, res) => {
     const {
         client_name,
         category,
@@ -656,7 +646,7 @@ router.get('/api/quotes', authenticateToken, (req, res) => {
     });
 });
 
-router.delete('/api/quotes/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.delete('/api/quotes/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     db.run('DELETE FROM quote_items WHERE quote_id=?', [req.params.id], () => {
         db.run('DELETE FROM quote_history WHERE quote_id=?', [req.params.id], () => {
             db.run('DELETE FROM quote_product_lines WHERE quote_id=?', [req.params.id], () => {
@@ -669,7 +659,7 @@ router.delete('/api/quotes/:id', authenticateToken, authorizeRole(['admin', 'ger
     });
 });
 
-router.post('/api/quotes/:id/convert', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/quotes/:id/convert', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     db.get(`SELECT * FROM quotes WHERE id = ?`, [req.params.id], (err, quote) => {
         if (err || !quote) return res.status(404).json({ error: 'Orçamento não encontrado.' });
 
@@ -826,7 +816,7 @@ router.get('/api/quotes/:code/history', authenticateToken, (req, res) => {
     });
 });
 
-router.post('/api/quotes/:code/status', authenticateToken, authorizeRole(['admin', 'gerente', 'designer']), (req, res) => {
+router.post('/api/quotes/:code/status', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes', 'designer']), (req, res) => {
     const { new_status } = req.body;
     if (!QUOTE_STATUS_VALUES.has(new_status)) {
         return res.status(400).json({ error: 'Status de orçamento inválido.' });
@@ -842,7 +832,7 @@ router.post('/api/quotes/:code/status', authenticateToken, authorizeRole(['admin
     });
 });
 
-router.post('/api/quotes/:code/reset', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/quotes/:code/reset', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     db.get(`SELECT id FROM quotes WHERE tracking_code=?`, [req.params.code], (err, quote) => {
         if (err || !quote) return res.status(404).json({ message: 'Orçamento não encontrado.' });
 

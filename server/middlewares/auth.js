@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const db = require('../database');
 
 const DEV_JWT_SECRET_PATH = path.join(__dirname, '..', '.dev-jwt-secret');
 
@@ -42,8 +43,7 @@ function roleIsAllowed(userRole, allowedRoles) {
     const normalizedUserRole = normalizeRole(userRole);
     const normalizedAllowedRoles = allowedRoles.map(normalizeRole);
 
-    return normalizedAllowedRoles.includes(normalizedUserRole)
-        || (normalizedAllowedRoles.includes('gerente') && normalizedUserRole.startsWith('gerente_'));
+    return normalizedAllowedRoles.includes(normalizedUserRole);
 }
 
 // Middleware que verifica se o usuário está logado
@@ -53,8 +53,19 @@ function authenticateToken(req, res, next) {
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
         if (err) return res.status(403).json({ message: "Token inválido." });
-        req.user = user;
-        next();
+
+        db.get(`SELECT id, name, email, role FROM users WHERE id = ?`, [user.id], (dbErr, currentUser) => {
+            if (dbErr) return res.status(500).json({ message: "Erro ao validar usuário." });
+            if (!currentUser) return res.status(403).json({ message: "Token inválido." });
+
+            req.user = {
+                id: currentUser.id,
+                name: currentUser.name,
+                email: currentUser.email,
+                role: currentUser.role
+            };
+            next();
+        });
     });
 }
 
@@ -68,4 +79,4 @@ function authorizeRole(roles) {
     };
 }
 
-module.exports = { authenticateToken, authorizeRole, JWT_SECRET };
+module.exports = { authenticateToken, authorizeRole, JWT_SECRET, normalizeRole, roleIsAllowed };

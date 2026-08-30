@@ -181,7 +181,7 @@ async function reverterPedidoParaOrcamento({ orderId, userId }) {
 router.post(
     '/orders/:id/reverter-para-orcamento',
     authenticateToken,
-    authorizeRole(['admin', 'gerente']),
+    authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']),
     async (req, res) => {
         try {
             const result = await reverterPedidoParaOrcamento({

@@ -1,11 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const multer = require('multer');
-const fs = require('fs');
 const archiver = require('archiver');
 const crypto = require('crypto');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
+const { createLayoutUpload } = require('../utils/layoutUpload');
 const {
     EVOLUTION_API_KEY,
     EVOLUTION_INSTANCE,
@@ -41,15 +40,7 @@ if (!EVOLUTION_API_KEY) {
 
 const evolution = createEvolutionClient();
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const dir = appPaths.uploadsDir;
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
-    },
-    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
-});
-const upload = multer({ storage });
+const upload = createLayoutUpload();
 
 function safeParseJSON(jsonString) { try { if (!jsonString || jsonString === '[object Object]') return {}; return JSON.parse(jsonString); } catch (e) { return {}; } }
 function generateTrackingCode() { return buildTrackingCode(appConfig.orderPrefix); }
@@ -1064,7 +1055,7 @@ router.put('/api/design-requests/:id', authenticateToken, upload.single('layout_
     db.run(sql, params, err => { res.json({ message: "Atualizado com sucesso!" }); });
 });
 
-router.post('/api/orders/:code/convert-to-quote', authenticateToken, authorizeRole(['admin', 'gerente', 'designer']), (req, res) => {
+router.post('/api/orders/:code/convert-to-quote', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes', 'designer']), (req, res) => {
     db.get(`SELECT * FROM orders WHERE tracking_code=?`, [req.params.code], (err, order) => {
         if (!order) return res.status(404).json({ message: "Arte não encontrada." });
         const newQuoteCode = generateQuoteTrackingCode();
@@ -1140,7 +1131,7 @@ router.post('/api/orders/:code/convert-to-quote', authenticateToken, authorizeRo
     });
 });
 
-router.post('/api/orders', authenticateToken, authorizeRole(['admin', 'gerente', 'designer']), upload.any(), (req, res) => {
+router.post('/api/orders', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes', 'designer']), upload.any(), (req, res) => {
     const { client_name, category, amount_paid, delivery_date, status, discount, allowed_sizes, allowed_models } = req.body;
     const trackingCode = generateTrackingCode();
     const portalToken = generatePortalToken();
@@ -1196,7 +1187,7 @@ router.post('/api/orders', authenticateToken, authorizeRole(['admin', 'gerente',
     });
 });
 
-router.put('/api/orders/reorder', authenticateToken, authorizeRole(['admin', 'gerente', 'designer']), (req, res) => {
+router.put('/api/orders/reorder', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes', 'designer']), (req, res) => {
     const { orderedIds } = req.body;
 
     if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
@@ -1247,7 +1238,7 @@ router.put('/api/orders/reorder', authenticateToken, authorizeRole(['admin', 'ge
     });
 });
 
-router.put('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'designer']), upload.any(), (req, res) => {
+router.put('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes', 'designer']), upload.any(), (req, res) => {
     const { client_name, category, amount_paid, delivery_date, discount, allowed_sizes, allowed_models } = req.body;
     
     const sizesStr = typeof allowed_sizes === 'object' ? JSON.stringify(allowed_sizes) : allowed_sizes;
@@ -1318,7 +1309,7 @@ router.get('/api/orders', authenticateToken, (req, res) => {
     });
 });
 
-router.delete('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.delete('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     db.run('DELETE FROM order_history WHERE order_id=?', [req.params.id], () => {
         db.run('DELETE FROM transactions WHERE order_id=?', [req.params.id], () => { 
             db.run('DELETE FROM order_items WHERE order_id=?', [req.params.id], () => { 
@@ -1349,7 +1340,7 @@ router.get('/api/orders/upcoming', authenticateToken, (req, res) => {
     });
 });
 
-router.get('/api/portal-link/:code', authenticateToken, authorizeRole(['admin', 'gerente', 'designer']), (req, res) => {
+router.get('/api/portal-link/:code', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes', 'designer']), (req, res) => {
     findPortalRecordByCode(req.params.code, (err, record) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!record) return res.status(404).json({ error: 'Pedido ou orçamento não encontrado.' });
@@ -1391,7 +1382,7 @@ router.get('/api/orders/:code/history', authenticateToken, (req, res) => {
     });
 });
 
-router.post('/api/orders/:code/status', authenticateToken, authorizeRole(['admin', 'gerente', 'designer', 'corte']), (req, res) => {
+router.post('/api/orders/:code/status', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes', 'designer', 'corte']), (req, res) => {
     const { new_status } = req.body;
     if (!ORDER_STATUS_VALUES.has(new_status)) {
         return res.status(400).json({ error: 'Status de pedido inválido.' });
@@ -1421,7 +1412,7 @@ router.post('/api/orders/:code/status', authenticateToken, authorizeRole(['admin
     });
 });
 
-router.post('/api/orders/:code/reset', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/orders/:code/reset', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     db.get(`SELECT id FROM orders WHERE tracking_code=?`, [req.params.code], (err, order) => {
         if (err) return res.status(500).json({ message: err.message });
         if (!order) return res.status(404).json({ message: "Pedido não encontrado." });
@@ -1929,7 +1920,7 @@ router.post('/api/tracking/portal/:code/approve-art', (req, res) => {
     });
 });
 
-router.post('/api/orders/:id/unlock', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/orders/:id/unlock', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     db.run(`UPDATE orders SET is_locked_by_client = 0 WHERE id = ?`, [req.params.id], function(updateErr) {
         if (updateErr) return res.status(500).json({ error: updateErr.message });
         if (this.changes === 0) return res.status(404).json({ error: 'Pedido não encontrado.' });
@@ -1941,7 +1932,7 @@ router.post('/api/orders/:id/unlock', authenticateToken, authorizeRole(['admin',
     });
 });
 
-router.post('/api/quotes/:id/unlock', authenticateToken, authorizeRole(['admin', 'gerente']), (req, res) => {
+router.post('/api/quotes/:id/unlock', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
     db.run(`UPDATE quotes SET is_locked_by_client = 0 WHERE id = ?`, [req.params.id], function(updateErr) {
         if (updateErr) return res.status(500).json({ error: updateErr.message });
         if (this.changes === 0) return res.status(404).json({ error: 'Orçamento não encontrado.' });
