@@ -38,7 +38,12 @@ jobs:
         run: |
           npm ci --prefix server 2>&1 | tee /tmp/oryon-backend-install.log
           test ${PIPESTATUS[0]} -eq 0 || {
-            message="$(tail -80 /tmp/oryon-backend-install.log | perl -0777 -pe 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')"
+            message="$({
+              printf '%s\n' '--- first 40 lines ---'
+              head -40 /tmp/oryon-backend-install.log
+              printf '%s\n' '--- last 80 lines ---'
+              tail -80 /tmp/oryon-backend-install.log
+            } | perl -0777 -pe 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')"
             printf '::error file=server/package-lock.json,line=1::Backend npm install failed:%s\n' "$message"
             exit 1
           }
