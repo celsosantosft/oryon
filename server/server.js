@@ -4,6 +4,7 @@ const path = require('path');
 require('./config/env').loadEnv();
 const { appConfig } = require('./config/appConfig');
 const { appPaths } = require('./config/paths');
+const { applyHttpSecurity } = require('./middlewares/security');
 
 // Inicializa o Banco de Dados
 require('./database');
@@ -15,6 +16,7 @@ const corsOrigin = process.env.CORS_ORIGIN
     : '*';
 
 // --- CONFIGURA��O B�SICA ---
+applyHttpSecurity(app);
 app.use(cors({
     origin: corsOrigin,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
