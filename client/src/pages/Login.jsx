@@ -73,10 +73,6 @@ const Login = () => {
                 throw new Error('Resposta de login inválida.');
             }
 
-            // Debug: Ver no console o que veio do banco
-            console.log("Usuário vindo do banco:", user);
-            console.log("Cargo original:", user.role);
-
             // 2. CORRIGE O FORMATO DO CARGO
             let safeRole = user.role;
             const normalized = normalizeRole(user.role);
@@ -153,28 +149,34 @@ const Login = () => {
 
                 <form onSubmit={handleSubmit} style={styles.form}>
                     <div style={styles.inputGroup}>
-                        <label style={styles.label}>E-mail Corporativo</label>
+                        <label htmlFor="login-email" style={styles.label}>E-mail Corporativo</label>
                         <input 
+                            id="login-email"
+                            name="email"
                             type="email" 
                             value={email} 
                             onChange={(e) => setEmail(e.target.value)} 
                             style={getInputStyle('email')}
                             onFocus={() => setFocusedField('email')}
                             onBlur={() => setFocusedField(null)}
+                            autoComplete="username"
                             required 
                             placeholder="seu@email.com"
                         />
                     </div>
 
                     <div style={styles.inputGroup}>
-                        <label style={styles.label}>Senha</label>
+                        <label htmlFor="login-password" style={styles.label}>Senha</label>
                         <input 
+                            id="login-password"
+                            name="password"
                             type="password" 
                             value={password} 
                             onChange={(e) => setPassword(e.target.value)} 
                             style={getInputStyle('password')}
                             onFocus={() => setFocusedField('password')}
                             onBlur={() => setFocusedField(null)}
+                            autoComplete="current-password"
                             required 
                             placeholder="••••••••"
                         />
@@ -203,7 +205,7 @@ const Login = () => {
 const styles = {
     container: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, #091A2D 0%, #0D1F33 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', sans-serif", zIndex: 1 },
     glowEffect: { position: 'absolute', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(37,99,235,0.08) 0%, rgba(0,0,0,0) 70%)', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: -1, pointerEvents: 'none' },
-    card: { backgroundColor: '#ffffff', padding: '48px 40px', borderRadius: '16px', boxShadow: '0 20px 40px -5px rgba(0, 0, 0, 0.3), 0 10px 20px -5px rgba(0, 0, 0, 0.2)', width: '100%', maxWidth: '420px', boxSizing: 'border-box', position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'stretch' },
+    card: { backgroundColor: '#ffffff', padding: '44px 40px', borderRadius: '12px', border: '1px solid rgba(226, 232, 240, 0.9)', boxShadow: '0 18px 36px -16px rgba(0, 0, 0, 0.35), 0 8px 18px -14px rgba(0, 0, 0, 0.28)', width: '100%', maxWidth: '420px', boxSizing: 'border-box', position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'stretch' },
     logoHeader: { display: 'grid', placeItems: 'center', width: '100%', textAlign: 'center', marginBottom: '32px' },
     logoFrame: { width: '120px', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px auto' },
     logo: { display: 'block', width: '120px', height: '120px', maxWidth: '100%', objectFit: 'contain', objectPosition: 'center', margin: 0 },
