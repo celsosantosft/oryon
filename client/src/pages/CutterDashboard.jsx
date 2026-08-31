@@ -3,71 +3,6 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { buildCuttingFabricTabs } from '../utils/cuttingGrouping';
 
-const MOCK_PEDIDOS = [
-    {
-        id_pedido: 1051,
-        tracking_code: '#ATOS-1051',
-        cliente: 'Escola Alfa',
-        status: 'Corte Iniciado',
-        delivery_date: '2026-09-01',
-        priority: 'high',
-        tipo_producao: 'Sublimacao',
-        cor_tecido: 'Azul',
-        produtos: [
-            {
-                nome_produto: 'Camisa Tradicional',
-                tecido: 'Dryfit Premium Azul',
-                acabamentos: ['Gola V', '100% Sublimada'],
-                grade: [
-                    { tamanho: 'M', quantidade: 13 },
-                    { tamanho: 'G', quantidade: 5 }
-                ]
-            }
-        ]
-    },
-    {
-        id_pedido: 1052,
-        tracking_code: '#ATOS-1052',
-        cliente: 'Academia Beta',
-        status: 'Corte Iniciado',
-        delivery_date: '2026-09-03',
-        priority: 'normal',
-        tipo_producao: 'Sublimacao',
-        cor_tecido: 'Preto',
-        produtos: [
-            {
-                nome_produto: 'Camisa Raglan',
-                tecido: 'Dryfit Branco 140g',
-                acabamentos: ['Raglan', 'Gola Redonda'],
-                grade: [
-                    { tamanho: 'P', quantidade: 7 },
-                    { tamanho: 'M', quantidade: 3 }
-                ]
-            }
-        ]
-    },
-    {
-        id_pedido: 1053,
-        tracking_code: '#ATOS-1053',
-        cliente: 'Equipe Horizonte',
-        status: 'Corte Iniciado',
-        delivery_date: '2026-09-05',
-        priority: 'normal',
-        tipo_producao: 'Sublimacao',
-        cor_tecido: 'Branco',
-        produtos: [
-            {
-                nome_produto: 'Short',
-                tecido: 'Dryfit',
-                acabamentos: ['100% Sublimado'],
-                grade: [
-                    { tamanho: 'M', quantidade: 12 }
-                ]
-            }
-        ]
-    }
-];
-
 function formatDate(value) {
     if (!value) return 'Sem prazo';
     const parts = String(value).split('-');
@@ -255,11 +190,10 @@ function OrderDetails({ order, apiBaseUrl, onClose, onComplete, completing }) {
 
 export default function CutterDashboard() {
     const { token, API_BASE_URL } = useAuth();
-    const [orders, setOrders] = useState(MOCK_PEDIDOS);
+    const [orders, setOrders] = useState([]);
     const [historyOrders, setHistoryOrders] = useState([]);
     const [selectedFabricId, setSelectedFabricId] = useState('');
     const [selectedOrder, setSelectedOrder] = useState(null);
-    const [usingMock, setUsingMock] = useState(true);
     const [loading, setLoading] = useState(true);
     const [completingOrderId, setCompletingOrderId] = useState(null);
     const [notice, setNotice] = useState('');
@@ -278,13 +212,12 @@ export default function CutterDashboard() {
                 if (!isActive) return;
                 setOrders(Array.isArray(ordersResponse.data) ? ordersResponse.data : []);
                 setHistoryOrders(Array.isArray(historyResponse.data) ? historyResponse.data : []);
-                setUsingMock(false);
             } catch (error) {
                 if (!isActive) return;
                 console.error('Erro ao carregar pedidos do corte:', error);
-                setOrders(MOCK_PEDIDOS);
+                setOrders([]);
                 setHistoryOrders([]);
-                setUsingMock(true);
+                setNotice('Não foi possível carregar os pedidos reais do corte. Verifique a conexão com a API.');
             } finally {
                 if (isActive) setLoading(false);
             }
@@ -346,11 +279,6 @@ export default function CutterDashboard() {
                                 Escolha a malha em produção, confira as modelagens e conclua os pedidos cortados.
                             </p>
                         </div>
-                        {usingMock && !loading && (
-                            <span className="rounded-md bg-amber-100 px-3 py-2 text-xs font-black text-amber-800">
-                                API indisponível: modo demonstração
-                            </span>
-                        )}
                     </div>
                 </header>
 
