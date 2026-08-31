@@ -48,7 +48,7 @@ test('groups fabric variations into one fabric tab and separates modelings insid
     assert.equal(tabs.length, 1);
     assert.equal(tabs[0].label, 'Dryfit');
     assert.deepEqual(tabs[0].modelings.map((group) => group.label), ['Camisa', 'Camisa Raglan', 'Short']);
-    assert.deepEqual(tabs[0].modelings[0].gradeTotals, [{ tamanho: 'P', quantidade: 0 }, { tamanho: 'M', quantidade: 10 }, { tamanho: 'G', quantidade: 0 }]);
+    assert.deepEqual(tabs[0].modelings[0].gradeTotals, [{ tamanho: 'M', quantidade: 10 }]);
     assert.equal(tabs[0].modelings[1].orders[0].tracking_code, '#ATOS-2');
 });
 

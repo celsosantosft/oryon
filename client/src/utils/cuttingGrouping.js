@@ -75,7 +75,7 @@ function mapGradeTotals(map, sizesToShow) {
         sizesToShow.map((tamanho) => ({
             tamanho,
             quantidade: map.get(tamanho) || 0
-        }))
+        })).filter((item) => item.quantidade > 0)
     );
 }
 
