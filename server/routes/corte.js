@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 
-const ACTIVE_CUTTING_STATUSES = ['Criação de Arte', 'Novo', 'Arte Aprovada/Liberada', 'Corte Iniciado'];
+const ACTIVE_CUTTING_STATUSES = ['Arte Aprovada/Liberada', 'Corte Iniciado'];
 const HISTORICAL_CUTTING_STATUSES = ['Corte Concluido', 'Corte Concluído', 'Na Costura', 'Costura Iniciada'];
 const FINALIZED_CUTTING_STATUS = 'Costura Iniciada';
 const CUTTING_PART_TYPES = ['frente', 'costas', 'mangas'];

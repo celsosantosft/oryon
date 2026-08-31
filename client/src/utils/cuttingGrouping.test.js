@@ -51,3 +51,66 @@ test('groups fabric variations into one fabric tab and separates modelings insid
     assert.deepEqual(tabs[0].modelings[0].gradeTotals, [{ tamanho: 'P', quantidade: 0 }, { tamanho: 'M', quantidade: 10 }, { tamanho: 'G', quantidade: 0 }]);
     assert.equal(tabs[0].modelings[1].orders[0].tracking_code, '#ATOS-2');
 });
+
+test('creates only tabs for fabrics with real active orders', () => {
+    const tabs = buildCuttingFabricTabs([
+        {
+            id_pedido: 10,
+            tracking_code: '#ATOS-10',
+            cliente: 'Cliente Dryfit',
+            produtos: [
+                { nome_produto: 'Camisa', tecido: 'Dryfit com Elastano Azul', grade: { M: 2 } }
+            ]
+        },
+        {
+            id_pedido: 11,
+            tracking_code: '#ATOS-11',
+            cliente: 'Cliente Helanca',
+            produtos: [
+                { nome_produto: 'Regata', tecido: 'Helanca Light Branca', grade: { P: 4 } }
+            ]
+        }
+    ]);
+
+    assert.deepEqual(tabs.map((tab) => tab.label), ['Dryfit', 'Helanca']);
+});
+
+test('keeps each card tied to its real order id and sorts urgent then nearest deadline', () => {
+    const tabs = buildCuttingFabricTabs([
+        {
+            id_pedido: 21,
+            tracking_code: '#ATOS-21',
+            cliente: 'Normal distante',
+            delivery_date: '2026-09-20',
+            priority: 'normal',
+            produtos: [
+                { nome_produto: 'Camisa', tecido: 'Dryfit', grade: { M: 1 } }
+            ]
+        },
+        {
+            id_pedido: 22,
+            tracking_code: '#ATOS-22',
+            cliente: 'Urgente distante',
+            delivery_date: '2026-09-30',
+            priority: 'high',
+            produtos: [
+                { nome_produto: 'Camisa', tecido: 'Dryfit Premium', grade: { M: 1 } }
+            ]
+        },
+        {
+            id_pedido: 23,
+            tracking_code: '#ATOS-23',
+            cliente: 'Normal perto',
+            delivery_date: '2026-09-01',
+            priority: 'normal',
+            produtos: [
+                { nome_produto: 'Camisa', tecido: 'Dryfit Branco', grade: { M: 1 } }
+            ]
+        }
+    ]);
+
+    const orders = tabs[0].modelings[0].orders;
+
+    assert.deepEqual(orders.map((order) => order.id_pedido), [22, 23, 21]);
+    assert.deepEqual(orders.map((order) => order.tracking_code), ['#ATOS-22', '#ATOS-23', '#ATOS-21']);
+});
