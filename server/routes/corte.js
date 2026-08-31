@@ -79,9 +79,15 @@ router.get('/corte/pedidos', authenticateToken, authorizeRole(['admin', 'gerente
     db.all(`
         SELECT
             o.id AS id_pedido,
+            o.tracking_code,
             o.client_name AS cliente,
             o.status,
             o.cor AS cor_tecido,
+            o.delivery_date,
+            o.priority,
+            o.layout_path,
+            o.observacao,
+            o.url_referencia,
             o.tipo_estampa,
             o.category,
             o.product_type AS produto_pedido,
@@ -104,8 +110,14 @@ router.get('/corte/pedidos', authenticateToken, authorizeRole(['admin', 'gerente
             if (!pedidos.has(row.id_pedido)) {
                 pedidos.set(row.id_pedido, {
                     id_pedido: row.id_pedido,
+                    tracking_code: row.tracking_code,
                     cliente: row.cliente,
                     status: row.status,
+                    delivery_date: row.delivery_date,
+                    priority: row.priority || 'normal',
+                    layout_path: row.layout_path,
+                    observacao: row.observacao,
+                    url_referencia: row.url_referencia,
                     tipo_producao: 'Sublimacao',
                     cor_tecido: row.cor_tecido || 'Não Informado',
                     produtos: []
