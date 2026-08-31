@@ -47,6 +47,16 @@ function gradeTotal(grade = []) {
 }
 
 function GradePills({ grade, compact = false }) {
+    if (!grade || grade.length === 0) {
+        return (
+            <span className={`inline-flex rounded-md border border-amber-200 bg-amber-50 font-black text-amber-700 ${
+                compact ? 'px-2 py-1 text-xs' : 'px-2.5 py-1.5 text-sm'
+            }`}>
+                Grade não informada
+            </span>
+        );
+    }
+
     return (
         <div className="flex flex-wrap gap-1.5">
             {(grade || []).map(({ tamanho, quantidade }) => (
@@ -124,6 +134,7 @@ function OrderDetails({ order, apiBaseUrl, completing, onClose, onComplete }) {
 
     const imageUrl = order.layout_path ? `${apiBaseUrl}/uploads/${order.layout_path}` : '';
     const finishes = order.produto?.acabamentos || [];
+    const canCompleteCutting = order.can_concluir_corte !== false;
 
     return (
         <div className="fixed inset-0 z-[1000] flex items-end bg-slate-950/60 sm:items-center sm:p-6" onClick={onClose}>
@@ -164,6 +175,7 @@ function OrderDetails({ order, apiBaseUrl, completing, onClose, onComplete }) {
                             <p className="mt-1 font-black text-slate-950">{order.produto?.nome_produto || order.modelingLabel || '-'}</p>
                             <p className="text-sm font-bold text-slate-600">{order.produto?.tecido || order.fabricLabel || '-'}</p>
                             <p className="text-sm font-bold text-slate-600">Cor: {order.cor_tecido || 'Não informada'}</p>
+                            <p className="text-sm font-bold text-slate-600">Status: {order.status || '-'}</p>
                             {finishes.length > 0 && <p className="mt-1 text-xs font-bold text-slate-500">{finishes.join(' | ')}</p>}
                         </div>
 
@@ -204,11 +216,16 @@ function OrderDetails({ order, apiBaseUrl, completing, onClose, onComplete }) {
                 </div>
 
                 <div className="sticky bottom-0 border-t border-slate-200 bg-white p-4">
+                    {!canCompleteCutting && (
+                        <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
+                            Este pedido está em outra etapa da produção. Ele aparece porque é real, mas não pode ser concluído pelo corte neste status.
+                        </p>
+                    )}
                     <button
                         type="button"
-                        disabled={completing}
+                        disabled={completing || !canCompleteCutting}
                         onClick={() => onComplete(order)}
-                        className="h-12 w-full rounded-lg bg-green-600 px-4 text-base font-black uppercase text-white shadow-sm hover:bg-green-700 disabled:cursor-wait disabled:bg-green-400"
+                        className="h-12 w-full rounded-lg bg-green-600 px-4 text-base font-black uppercase text-white shadow-sm hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                     >
                         {completing ? 'Concluindo corte...' : 'Concluir corte deste pedido'}
                     </button>

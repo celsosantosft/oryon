@@ -3,7 +3,8 @@ const router = express.Router();
 const db = require('../database');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 
-const ACTIVE_CUTTING_STATUSES = ['Arte Aprovada/Liberada', 'Corte Iniciado'];
+const ACTIVE_PRODUCTION_EXCLUDED_STATUSES = ['Entregue/Concluído', 'Cancelado', 'Arte Arquivada'];
+const COMPLETABLE_CUTTING_STATUSES = ['Arte Aprovada/Liberada', 'Corte Iniciado'];
 const HISTORICAL_CUTTING_STATUSES = ['Corte Concluido', 'Corte Concluído', 'Na Costura', 'Costura Iniciada'];
 const FINALIZED_CUTTING_STATUS = 'Costura Iniciada';
 const CUTTING_PART_TYPES = ['frente', 'costas', 'mangas'];
@@ -77,8 +78,11 @@ function isCottonProduction(row) {
 
 router.get('/corte/pedidos', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_operacoes', 'corte']), (req, res) => {
     const isHistory = normalizeText(req.query.aba).trim() === 'historico';
-    const statuses = isHistory ? HISTORICAL_CUTTING_STATUSES : ACTIVE_CUTTING_STATUSES;
+    const statuses = isHistory ? HISTORICAL_CUTTING_STATUSES : ACTIVE_PRODUCTION_EXCLUDED_STATUSES;
     const statusPlaceholders = statuses.map(() => '?').join(', ');
+    const statusFilter = isHistory
+        ? `o.status IN (${statusPlaceholders})`
+        : `o.status NOT IN (${statusPlaceholders})`;
 
     db.all(`
         SELECT
@@ -122,7 +126,7 @@ router.get('/corte/pedidos', authenticateToken, authorizeRole(['admin', 'gerente
             )
             GROUP BY order_id
         ) submitted_sizes ON submitted_sizes.order_id = o.id
-        WHERE o.status IN (${statusPlaceholders})
+        WHERE ${statusFilter}
         ORDER BY o.id ASC, COALESCE(opl.sort_order, 0) ASC, COALESCE(opl.id, 0) ASC
     `, statuses, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -136,6 +140,7 @@ router.get('/corte/pedidos', authenticateToken, authorizeRole(['admin', 'gerente
                     tracking_code: row.tracking_code,
                     cliente: row.cliente,
                     status: row.status,
+                    can_concluir_corte: COMPLETABLE_CUTTING_STATUSES.includes(row.status),
                     delivery_date: row.delivery_date,
                     priority: 'normal',
                     layout_path: row.layout_path,
@@ -192,14 +197,14 @@ const archiveCuttingLot = (req, res) => {
         if (tableErr) return res.status(500).json({ error: tableErr.message });
 
         const orderPlaceholders = orderIds.map(() => '?').join(', ');
-        const statusPlaceholders = ACTIVE_CUTTING_STATUSES.map(() => '?').join(', ');
+        const statusPlaceholders = COMPLETABLE_CUTTING_STATUSES.map(() => '?').join(', ');
 
         db.all(`
             SELECT id
             FROM orders
             WHERE id IN (${orderPlaceholders})
               AND status IN (${statusPlaceholders})
-        `, [...orderIds, ...ACTIVE_CUTTING_STATUSES], (selectErr, activeOrders) => {
+        `, [...orderIds, ...COMPLETABLE_CUTTING_STATUSES], (selectErr, activeOrders) => {
             if (selectErr) return res.status(500).json({ error: selectErr.message });
             if (!activeOrders || activeOrders.length === 0) {
                 return res.status(404).json({ error: 'Nenhum pedido ativo encontrado para este lote.' });

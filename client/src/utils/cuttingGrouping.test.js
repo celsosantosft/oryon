@@ -114,3 +114,27 @@ test('keeps each card tied to its real order id and sorts urgent then nearest de
     assert.deepEqual(orders.map((order) => order.id_pedido), [22, 23, 21]);
     assert.deepEqual(orders.map((order) => order.tracking_code), ['#ATOS-22', '#ATOS-23', '#ATOS-21']);
 });
+
+test('keeps real production orders visible when grade is not informed yet', () => {
+    const tabs = buildCuttingFabricTabs([
+        {
+            id_pedido: 30,
+            tracking_code: '#ATOS-30',
+            cliente: 'Cliente Regata',
+            delivery_date: '2026-09-01',
+            produtos: [
+                {
+                    nome_produto: 'REGATA MACHÃO - GOLA V',
+                    tecido: 'Dryfit',
+                    grade: {}
+                }
+            ]
+        }
+    ]);
+
+    assert.equal(tabs.length, 1);
+    assert.equal(tabs[0].label, 'Dryfit');
+    assert.equal(tabs[0].modelings[0].label, 'Regata');
+    assert.equal(tabs[0].modelings[0].orders[0].id_pedido, 30);
+    assert.equal(tabs[0].modelings[0].orders[0].totalPieces, 0);
+});

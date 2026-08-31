@@ -87,7 +87,6 @@ export function buildCuttingFabricTabs(pedidos) {
             const baseFabric = normalizeBaseFabric(produto.tecido);
             const modeling = detectModeling(produto.nome_produto);
             const grade = normalizeGrade(produto.grade);
-            if (grade.length === 0) return;
 
             const fabricKey = normalizeCuttingKey(baseFabric);
             const modelingKey = normalizeCuttingKey(modeling);
