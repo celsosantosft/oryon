@@ -52,6 +52,10 @@ function extractSoldGrade(value) {
         .filter((item) => item.quantidade > 0);
 }
 
+function sumGrade(grade) {
+    return grade.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
+}
+
 function normalizeText(value) {
     return String(value || '')
         .normalize('NFD')
@@ -91,6 +95,8 @@ router.get('/corte/pedidos', authenticateToken, authorizeRole(['admin', 'gerente
             o.category,
             o.product_type AS produto_pedido,
             o.fabric_type AS tecido_pedido,
+            COALESCE(product_counts.product_count, 0) AS product_count,
+            submitted_sizes.sizes_json AS submitted_sizes_json,
             opl.production_label,
             COALESCE(opl.printing_types_json, '[]') AS acabamentos_json,
             COALESCE(NULLIF(opl.production_label, ''), opl.product_type, o.product_type) AS nome_produto,
@@ -98,6 +104,24 @@ router.get('/corte/pedidos', authenticateToken, authorizeRole(['admin', 'gerente
             COALESCE(opl.sizes_json, o.sizes_json, '{}') AS sizes_json
         FROM orders o
         LEFT JOIN order_product_lines opl ON opl.order_id = o.id
+        LEFT JOIN (
+            SELECT order_id, COUNT(*) AS product_count
+            FROM order_product_lines
+            GROUP BY order_id
+        ) product_counts ON product_counts.order_id = o.id
+        LEFT JOIN (
+            SELECT
+                order_id,
+                json_group_object(size, qty) AS sizes_json
+            FROM (
+                SELECT order_id, size, COUNT(*) AS qty
+                FROM order_items
+                WHERE (reference_type = 'order' OR reference_type IS NULL)
+                  AND COALESCE(size, '') <> ''
+                GROUP BY order_id, size
+            )
+            GROUP BY order_id
+        ) submitted_sizes ON submitted_sizes.order_id = o.id
         WHERE o.status IN (${statusPlaceholders})
         ORDER BY o.id ASC, COALESCE(opl.sort_order, 0) ASC, COALESCE(opl.id, 0) ASC
     `, statuses, (err, rows) => {
@@ -124,7 +148,12 @@ router.get('/corte/pedidos', authenticateToken, authorizeRole(['admin', 'gerente
             }
 
             const pedido = pedidos.get(row.id_pedido);
-            const grade = extractSoldGrade(row.sizes_json);
+            const productGrade = extractSoldGrade(row.sizes_json);
+            const submittedGrade = extractSoldGrade(row.submitted_sizes_json);
+            const canUseSubmittedGrade = Number(row.product_count || 0) <= 1;
+            const grade = sumGrade(productGrade) > 0
+                ? productGrade
+                : (canUseSubmittedGrade ? submittedGrade : []);
             const nomeProduto = String(row.nome_produto || '').trim();
             const modeloMigradoSemOrigem = !String(row.produto_pedido || '').trim() && nomeProduto === 'Produto';
 
