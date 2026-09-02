@@ -1,6 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { shouldCloseFromOverlayPointer } from '../utils/modalInteraction';
 
 const Modal = ({ isOpen, onClose, title, children }) => {
+    const overlayPointerDownTarget = useRef(null);
     
     // --- LÓGICA DO ESC E SCROLL ---
     useEffect(() => {
@@ -24,11 +26,25 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 
     if (!isOpen) return null;
 
+    const handleOverlayPointerDown = (event) => {
+        overlayPointerDownTarget.current = event.target;
+    };
+
+    const handleOverlayPointerUp = (event) => {
+        if (shouldCloseFromOverlayPointer(event.currentTarget, overlayPointerDownTarget.current, event.target)) {
+            onClose();
+        }
+        overlayPointerDownTarget.current = null;
+    };
+
     return (
-        // O clique no overlay (fundo escuro) fecha o modal
-        <div className="oryon-modal-overlay" style={styles.overlay} onClick={onClose}>
-            {/* O clique dentro do modal NÃO fecha (stopPropagation) */}
-            <div className="oryon-modal-card" style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div
+            className="oryon-modal-overlay"
+            style={styles.overlay}
+            onPointerDown={handleOverlayPointerDown}
+            onPointerUp={handleOverlayPointerUp}
+        >
+            <div className="oryon-modal-card" style={styles.modal}>
                 
                 {/* Cabeçalho */}
                 <div className="oryon-modal-header" style={styles.header}>
