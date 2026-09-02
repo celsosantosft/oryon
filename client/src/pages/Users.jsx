@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
+import Swal from 'sweetalert2';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 
@@ -9,6 +10,7 @@ import Modal from '../components/Modal';
 const Icons = {
     Plus: <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>,
     Edit: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>,
+    Trash: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m2 0H7m3 0V5a2 2 0 012-2h0a2 2 0 012 2v2"/></svg>,
 };
 
 // ============================================================================
@@ -26,7 +28,9 @@ const UserService = {
         delete payload.id;
         delete payload.email; // E-mail não pode ser editado
         return axios.put(`${api}/api/users/${id}`, payload, UserService.getHeaders(token));
-    }
+    },
+
+    deleteUser: (api, token, id) => axios.delete(`${api}/api/users/${id}`, UserService.getHeaders(token))
 };
 
 // ============================================================================
@@ -54,7 +58,7 @@ const useUsers = (API_BASE_URL, token) => {
 // ============================================================================
 // --- /components/users/UserFormModal.jsx ---
 // ============================================================================
-const UserFormModal = React.memo(({ isOpen, onClose, userToEdit, onSave, API_BASE_URL, token, showNotification }) => {
+const UserFormModal = React.memo(({ isOpen, onClose, userToEdit, onSave, API_BASE_URL, token }) => {
     const initialState = useMemo(() => ({ name: '', email: '', password: '', role: 'costura', salary: '', birth_date: '' }), []);
     const [formData, setFormData] = useState(initialState);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,16 +86,16 @@ const UserFormModal = React.memo(({ isOpen, onClose, userToEdit, onSave, API_BAS
         try {
             if (userToEdit) {
                 await UserService.updateUser(API_BASE_URL, token, userToEdit.id, formData);
-                showNotification(`Usuário ${formData.name} atualizado com sucesso!`);
+                Swal.fire({ title: 'Atualizado!', text: `Usuário ${formData.name} atualizado com sucesso.`, icon: 'success', showConfirmButton: false, timer: 2500 });
             } else {
                 await UserService.createUser(API_BASE_URL, token, formData);
-                showNotification('Usuário criado com sucesso!');
+                Swal.fire({ title: 'Criado!', text: 'Usuário criado com sucesso.', icon: 'success', showConfirmButton: false, timer: 2500 });
             }
             onSave();
             onClose();
         } catch (err) {
-            const errorMsg = err.response?.data?.message || `Erro ao ${userToEdit ? 'atualizar' : 'criar'} usuário`;
-            showNotification(errorMsg, true);
+            const errorMsg = err.response?.data?.error || err.response?.data?.message || `Erro ao ${userToEdit ? 'atualizar' : 'criar'} usuário`;
+            Swal.fire('Falha ao salvar', errorMsg, 'error');
         } finally {
             setIsSubmitting(false);
         }
@@ -161,7 +165,7 @@ const UserFormModal = React.memo(({ isOpen, onClose, userToEdit, onSave, API_BAS
 // ============================================================================
 // --- /components/users/UsersTable.jsx ---
 // ============================================================================
-const UsersTable = React.memo(({ users, onEditClick }) => {
+const UsersTable = React.memo(({ users, onEditClick, onDeleteClick }) => {
     const [hoveredRowId, setHoveredRowId] = useState(null);
 
     if (users.length === 0) {
@@ -204,6 +208,9 @@ const UsersTable = React.memo(({ users, onEditClick }) => {
                                 <button onClick={() => onEditClick(user)} style={styles.actionButton}>
                                     <span style={{ marginRight: '6px', display: 'flex' }}>{Icons.Edit}</span> Editar
                                 </button>
+                                <button onClick={() => onDeleteClick(user)} style={{ ...styles.actionButton, ...styles.deleteActionButton }}>
+                                    <span style={{ marginRight: '6px', display: 'flex' }}>{Icons.Trash}</span> Excluir
+                                </button>
                             </td>
                         </tr>
                     ))}
@@ -222,12 +229,6 @@ const Users = () => {
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [userToEdit, setUserToEdit] = useState(null);
-    const [notification, setNotification] = useState({ message: '', isError: false, visible: false });
-
-    const showNotification = useCallback((message, isError = false) => {
-        setNotification({ message, isError, visible: true });
-        setTimeout(() => setNotification(prev => ({ ...prev, visible: false })), 3000);
-    }, []);
 
     const handleOpenCreateModal = useCallback(() => {
         setUserToEdit(null);
@@ -239,16 +240,32 @@ const Users = () => {
         setIsModalOpen(true);
     }, []);
 
+    const handleDeleteClick = useCallback(async (user) => {
+        const result = await Swal.fire({
+            title: 'Confirmar exclusão?',
+            text: `Deseja realmente excluir o usuário ${user.name}?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#EF4444',
+            confirmButtonText: 'Sim, excluir',
+            cancelButtonText: 'Cancelar'
+        });
+
+        if (!result.isConfirmed) return;
+
+        try {
+            await UserService.deleteUser(API_BASE_URL, token, user.id);
+            await refreshUsers();
+            Swal.fire({ title: 'Excluído!', text: 'Usuário removido do sistema.', icon: 'success', showConfirmButton: false, timer: 2500 });
+        } catch (err) {
+            Swal.fire('Falha ao excluir', err.response?.data?.error || 'Não foi possível excluir este usuário.', 'error');
+        }
+    }, [API_BASE_URL, token, refreshUsers]);
+
     if (loading) return <p style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>Carregando equipe...</p>;
 
     return (
         <div style={styles.mainContainer}>
-            {notification.visible && (
-                <div style={{...styles.notification, backgroundColor: notification.isError ? '#ef4444' : '#10b981'}}>
-                    {notification.message}
-                </div>
-            )}
-
             {/* ⭐ AQUI ENTROU A RECEITA DO TÍTULO PERFEITO ⭐ */}
             <header style={styles.header}>
                 <div>
@@ -269,7 +286,7 @@ const Users = () => {
 
             {error && <p style={styles.error}>{error}</p>}
 
-            <UsersTable users={users} onEditClick={handleEditClick} />
+            <UsersTable users={users} onEditClick={handleEditClick} onDeleteClick={handleDeleteClick} />
 
             <UserFormModal 
                 isOpen={isModalOpen} 
@@ -278,7 +295,6 @@ const Users = () => {
                 onSave={refreshUsers}
                 API_BASE_URL={API_BASE_URL}
                 token={token}
-                showNotification={showNotification}
             />
         </div>
     );
@@ -292,7 +308,6 @@ const styles = {
     header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
     title: { color: '#0f172a', fontSize: '1.5rem', fontWeight: '800', margin: 0, letterSpacing: '-0.02em' },
     addButton: { backgroundColor: '#10b981', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', transition: 'background 0.2s', display: 'flex', alignItems: 'center', boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)' },
-    notification: { position: 'fixed', top: '20px', right: '20px', color: 'white', padding: '16px 24px', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 2000, fontWeight: '600', animation: 'fadeIn 0.3s ease-out' },
     tableContainer: { backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden', border: '1px solid #e2e8f0' },
     table: { width: '100%', borderCollapse: 'collapse' },
     th: { backgroundColor: '#f8fafc', padding: '16px 20px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', color: '#475569', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' },
@@ -301,6 +316,7 @@ const styles = {
     trHover: { backgroundColor: '#f8fafc' },
     roleTag: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: '700', border: '1px solid #bae6fd' },
     actionButton: { backgroundColor: 'white', color: '#475569', border: '1px solid #cbd5e1', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center' },
+    deleteActionButton: { color: '#dc2626', borderColor: '#fecaca', marginLeft: '8px' },
     error: { color: '#ef4444', marginBottom: '15px', padding: '12px', backgroundColor: '#fee2e2', borderRadius: '6px', fontWeight: '500', border: '1px solid #fca5a5' },
     form: { display: 'flex', flexDirection: 'column', gap: '20px' },
     formGroup: { display: 'flex', flexDirection: 'column', flex: 1, gap: '6px' },
