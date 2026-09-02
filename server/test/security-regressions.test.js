@@ -48,3 +48,9 @@ test('portal tracking requires the private portal token', () => {
     const validTokenResponse = makeResponse();
     assert.equal(requirePortalToken({ portal_token: 'secret-token' }, { query: { token: 'secret-token' }, headers: {}, body: {} }, validTokenResponse), true);
 });
+
+test('quote conversion keeps the numeric tracking code for the new order', () => {
+    const quotesRouter = require('../routes/quotes');
+
+    assert.equal(quotesRouter._test.buildOrderCodeFromQuoteCode('#ORC-7400'), '#ATOS-7400');
+});

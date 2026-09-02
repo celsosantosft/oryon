@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const crypto = require('crypto');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
-const { appConfig, buildTrackingCode } = require('../config/appConfig');
+const { appConfig, buildTrackingCode, normalizePrefix } = require('../config/appConfig');
 const { createLayoutUpload } = require('../utils/layoutUpload');
 db.run("ALTER TABLE quotes ADD COLUMN portal_token TEXT", () => {});
 db.run("ALTER TABLE orders ADD COLUMN portal_token TEXT", () => {});
@@ -41,6 +41,11 @@ function generatePortalToken() {
 
 function buildPortalPath(record) {
     return `/portal/${encodeURIComponent(record.tracking_code)}?token=${encodeURIComponent(record.portal_token || '')}`;
+}
+
+function buildOrderCodeFromQuoteCode(quoteCode) {
+    const suffix = String(quoteCode || '').trim().toUpperCase().match(/(\d+)$/)?.[1];
+    return suffix ? `#${normalizePrefix(appConfig.orderPrefix)}-${suffix}` : generateTrackingCode();
 }
 
 const QUOTE_STATUS_VALUES = new Set(['Em Análise', 'Enviado ao Cliente', 'Aprovado', 'Recusado', 'Cancelado']);
@@ -715,10 +720,20 @@ router.post('/api/quotes/:id/convert', authenticateToken, authorizeRole(['admin'
                 return;
             }
 
-            const newOrderCode = generateTrackingCode();
+            const newOrderCode = buildOrderCodeFromQuoteCode(quote.tracking_code);
 
             db.serialize(() => {
                 db.run('BEGIN TRANSACTION');
+
+                db.get(`SELECT id FROM orders WHERE tracking_code = ?`, [newOrderCode], (codeErr, codeOwner) => {
+                    if (codeErr) {
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: 'Erro ao verificar código do pedido.' });
+                    }
+                    if (codeOwner) {
+                        db.run('ROLLBACK');
+                        return res.status(409).json({ error: `Já existe um pedido com o código ${newOrderCode}.` });
+                    }
 
                 db.run(`
                     INSERT INTO orders (
@@ -782,6 +797,7 @@ router.post('/api/quotes/:id/convert', authenticateToken, authorizeRole(['admin'
                             });
                         });
                     });
+                });
                 });
             });
         });
@@ -863,5 +879,7 @@ router.post('/api/quotes/:code/reset', authenticateToken, authorizeRole(['admin'
         });
     });
 });
+
+router._test = { buildOrderCodeFromQuoteCode };
 
 module.exports = router;
