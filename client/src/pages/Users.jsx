@@ -277,7 +277,11 @@ const Users = () => {
             await refreshUsers();
             Swal.fire({ title: 'Excluído!', text: 'Usuário removido do sistema.', icon: 'success', showConfirmButton: false, timer: 2500 });
         } catch (err) {
-            Swal.fire('Falha ao excluir', err.response?.data?.error || 'Não foi possível excluir este usuário.', 'error');
+            const errorMessage = err.response?.data?.error || '';
+            const friendlyMessage = errorMessage.includes('SQLITE_CONSTRAINT')
+                ? 'Este usuário possui vínculos no histórico do sistema. Tente novamente após atualizar a página.'
+                : errorMessage || 'Não foi possível excluir este usuário.';
+            Swal.fire('Falha ao excluir', friendlyMessage, 'error');
         }
     }, [API_BASE_URL, token, refreshUsers]);
 

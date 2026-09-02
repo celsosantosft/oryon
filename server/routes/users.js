@@ -4,6 +4,7 @@ const db = require('../database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { authenticateToken, authorizeRole, JWT_SECRET } = require('../middlewares/auth');
+const { USER_REFERENCE_CLEANUP_STATEMENTS } = require('../utils/userDeletion');
 
 // --- LOGIN (Acesso Público) ---
 router.post('/login', (req, res) => {
@@ -41,14 +42,43 @@ router.post('/api/users', authenticateToken, authorizeRole(['admin']), async (re
 }); 
 
 router.delete('/api/users/:id', authenticateToken, authorizeRole(['admin']), (req, res) => {
-    if (parseInt(req.params.id, 10) === req.user.id) {
+    const userId = parseInt(req.params.id, 10);
+
+    if (userId === req.user.id) {
         return res.status(400).json({ error: 'Você não pode excluir seu próprio usuário.' });
     }
 
-    db.run('DELETE FROM users WHERE id=?', [req.params.id], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) return res.status(404).json({ error: 'Usuário não encontrado.' });
-        res.json({message:'Deletado'});
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION', (beginErr) => {
+            if (beginErr) return res.status(500).json({ error: beginErr.message });
+
+            const rollback = (error) => {
+                db.run('ROLLBACK', () => res.status(500).json({ error: error.message }));
+            };
+
+            const deleteUser = () => {
+                db.run('DELETE FROM users WHERE id=?', [userId], function(err) {
+                    if (err) return rollback(err);
+                    if (this.changes === 0) {
+                        return db.run('ROLLBACK', () => res.status(404).json({ error: 'Usuário não encontrado.' }));
+                    }
+                    db.run('COMMIT', (commitErr) => {
+                        if (commitErr) return rollback(commitErr);
+                        res.json({ message: 'Usuário excluído.' });
+                    });
+                });
+            };
+
+            const clearReference = (index = 0) => {
+                if (index >= USER_REFERENCE_CLEANUP_STATEMENTS.length) return deleteUser();
+                db.run(USER_REFERENCE_CLEANUP_STATEMENTS[index], [userId], (err) => {
+                    if (err) return rollback(err);
+                    clearReference(index + 1);
+                });
+            };
+
+            clearReference();
+        });
     });
 });
 
