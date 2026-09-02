@@ -196,7 +196,17 @@ const UsersTable = React.memo(({ users, onEditClick, onDeleteClick }) => {
                             <td style={styles.td}>
                                 <span style={{ color: '#94a3b8', fontWeight: '600', fontSize: '0.85rem' }}>#{user.id}</span>
                             </td>
-                            <td style={{ ...styles.td, fontWeight: '600', color: '#1e293b' }}>{user.name}</td>
+                            <td style={styles.td}>
+                                <button
+                                    type="button"
+                                    className="users-name-button"
+                                    onClick={() => onEditClick(user)}
+                                    style={styles.nameButton}
+                                    title="Editar usuário"
+                                >
+                                    {user.name}
+                                </button>
+                            </td>
                             <td style={styles.td}>{user.email}</td>
                             <td style={styles.td}>
                                 <span style={styles.roleTag}>{user.role}</span>
@@ -205,11 +215,25 @@ const UsersTable = React.memo(({ users, onEditClick, onDeleteClick }) => {
                                 {user.salary ? `R$ ${parseFloat(user.salary).toFixed(2)}` : <span style={{ color: '#cbd5e1' }}>-</span>}
                             </td>
                             <td style={{ ...styles.td, textAlign: 'right' }}>
-                                <button onClick={() => onEditClick(user)} style={styles.actionButton}>
-                                    <span style={{ marginRight: '6px', display: 'flex' }}>{Icons.Edit}</span> Editar
+                                <button
+                                    type="button"
+                                    className="users-icon-button"
+                                    onClick={() => onEditClick(user)}
+                                    style={styles.actionButton}
+                                    title="Editar usuário"
+                                    aria-label={`Editar usuário ${user.name}`}
+                                >
+                                    {Icons.Edit}
                                 </button>
-                                <button onClick={() => onDeleteClick(user)} style={{ ...styles.actionButton, ...styles.deleteActionButton }}>
-                                    <span style={{ marginRight: '6px', display: 'flex' }}>{Icons.Trash}</span> Excluir
+                                <button
+                                    type="button"
+                                    className="users-icon-button users-icon-button-danger"
+                                    onClick={() => onDeleteClick(user)}
+                                    style={{ ...styles.actionButton, ...styles.deleteActionButton }}
+                                    title="Excluir usuário"
+                                    aria-label={`Excluir usuário ${user.name}`}
+                                >
+                                    {Icons.Trash}
                                 </button>
                             </td>
                         </tr>
@@ -279,7 +303,7 @@ const Users = () => {
                         Gerencie permissões, salários e dados dos colaboradores.
                     </p>
                 </div>
-                <button onClick={handleOpenCreateModal} style={styles.addButton}>
+                <button type="button" onClick={handleOpenCreateModal} className="users-add-button" style={styles.addButton}>
                     <span style={{ marginRight: '6px', display: 'flex' }}>{Icons.Plus}</span> Novo Usuário
                 </button>
             </header>
@@ -296,6 +320,38 @@ const Users = () => {
                 API_BASE_URL={API_BASE_URL}
                 token={token}
             />
+            <style>{`
+                .users-add-button:hover {
+                    background-color: #1d4ed8 !important;
+                    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.24) !important;
+                    transform: translateY(-1px);
+                }
+
+                .users-add-button:active,
+                .users-icon-button:active,
+                .users-name-button:active {
+                    transform: translateY(0);
+                }
+
+                .users-name-button:hover {
+                    color: #2563eb !important;
+                    text-decoration: underline;
+                    text-underline-offset: 3px;
+                }
+
+                .users-icon-button:hover {
+                    border-color: #93c5fd !important;
+                    color: #2563eb !important;
+                    background-color: #eff6ff !important;
+                    transform: translateY(-1px);
+                }
+
+                .users-icon-button-danger:hover {
+                    border-color: #fca5a5 !important;
+                    color: #dc2626 !important;
+                    background-color: #fef2f2 !important;
+                }
+            `}</style>
         </div>
     );
 };
@@ -307,7 +363,7 @@ const styles = {
     mainContainer: { fontFamily: "'Inter', sans-serif", padding: '20px', maxWidth: '1400px', margin: '0 auto' },
     header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
     title: { color: '#0f172a', fontSize: '1.5rem', fontWeight: '800', margin: 0, letterSpacing: '-0.02em' },
-    addButton: { backgroundColor: '#10b981', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', transition: 'background 0.2s', display: 'flex', alignItems: 'center', boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)' },
+    addButton: { backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '11px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.18)' },
     tableContainer: { backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden', border: '1px solid #e2e8f0' },
     table: { width: '100%', borderCollapse: 'collapse' },
     th: { backgroundColor: '#f8fafc', padding: '16px 20px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', color: '#475569', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' },
@@ -315,7 +371,8 @@ const styles = {
     tr: { transition: 'background 0.15s ease' },
     trHover: { backgroundColor: '#f8fafc' },
     roleTag: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: '700', border: '1px solid #bae6fd' },
-    actionButton: { backgroundColor: 'white', color: '#475569', border: '1px solid #cbd5e1', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center' },
+    nameButton: { appearance: 'none', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: '#1e293b', fontWeight: '700', fontSize: '0.9rem', transition: 'all 0.2s ease', textAlign: 'left' },
+    actionButton: { width: '36px', height: '36px', backgroundColor: 'white', color: '#475569', border: '1px solid #cbd5e1', padding: 0, borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s ease', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
     deleteActionButton: { color: '#dc2626', borderColor: '#fecaca', marginLeft: '8px' },
     error: { color: '#ef4444', marginBottom: '15px', padding: '12px', backgroundColor: '#fee2e2', borderRadius: '6px', fontWeight: '500', border: '1px solid #fca5a5' },
     form: { display: 'flex', flexDirection: 'column', gap: '20px' },
