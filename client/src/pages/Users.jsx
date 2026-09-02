@@ -190,23 +190,14 @@ const UsersTable = React.memo(({ users, onEditClick, onDeleteClick }) => {
                         <tr 
                             key={user.id} 
                             style={{ ...styles.tr, ...(hoveredRowId === user.id ? styles.trHover : {}) }}
+                            onClick={() => onEditClick(user)}
                             onMouseEnter={() => setHoveredRowId(user.id)}
                             onMouseLeave={() => setHoveredRowId(null)}
                         >
                             <td style={styles.td}>
                                 <span style={{ color: '#94a3b8', fontWeight: '600', fontSize: '0.85rem' }}>#{user.id}</span>
                             </td>
-                            <td style={styles.td}>
-                                <button
-                                    type="button"
-                                    className="users-name-button"
-                                    onClick={() => onEditClick(user)}
-                                    style={styles.nameButton}
-                                    title="Editar usuário"
-                                >
-                                    {user.name}
-                                </button>
-                            </td>
+                            <td style={{ ...styles.td, fontWeight: '700', color: '#1e293b' }}>{user.name}</td>
                             <td style={styles.td}>{user.email}</td>
                             <td style={styles.td}>
                                 <span style={styles.roleTag}>{user.role}</span>
@@ -218,9 +209,11 @@ const UsersTable = React.memo(({ users, onEditClick, onDeleteClick }) => {
                                 <button
                                     type="button"
                                     className="users-icon-button"
-                                    onClick={() => onEditClick(user)}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        onEditClick(user);
+                                    }}
                                     style={styles.actionButton}
-                                    title="Editar usuário"
                                     aria-label={`Editar usuário ${user.name}`}
                                 >
                                     {Icons.Edit}
@@ -228,9 +221,11 @@ const UsersTable = React.memo(({ users, onEditClick, onDeleteClick }) => {
                                 <button
                                     type="button"
                                     className="users-icon-button users-icon-button-danger"
-                                    onClick={() => onDeleteClick(user)}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        onDeleteClick(user);
+                                    }}
                                     style={{ ...styles.actionButton, ...styles.deleteActionButton }}
-                                    title="Excluir usuário"
                                     aria-label={`Excluir usuário ${user.name}`}
                                 >
                                     {Icons.Trash}
@@ -328,15 +323,8 @@ const Users = () => {
                 }
 
                 .users-add-button:active,
-                .users-icon-button:active,
-                .users-name-button:active {
+                .users-icon-button:active {
                     transform: translateY(0);
-                }
-
-                .users-name-button:hover {
-                    color: #2563eb !important;
-                    text-decoration: underline;
-                    text-underline-offset: 3px;
                 }
 
                 .users-icon-button:hover {
@@ -368,10 +356,9 @@ const styles = {
     table: { width: '100%', borderCollapse: 'collapse' },
     th: { backgroundColor: '#f8fafc', padding: '16px 20px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', color: '#475569', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' },
     td: { padding: '16px 20px', borderBottom: '1px solid #e2e8f0', color: '#334155', fontSize: '0.9rem', verticalAlign: 'middle' },
-    tr: { transition: 'background 0.15s ease' },
+    tr: { transition: 'background 0.15s ease', cursor: 'pointer' },
     trHover: { backgroundColor: '#f8fafc' },
     roleTag: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: '700', border: '1px solid #bae6fd' },
-    nameButton: { appearance: 'none', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: '#1e293b', fontWeight: '700', fontSize: '0.9rem', transition: 'all 0.2s ease', textAlign: 'left' },
     actionButton: { width: '36px', height: '36px', backgroundColor: 'white', color: '#475569', border: '1px solid #cbd5e1', padding: 0, borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s ease', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
     deleteActionButton: { color: '#dc2626', borderColor: '#fecaca', marginLeft: '8px' },
     error: { color: '#ef4444', marginBottom: '15px', padding: '12px', backgroundColor: '#fee2e2', borderRadius: '6px', fontWeight: '500', border: '1px solid #fca5a5' },
