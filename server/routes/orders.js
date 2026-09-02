@@ -108,9 +108,6 @@ function tokenMatches(storedToken, providedToken) {
 function requirePortalToken(record, req, res) {
     const suppliedToken = getPortalToken(req);
 
-    // Mantem compatibilidade com o portal do cliente por numero do pedido.
-    if (!suppliedToken) return true;
-
     if (tokenMatches(record?.portal_token, suppliedToken)) return true;
 
     res.status(403).json({ error: 'Link do portal inválido ou incompleto.' });
@@ -1973,5 +1970,7 @@ router.get('/api/orders/:id/export-txt', authenticateToken, authorizeRole(['admi
         archive.finalize();
     });
 });
+
+router._security = { requirePortalToken, tokenMatches };
 
 module.exports = router;

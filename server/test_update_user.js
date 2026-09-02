@@ -1,8 +1,7 @@
 const axios = require('axios');
 
 // Token JWT do Admin Geral
-const ADMIN_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzY1MjE2NzY0LCJleHAiOjE3NjUzMDMxNjR9.VDpZAuZTaezzHKyWaCYaOGDPiMqvTeY2WR726SB07U8'; 
-
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const USER_ID_TO_UPDATE = 2; // ID da Maria Gerente
 const UPDATE_DATA = {
     salary: 5800.00, // Aumento de salário

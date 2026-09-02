@@ -1,8 +1,7 @@
 const axios = require('axios');
 
 // Token JWT do Admin Geral
-const ADMIN_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzY1MjE2NzY0LCJleHAiOjE3NjUzMDMxNjR9.VDpZAuZTaezzHKyWaCYaOGDPiMqvTeY2WR726SB07U8'; 
-
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 // Código de Rastreio do Pedido 1
 const TRACKING_CODE = '#ATOS-2774'; 
 const FINAL_STATUS = 'Entregue/Concluído'; // Status Final

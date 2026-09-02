@@ -15,6 +15,10 @@ const corsOrigin = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean)
     : '*';
 
+if (process.env.NODE_ENV === 'production' && corsOrigin === '*') {
+    throw new Error('CORS_ORIGIN é obrigatório em produção.');
+}
+
 // --- CONFIGURA��O B�SICA ---
 applyHttpSecurity(app);
 app.use(cors({

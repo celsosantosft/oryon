@@ -1,7 +1,6 @@
 const axios = require('axios');
 
-const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzY1MjE2NzY0LCJleHAiOjE3NjUzMDMxNjR9.VDpZAuZTaezzHKyWaCYaOGDPiMqvTeY2WR726SB07U8'; 
-
+const TOKEN = process.env.ADMIN_TOKEN || '';
 async function accessProtected() {
     try {
         const response = await axios.get('http://localhost:3001/api/protected', {

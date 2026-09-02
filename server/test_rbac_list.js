@@ -1,8 +1,7 @@
 const axios = require('axios');
 
 // O Token JWT do Admin (obtido no Passo 20/23)
-const ADMIN_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzY1MjE2NzY0LCJleHAiOjE3NjUzMDMxNjR9.VDpZAuZTaezzHKyWaCYaOGDPiMqvTeY2WR726SB07U8'; 
-
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 async function listUsers() {
     try {
         const response = await axios.get('http://localhost:3001/api/users', {

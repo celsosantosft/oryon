@@ -23,3 +23,28 @@ test('layout upload filter rejects active web content', () => {
     assert.equal(isAllowedLayoutUpload({ originalname: 'orcamento.html', mimetype: 'text/html' }), false);
     assert.equal(isAllowedLayoutUpload({ originalname: 'vetor.svg', mimetype: 'image/svg+xml' }), false);
 });
+
+test('portal tracking requires the private portal token', () => {
+    const ordersRouter = require('../routes/orders');
+    const { requirePortalToken } = ordersRouter._security;
+
+    const makeResponse = () => ({
+        statusCode: 200,
+        body: null,
+        status(code) {
+            this.statusCode = code;
+            return this;
+        },
+        json(payload) {
+            this.body = payload;
+            return this;
+        }
+    });
+
+    const missingTokenResponse = makeResponse();
+    assert.equal(requirePortalToken({ portal_token: 'secret-token' }, { query: {}, headers: {}, body: {} }, missingTokenResponse), false);
+    assert.equal(missingTokenResponse.statusCode, 403);
+
+    const validTokenResponse = makeResponse();
+    assert.equal(requirePortalToken({ portal_token: 'secret-token' }, { query: { token: 'secret-token' }, headers: {}, body: {} }, validTokenResponse), true);
+});
