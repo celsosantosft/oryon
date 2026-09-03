@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const archiver = require('archiver');
 const crypto = require('crypto');
+const { rateLimit } = require('express-rate-limit');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 const { createLayoutUpload } = require('../utils/layoutUpload');
 const {
@@ -46,6 +47,13 @@ function safeParseJSON(jsonString) { try { if (!jsonString || jsonString === '[o
 function generateTrackingCode() { return buildTrackingCode(appConfig.orderPrefix); }
 function generateQuoteTrackingCode() { return buildTrackingCode(appConfig.quotePrefix); }
 function generatePortalToken() { return crypto.randomBytes(24).toString('base64url'); }
+const portalLookupLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: 'Muitas tentativas. Tente novamente em alguns minutos.' }
+});
 
 const ORDER_STATUS_VALUES = new Set([
     'Criação de Arte',
@@ -91,6 +99,18 @@ function normalizePortalTrackingCode(value) {
     return normalizeTrackingCode(safeCode, appConfig.orderPrefix);
 }
 
+function getPortalCodeCandidates(code) {
+    const normalized = normalizePortalTrackingCode(code);
+    const candidates = [normalized];
+    const suffix = normalized.match(/(\d+)$/)?.[1];
+
+    if (suffix && normalized === `#${appConfig.orderPrefix}-${suffix}`) {
+        candidates.push(`#${appConfig.quotePrefix}-${suffix}`);
+    }
+
+    return [...new Set(candidates)];
+}
+
 function getPortalToken(req) {
     return String(req.query.token || req.headers['x-portal-token'] || req.body?.portal_token || '').trim();
 }
@@ -126,9 +146,10 @@ function ensurePortalToken(tableName, record, callback) {
 }
 
 function findPortalRecordByCode(code, callback) {
-    const safeCode = normalizePortalTrackingCode(code);
+    const candidates = getPortalCodeCandidates(code);
+    const placeholders = candidates.map(() => '?').join(',');
 
-    db.get(`SELECT id, tracking_code, portal_token FROM orders WHERE tracking_code = ?`, [safeCode], (orderErr, order) => {
+    db.get(`SELECT id, tracking_code, portal_token FROM orders WHERE tracking_code IN (${placeholders}) ORDER BY id DESC LIMIT 1`, candidates, (orderErr, order) => {
         if (orderErr) return callback(orderErr);
         if (order) {
             return ensurePortalToken('orders', order, (ensureErr, ensuredOrder) => {
@@ -136,7 +157,7 @@ function findPortalRecordByCode(code, callback) {
             });
         }
 
-        db.get(`SELECT id, tracking_code, portal_token FROM quotes WHERE tracking_code = ?`, [safeCode], (quoteErr, quote) => {
+        db.get(`SELECT id, tracking_code, portal_token FROM quotes WHERE tracking_code IN (${placeholders}) ORDER BY id DESC LIMIT 1`, candidates, (quoteErr, quote) => {
             if (quoteErr) return callback(quoteErr);
             ensurePortalToken('quotes', quote, (ensureErr, ensuredQuote) => {
                 callback(ensureErr, ensuredQuote ? { ...ensuredQuote, type: 'quote' } : null);
@@ -1350,6 +1371,19 @@ router.get('/api/portal-link/:code', authenticateToken, authorizeRole(['admin', 
     });
 });
 
+router.get('/api/tracking/portal-link/:code', portalLookupLimit, (req, res) => {
+    findPortalRecordByCode(req.params.code, (err, record) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!record) return res.status(404).json({ error: 'Pedido ou orçamento não encontrado.' });
+
+        res.json({
+            tracking_code: record.tracking_code,
+            type: record.type,
+            portal_path: buildPortalPath(record)
+        });
+    });
+});
+
 router.get('/api/orders/:code/history', authenticateToken, (req, res) => {
     db.get(`
         SELECT
@@ -1971,6 +2005,6 @@ router.get('/api/orders/:id/export-txt', authenticateToken, authorizeRole(['admi
     });
 });
 
-router._security = { requirePortalToken, tokenMatches };
+router._security = { requirePortalToken, tokenMatches, getPortalCodeCandidates };
 
 module.exports = router;

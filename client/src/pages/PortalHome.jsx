@@ -52,15 +52,17 @@ const PortalHome = () => {
 
         setIsSearching(true);
         try {
-            const response = await trackingService.getPortalOrder(safeCode, portalToken);
+            const response = portalToken
+                ? await trackingService.getPortalOrder(safeCode, portalToken)
+                : await trackingService.getPortalLink(safeCode);
             
             // ⭐ A CORREÇÃO: Validação rigorosa para forçar o erro se o pedido não existir
             if (!response || response.error || (response.data && response.data.error)) {
                 throw new Error("Pedido não encontrado");
             }
 
-            const encodedCode = encodeURIComponent(safeCode);
-            navigate(portalToken ? `/portal/${encodedCode}?token=${encodeURIComponent(portalToken)}` : `/portal/${encodedCode}`);
+            const encodedCode = encodeURIComponent(response.tracking_code || safeCode);
+            navigate(response.portal_path || `/portal/${encodedCode}?token=${encodeURIComponent(portalToken)}`);
         } catch {
             await showSearchError();
         } finally {

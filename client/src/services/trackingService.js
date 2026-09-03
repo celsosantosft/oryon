@@ -8,6 +8,11 @@ const portalParams = (token) => (
 );
 
 export const trackingService = {
+    getPortalLink: async (code) => {
+        const safeCode = encodeURIComponent(normalizeTrackingCode(code));
+        const response = await axios.get(`${API_BASE_URL}/api/tracking/portal-link/${safeCode}`);
+        return response.data;
+    },
     getPortalOrder: async (code, token) => {
         const safeCode = encodeURIComponent(normalizeTrackingCode(code));
         const response = await axios.get(`${API_BASE_URL}/api/tracking/portal/${safeCode}`, portalParams(token));

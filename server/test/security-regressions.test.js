@@ -49,6 +49,13 @@ test('portal tracking requires the private portal token', () => {
     assert.equal(requirePortalToken({ portal_token: 'secret-token' }, { query: { token: 'secret-token' }, headers: {}, body: {} }, validTokenResponse), true);
 });
 
+test('portal lookup tries order and quote codes when customer types only the number', () => {
+    const ordersRouter = require('../routes/orders');
+
+    assert.deepEqual(ordersRouter._security.getPortalCodeCandidates('6034'), ['#ATOS-6034', '#ORC-6034']);
+    assert.deepEqual(ordersRouter._security.getPortalCodeCandidates('#ORC-6034'), ['#ORC-6034']);
+});
+
 test('quote conversion keeps the numeric tracking code for the new order', () => {
     const quotesRouter = require('../routes/quotes');
 
