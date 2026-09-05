@@ -85,6 +85,20 @@ export default defineConfig(({ mode }) => {
         methods: ['GET', 'POST', 'PUT', 'DELETE'],
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('react') || id.includes('react-router-dom')) return 'react-vendor';
+            if (id.includes('recharts') || id.includes('d3-')) return 'charts-vendor';
+            if (id.includes('sweetalert2')) return 'alerts-vendor';
+            if (id.includes('axios') || id.includes('browser-image-compression')) return 'utils-vendor';
+            return undefined;
+          },
+        },
+      },
+    },
     base: '/',
   };
 });
