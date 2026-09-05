@@ -517,9 +517,14 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
 
     const [orderData, setOrderData] = useState(initialState);
     const [productLines, setProductLines] = useState([createProductLineDraft()]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const submitLockRef = useRef(false);
 
     useEffect(() => {
         if (!isOpen) return;
+
+        submitLockRef.current = false;
+        setIsSubmitting(false);
 
         if (isEditMode) {
             const preparedLines = Array.isArray(orderToEdit.product_lines) && orderToEdit.product_lines.length > 0
@@ -661,6 +666,7 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
 
     const handleSubmit = async (event) => {
         event.preventDefault();
+        if (submitLockRef.current) return;
 
         const serializedLines = productLines.map((line) => serializeLineForApi(line, auxData.dbProducts, auxData.dbFabrics));
         const hasInvalidLine = serializedLines.some((line) => !String(line.product_type || '').trim());
@@ -671,6 +677,8 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
         }
 
         try {
+            submitLockRef.current = true;
+            setIsSubmitting(true);
             const formData = new FormData();
             const normalizedDiscount = normalizeMoneyValue(orderData.discount);
             const normalizedAmountPaid = normalizeMoneyValue(orderData.amount_paid);
@@ -715,6 +723,8 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
             onRefresh();
             onClose();
         } catch (error) {
+            submitLockRef.current = false;
+            setIsSubmitting(false);
             Swal.fire('Falha ao salvar', error.response?.data?.error || 'Verifique os dados preenchidos e tente novamente.', 'error');
         }
     };
@@ -788,8 +798,8 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minHeight: '175px', flex: 1, minWidth: '250px', maxWidth: '350px' }}>
-                        <button type="submit" className="premium-btn" style={{ ...styles.submitButton, width: '100%', padding: '16px', fontSize: '1.05rem', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}>
-                            {isEditMode ? 'Salvar Alterações e Lançar' : 'Salvar Pedido'}
+                        <button type="submit" className="premium-btn" disabled={isSubmitting} style={{ ...styles.submitButton, width: '100%', padding: '16px', fontSize: '1.05rem', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', opacity: isSubmitting ? 0.75 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
+                            {isSubmitting ? 'Salvando...' : (isEditMode ? 'Salvar Alterações e Lançar' : 'Salvar Pedido')}
                         </button>
                     </div>
                 </div>
