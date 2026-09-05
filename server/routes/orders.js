@@ -691,6 +691,12 @@ function syncFinanceWithOrder(orderId, callback = () => {}) {
     });
 }
 
+function syncFinanceAfterResponse(orderId) {
+    syncFinanceWithOrder(orderId, (syncErr) => {
+        if (syncErr) console.error('Erro ao sincronizar financeiro do pedido:', syncErr.message);
+    });
+}
+
 function buildSyncedAmountPaidExpression(orderAlias = 'orders') {
     return `COALESCE((
         SELECT SUM(tx.amount)
@@ -1196,10 +1202,8 @@ router.post('/api/orders', authenticateToken, authorizeRole(['admin', 'gerente',
                 saveOrderProductLines(orderId, productLines, (linesErr) => {
                     if (linesErr) return res.status(500).json({ error: linesErr.message });
                     db.run(`INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`, [orderId, status || 'Criação de Arte', req.user.id]);
-                    syncFinanceWithOrder(orderId, (syncErr) => {
-                        if (syncErr) return res.status(500).json({ error: syncErr.message });
-                        res.json({ message: "Pedido criado!", tracking_code: trackingCode, portal_path: buildPortalPath({ tracking_code: trackingCode, portal_token: portalToken }) });
-                    });
+                    res.json({ message: "Pedido criado!", tracking_code: trackingCode, portal_path: buildPortalPath({ tracking_code: trackingCode, portal_token: portalToken }) });
+                    syncFinanceAfterResponse(orderId);
                 });
             });
     });
@@ -1300,10 +1304,8 @@ router.put('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerent
             if (this.changes === 0) return res.status(404).json({ error: 'Pedido não encontrado.' });
             saveOrderProductLines(req.params.id, productLines, (linesErr) => {
                 if (linesErr) return res.status(500).json({ error: linesErr.message });
-                syncFinanceWithOrder(req.params.id, (syncErr) => {
-                    if (syncErr) return res.status(500).json({ error: syncErr.message });
-                    res.json({ message: "Pedido atualizado." });
-                });
+                res.json({ message: "Pedido atualizado." });
+                syncFinanceAfterResponse(req.params.id);
             });
         });
     });

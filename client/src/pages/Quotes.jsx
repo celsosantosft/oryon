@@ -700,11 +700,14 @@ const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, aux
             formData.append('cost_price', totalCost);
             formData.append('product_lines', JSON.stringify(serializedLines));
 
-            for (const line of productLines) {
-                if (line.layout_file) {
-                    formData.append(`layout_file_${line.line_key}`, await compressImageSafe(line.layout_file));
-                }
-            }
+            const compressedFiles = await Promise.all(productLines.map(async (line) => ({
+                lineKey: line.line_key,
+                file: line.layout_file ? await compressImageSafe(line.layout_file) : null
+            })));
+
+            compressedFiles.forEach(({ lineKey, file }) => {
+                if (file) formData.append(`layout_file_${lineKey}`, file);
+            });
 
             if (isEditMode) {
                 await QuoteService.updateQuote(API_BASE_URL, token, quoteData.id, formData);
