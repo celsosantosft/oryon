@@ -48,7 +48,20 @@ function buildOrderCodeFromQuoteCode(quoteCode) {
     return suffix ? `#${normalizePrefix(appConfig.orderPrefix)}-${suffix}` : generateTrackingCode();
 }
 
-const QUOTE_STATUS_VALUES = new Set(['Em Análise', 'Enviado ao Cliente', 'Aprovado', 'Recusado', 'Cancelado']);
+const QUOTE_CONVERTED_STATUS = 'Convertido em Pedido';
+const QUOTE_STATUS_VALUES = new Set(['Em Análise', 'Enviado ao Cliente', 'Aprovado', 'Recusado', 'Cancelado', QUOTE_CONVERTED_STATUS]);
+
+function shouldShowQuoteInList(quote) {
+    return quote?.status !== QUOTE_CONVERTED_STATUS;
+}
+
+function normalizeClientName(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function canAdoptOrderForQuote(order, quote) {
+    return !order?.quote_id && normalizeClientName(order?.client_name) === normalizeClientName(quote?.client_name);
+}
 
 function parseStringArray(value) {
     if (Array.isArray(value)) {
@@ -386,6 +399,7 @@ function syncQuoteDataToOrder(quote, orderId, callback) {
                 allowed_models = ?,
                 unit_price = ?,
                 unit_cost = ?,
+                quote_id = ?,
                 is_locked_by_client = CASE WHEN ? = 1 THEN 1 ELSE is_locked_by_client END
             WHERE id = ?
         `,
@@ -409,6 +423,7 @@ function syncQuoteDataToOrder(quote, orderId, callback) {
             quote.allowed_models || null,
             Number(quote.unit_price || 0),
             Number(quote.unit_cost || 0),
+            quote.id,
             quote.is_locked_by_client ? 1 : 0,
             orderId
         ],
@@ -640,10 +655,16 @@ router.put('/api/quotes/:id', authenticateToken, authorizeRole(['admin', 'gerent
 });
 
 router.get('/api/quotes', authenticateToken, (req, res) => {
-    db.all(`SELECT * FROM quotes ORDER BY created_at DESC`, [], (err, rows) => {
+    db.all(`
+        SELECT q.*
+        FROM quotes q
+        WHERE (q.status IS NULL OR q.status != ?)
+          AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.quote_id = q.id)
+        ORDER BY q.created_at DESC
+    `, [QUOTE_CONVERTED_STATUS], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({
-            quotes: (rows || []).map((row) => ({
+            quotes: (rows || []).filter(shouldShowQuoteInList).map((row) => ({
                 ...row,
                 sizes_json: safeParseJSON(row.sizes_json)
             }))
@@ -668,55 +689,59 @@ router.post('/api/quotes/:id/convert', authenticateToken, authorizeRole(['admin'
     db.get(`SELECT * FROM quotes WHERE id = ?`, [req.params.id], (err, quote) => {
         if (err || !quote) return res.status(404).json({ error: 'Orçamento não encontrado.' });
 
-        db.get(`SELECT id, tracking_code FROM orders WHERE quote_id = ? ORDER BY id DESC LIMIT 1`, [quote.id], (existingErr, existingOrder) => {
-            if (existingErr) return res.status(500).json({ error: 'Erro ao verificar pedido existente.' });
+        const syncExistingOrder = (order) => {
+            db.serialize(() => {
+                db.run('BEGIN TRANSACTION');
 
-            if (existingOrder) {
-                db.serialize(() => {
-                    db.run('BEGIN TRANSACTION');
+                syncQuoteDataToOrder(quote, order.id, (updateErr) => {
+                    if (updateErr) {
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: 'Erro ao atualizar o pedido existente.' });
+                    }
 
-                    syncQuoteDataToOrder(quote, existingOrder.id, (updateErr) => {
-                        if (updateErr) {
+                    copyQuoteItemsToOrder(quote.id, order.id, (copyItemsErr, copiedCount) => {
+                        if (copyItemsErr) {
                             db.run('ROLLBACK');
-                            return res.status(500).json({ error: 'Erro ao atualizar o pedido existente.' });
+                            return res.status(500).json({ error: 'Erro ao sincronizar a lista do orçamento.' });
                         }
 
-                        copyQuoteItemsToOrder(quote.id, existingOrder.id, (copyItemsErr, copiedCount) => {
-                            if (copyItemsErr) {
+                        copyQuoteProductLinesToOrder(quote.id, order.id, (copyLinesErr) => {
+                            if (copyLinesErr) {
                                 db.run('ROLLBACK');
-                                return res.status(500).json({ error: 'Erro ao sincronizar a lista do orçamento.' });
+                                return res.status(500).json({ error: 'Erro ao sincronizar os produtos do orçamento.' });
                             }
 
-                            copyQuoteProductLinesToOrder(quote.id, existingOrder.id, (copyLinesErr) => {
-                                if (copyLinesErr) {
-                                    db.run('ROLLBACK');
-                                    return res.status(500).json({ error: 'Erro ao sincronizar os produtos do orçamento.' });
-                                }
+                            db.run(`UPDATE quotes SET status = ? WHERE id = ?`, [QUOTE_CONVERTED_STATUS, quote.id]);
+                            db.run(
+                                `INSERT INTO quote_history (quote_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`,
+                                [quote.id, copiedCount > 0 ? `Pedido já existia; dados, produtos e lista sincronizados (${copiedCount} item(ns))` : 'Pedido já existia; dados e produtos sincronizados', req.user.id]
+                            );
+                            db.run(
+                                `INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`,
+                                [order.id, copiedCount > 0 ? `Pedido sincronizado com orçamento (${copiedCount} item(ns) atualizado(s))` : 'Pedido sincronizado com orçamento', req.user.id]
+                            );
 
-                                db.run(`UPDATE quotes SET status = 'Aprovado' WHERE id = ?`, [quote.id]);
-                                db.run(
-                                    `INSERT INTO quote_history (quote_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`,
-                                    [quote.id, copiedCount > 0 ? `Pedido já existia; dados, produtos e lista sincronizados (${copiedCount} item(ns))` : 'Pedido já existia; dados e produtos sincronizados', req.user.id]
-                                );
-                                db.run(
-                                    `INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`,
-                                    [existingOrder.id, copiedCount > 0 ? `Pedido sincronizado com orçamento (${copiedCount} item(ns) atualizado(s))` : 'Pedido sincronizado com orçamento', req.user.id]
-                                );
-
-                                db.run('COMMIT', (commitErr) => {
-                                    if (commitErr) return res.status(500).json({ error: 'Erro ao finalizar sincronização do pedido.' });
-                                    syncFinanceWithOrder(existingOrder.id);
-                                    return res.json({
-                                        message: 'Pedido existente sincronizado!',
-                                        tracking_code: existingOrder.tracking_code,
-                                        already_exists: true,
-                                        copied_items: copiedCount || 0
-                                    });
+                            db.run('COMMIT', (commitErr) => {
+                                if (commitErr) return res.status(500).json({ error: 'Erro ao finalizar sincronização do pedido.' });
+                                syncFinanceWithOrder(order.id);
+                                return res.json({
+                                    message: 'Pedido existente sincronizado!',
+                                    tracking_code: order.tracking_code,
+                                    already_exists: true,
+                                    copied_items: copiedCount || 0
                                 });
                             });
                         });
                     });
                 });
+            });
+        };
+
+        db.get(`SELECT id, tracking_code, quote_id, client_name FROM orders WHERE quote_id = ? ORDER BY id DESC LIMIT 1`, [quote.id], (existingErr, existingOrder) => {
+            if (existingErr) return res.status(500).json({ error: 'Erro ao verificar pedido existente.' });
+
+            if (existingOrder) {
+                syncExistingOrder(existingOrder);
                 return;
             }
 
@@ -725,13 +750,17 @@ router.post('/api/quotes/:id/convert', authenticateToken, authorizeRole(['admin'
             db.serialize(() => {
                 db.run('BEGIN TRANSACTION');
 
-                db.get(`SELECT id FROM orders WHERE tracking_code = ?`, [newOrderCode], (codeErr, codeOwner) => {
+                db.get(`SELECT id, tracking_code, quote_id, client_name FROM orders WHERE tracking_code = ?`, [newOrderCode], (codeErr, codeOwner) => {
                     if (codeErr) {
                         db.run('ROLLBACK');
                         return res.status(500).json({ error: 'Erro ao verificar código do pedido.' });
                     }
                     if (codeOwner) {
                         db.run('ROLLBACK');
+                        if (canAdoptOrderForQuote(codeOwner, quote)) {
+                            syncExistingOrder(codeOwner);
+                            return;
+                        }
                         return res.status(409).json({ error: `Já existe um pedido com o código ${newOrderCode}.` });
                     }
 
@@ -787,8 +816,8 @@ router.post('/api/quotes/:id/convert', authenticateToken, authorizeRole(['admin'
                             }
 
                             db.run(`INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`, [orderId, copiedCount > 0 ? `Pedido Gerado via Orçamento (${copiedCount} item(ns) importado(s))` : 'Pedido Gerado via Orçamento', req.user.id]);
-                            db.run(`UPDATE quotes SET status = 'Aprovado' WHERE id = ?`, [quote.id]);
-                            db.run(`INSERT INTO quote_history (quote_id, status_text, changed_by_user_id) VALUES (?, 'Aprovado e Convertido em Pedido', ?)`, [quote.id, req.user.id]);
+                            db.run(`UPDATE quotes SET status = ? WHERE id = ?`, [QUOTE_CONVERTED_STATUS, quote.id]);
+                            db.run(`INSERT INTO quote_history (quote_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`, [quote.id, QUOTE_CONVERTED_STATUS, req.user.id]);
                             db.run(`INSERT INTO notifications (target_role, title, message) VALUES (?, ?, ?)`, ['designer', 'Novo Pedido para Arte', `O orçamento aprovado de ${quote.client_name} entrou na fila.`]);
                             db.run('COMMIT', (commitErr) => {
                                 if (commitErr) return res.status(500).json({ error: 'Erro ao finalizar conversão.' });
@@ -880,6 +909,6 @@ router.post('/api/quotes/:code/reset', authenticateToken, authorizeRole(['admin'
     });
 });
 
-router._test = { buildOrderCodeFromQuoteCode };
+router._test = { buildOrderCodeFromQuoteCode, shouldShowQuoteInList, canAdoptOrderForQuote };
 
 module.exports = router;

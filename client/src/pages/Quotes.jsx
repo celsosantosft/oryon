@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 import { printOrder as printQuote } from '../utils/printUtils';
 import { compressImageSafe } from '../utils/helpers';
+import { getVisibleQuoteStatuses, isQuoteVisibleInBoard } from '../utils/quoteFilters';
 import {
     PRINTING_TYPE_PRESETS,
     buildProductionLabel,
@@ -1074,7 +1075,8 @@ const Quotes = () => {
     const location = useLocation();
     const { quotes, dbProducts, dbFabrics, dbClients, loading, error, refreshQuotes, quickAddClient, removeQuotes } = useQuotes(API_BASE_URL, token);
     
-    const [currentTab, setCurrentTab] = useState('active'); 
+    const statusTabs = useMemo(() => getVisibleQuoteStatuses(QUOTE_CONSTANTS.STATUS_OPTIONS), []);
+    const [currentTab, setCurrentTab] = useState(statusTabs[0] || 'Em Análise'); 
     const [filterStatus, setFilterStatus] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [startDate, setStartDate] = useState('');
@@ -1114,9 +1116,8 @@ const Quotes = () => {
 
     const filteredQuotes = useMemo(() => {
         return quotes.filter(o => {
-            const isDone = o.status === 'Aprovado' || o.status === 'Recusado' || o.status === 'Cancelado';
-            if (currentTab === 'active' && isDone) return false;
-            if (currentTab === 'history' && !isDone) return false;
+            if (!isQuoteVisibleInBoard(o)) return false;
+            if (currentTab && o.status !== currentTab) return false;
             if (filterStatus && o.status !== filterStatus) return false;
             const searchLower = searchTerm.toLowerCase();
             if (searchTerm && !o.client_name.toLowerCase().includes(searchLower) && !o.tracking_code.toLowerCase().includes(searchLower)) return false;
@@ -1334,8 +1335,9 @@ const handleApproveToOrder = useCallback(async (quote) => {
 
             <div style={styles.controlsContainer}>
                 <div style={styles.tabsContainer}>
-                    <button onClick={() => { setCurrentTab('active'); clearFilters(); }} style={currentTab === 'active' && !filterStatus ? styles.tabActive : styles.tabInactive}>Em Aberto</button>
-                    <button onClick={() => { setCurrentTab('history'); clearFilters(); }} style={currentTab === 'history' ? styles.tabActive : styles.tabInactive}>Histórico</button>
+                    {statusTabs.map((status) => (
+                        <button key={status} onClick={() => { setCurrentTab(status); clearFilters(); }} style={currentTab === status && !filterStatus ? styles.tabActive : styles.tabInactive}>{status}</button>
+                    ))}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                     <div style={styles.searchBox}>
@@ -1344,7 +1346,7 @@ const handleApproveToOrder = useCallback(async (quote) => {
                     </div>
                     <div style={styles.selectBox}>
                         <span style={{ color: '#94a3b8' }}>{Icons.Filter}</span>
-                        <select aria-label="Filtrar por status" value={filterStatus || ''} onChange={(e) => setFilterStatus(e.target.value || null)} style={styles.selectInput}><option value="">Todos os Status</option>{QUOTE_CONSTANTS.STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                        <select aria-label="Filtrar por status" value={filterStatus || ''} onChange={(e) => { const status = e.target.value || null; setFilterStatus(status); if (status) setCurrentTab(status); }} style={styles.selectInput}><option value="">Todos os Status</option>{statusTabs.map(s => <option key={s} value={s}>{s}</option>)}</select>
                     </div>
                     <div style={styles.dateBox}>
                         <span style={{ color: '#64748b', fontSize: '0.8rem', marginRight: '5px', fontWeight: '500' }}>Previsão:</span>

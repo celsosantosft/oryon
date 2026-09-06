@@ -61,3 +61,20 @@ test('quote conversion keeps the numeric tracking code for the new order', () =>
 
     assert.equal(quotesRouter._test.buildOrderCodeFromQuoteCode('#ORC-7400'), '#ATOS-7400');
 });
+
+test('converted quotes are hidden from the operational quote list', () => {
+    const quotesRouter = require('../routes/quotes');
+
+    assert.equal(quotesRouter._test.shouldShowQuoteInList({ status: 'Em Análise' }), true);
+    assert.equal(quotesRouter._test.shouldShowQuoteInList({ status: 'Aprovado' }), true);
+    assert.equal(quotesRouter._test.shouldShowQuoteInList({ status: 'Convertido em Pedido' }), false);
+});
+
+test('quote conversion only adopts an unlinked same-client order code', () => {
+    const quotesRouter = require('../routes/quotes');
+    const quote = { id: 10, client_name: 'Centro Educacional' };
+
+    assert.equal(quotesRouter._test.canAdoptOrderForQuote({ quote_id: null, client_name: ' centro educacional ' }, quote), true);
+    assert.equal(quotesRouter._test.canAdoptOrderForQuote({ quote_id: null, client_name: 'Outro Cliente' }, quote), false);
+    assert.equal(quotesRouter._test.canAdoptOrderForQuote({ quote_id: 99, client_name: 'Centro Educacional' }, quote), false);
+});
