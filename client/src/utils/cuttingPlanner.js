@@ -12,6 +12,7 @@ export const SHIRT_MEASUREMENTS = {
     EXG: { front: [65, 83], back: [65, 85], sleeve: [48, 27.5] }
 };
 
+const PARTS = ['front', 'back', 'sleeve'];
 const PART_LABELS = {
     front: 'FRENTE',
     back: 'COSTAS',
@@ -29,117 +30,307 @@ function addTotal(map, size, quantity) {
     map.set(normalizedSize, (map.get(normalizedSize) || 0) + quantity);
 }
 
-function makeShirtMarkers(size) {
-    const measurement = SHIRT_MEASUREMENTS[size];
-    if (!measurement) return [];
+function makeGradeFromMap(map) {
+    return sortGradeItems(Array.from(map.entries()).map(([tamanho, quantidade]) => ({ tamanho, quantidade })));
+}
 
-    return [
-        ['front', ...measurement.front],
-        ['back', ...measurement.back],
-        ['sleeve', ...measurement.sleeve],
-        ['sleeve', ...measurement.sleeve]
-    ].map(([part, width, height], index) => ({
-        id: `${size}-${part}-${index}`,
-        part,
-        label: PART_LABELS[part],
-        size,
-        width,
-        height,
-        rotated: false
-    }));
+function intersects(left, right) {
+    return !(
+        right.x >= left.x + left.width
+        || right.x + right.width <= left.x
+        || right.y >= left.y + left.height
+        || right.y + right.height <= left.y
+    );
+}
+
+function isContained(inner, outer) {
+    return inner.x >= outer.x
+        && inner.y >= outer.y
+        && inner.x + inner.width <= outer.x + outer.width
+        && inner.y + inner.height <= outer.y + outer.height;
+}
+
+function splitFreeRectangle(free, used) {
+    if (!intersects(free, used)) return [free];
+
+    const split = [];
+    if (used.x > free.x) {
+        split.push({ x: free.x, y: free.y, width: used.x - free.x, height: free.height });
+    }
+    if (used.x + used.width < free.x + free.width) {
+        split.push({
+            x: used.x + used.width,
+            y: free.y,
+            width: free.x + free.width - used.x - used.width,
+            height: free.height
+        });
+    }
+    if (used.y > free.y) {
+        split.push({ x: free.x, y: free.y, width: free.width, height: used.y - free.y });
+    }
+    if (used.y + used.height < free.y + free.height) {
+        split.push({
+            x: free.x,
+            y: used.y + used.height,
+            width: free.width,
+            height: free.y + free.height - used.y - used.height
+        });
+    }
+    return split;
+}
+
+function pruneFreeRectangles(rectangles) {
+    return rectangles.filter((rectangle, index) => !rectangles.some((other, otherIndex) => (
+        index !== otherIndex && isContained(rectangle, other)
+    )));
 }
 
 function packMarkers(markers) {
-    const sorted = [...markers].sort((left, right) => right.height - left.height || right.width - left.width);
+    const sorted = [...markers].sort((left, right) => (
+        (right.width * right.height) - (left.width * left.height)
+        || right.height - left.height
+        || left.id.localeCompare(right.id)
+    ));
     const packed = [];
-    let x = 0;
-    let y = 0;
-    let rowHeight = 0;
+    let freeRectangles = [{ x: 0, y: 0, width: CUTTING_TABLE.width, height: CUTTING_TABLE.height }];
 
     for (const marker of sorted) {
-        if (marker.width > CUTTING_TABLE.width || marker.height > CUTTING_TABLE.height) return null;
+        let placement = null;
 
-        if (x + marker.width > CUTTING_TABLE.width) {
-            x = 0;
-            y += rowHeight;
-            rowHeight = 0;
+        for (const free of freeRectangles) {
+            if (marker.width > free.width || marker.height > free.height) continue;
+
+            const shortSide = Math.min(free.width - marker.width, free.height - marker.height);
+            const longSide = Math.max(free.width - marker.width, free.height - marker.height);
+            const candidate = { x: free.x, y: free.y, shortSide, longSide };
+
+            if (!placement
+                || candidate.shortSide < placement.shortSide
+                || (candidate.shortSide === placement.shortSide && candidate.longSide < placement.longSide)
+                || (candidate.shortSide === placement.shortSide && candidate.longSide === placement.longSide && candidate.y < placement.y)
+                || (candidate.shortSide === placement.shortSide && candidate.longSide === placement.longSide
+                    && candidate.y === placement.y && candidate.x < placement.x)) {
+                placement = candidate;
+            }
         }
 
-        if (y + marker.height > CUTTING_TABLE.height) return null;
+        if (!placement) return null;
 
-        packed.push({ ...marker, x, y });
-        x += marker.width;
-        rowHeight = Math.max(rowHeight, marker.height);
+        const used = { ...marker, x: placement.x, y: placement.y, rotated: false };
+        packed.push(used);
+        freeRectangles = pruneFreeRectangles(freeRectangles.flatMap((free) => splitFreeRectangle(free, used)));
     }
 
     return packed;
 }
 
-function makeGradeFromMap(map) {
-    return sortGradeItems(Array.from(map.entries()).map(([tamanho, quantidade]) => ({ tamanho, quantidade })));
+function makeMarkerCounts(sizes, requested, layers) {
+    return Object.fromEntries(sizes.map((size) => {
+        const quantity = requested.get(size);
+        return [size, {
+            front: Math.ceil(quantity / layers),
+            back: Math.ceil(quantity / layers),
+            sleeve: Math.ceil((quantity * 2) / layers)
+        }];
+    }));
 }
 
-function addSpread(spreads, layers, sizes) {
-    const markers = sizes.flatMap((size) => makeShirtMarkers(size));
-    const packed = packMarkers(markers);
-    if (!packed) return false;
-    const usedLength = Math.round(Math.max(...packed.map((marker) => marker.y + marker.height)) * 10) / 10;
+function makeMarkers(markerCounts) {
+    return Object.entries(markerCounts).flatMap(([size, counts]) => PARTS.flatMap((part) => {
+        const [width, height] = SHIRT_MEASUREMENTS[size][part];
+        return Array.from({ length: counts[part] }, (_, index) => ({
+            id: `${size}-${part}-${index}`,
+            part,
+            label: PART_LABELS[part],
+            size,
+            width,
+            height,
+            rotated: false
+        }));
+    }));
+}
 
-    const cutMap = new Map();
-    sizes.forEach((size) => addTotal(cutMap, size, layers));
+function countCandidate(markerCounts, requested, layers) {
+    const partTotals = [];
+    let surplusPieces = 0;
 
-    spreads.push({
-        index: spreads.length + 1,
-        layers,
-        sizes,
-        markers: packed,
-        usedLength,
-        cutTotals: makeGradeFromMap(cutMap),
-        table: CUTTING_TABLE
+    Object.entries(markerCounts).forEach(([size, counts]) => {
+        const quantity = requested.get(size);
+        const totals = {
+            tamanho: size,
+            front: counts.front * layers,
+            back: counts.back * layers,
+            sleeve: counts.sleeve * layers
+        };
+        surplusPieces += totals.front - quantity;
+        surplusPieces += totals.back - quantity;
+        surplusPieces += totals.sleeve - (quantity * 2);
+        partTotals.push(totals);
     });
-    return true;
+
+    return { partTotals, surplusPieces };
+}
+
+function compareSpreadCandidates(left, right) {
+    return left.surplusPieces - right.surplusPieces
+        || left.fabricUsage - right.fabricUsage
+        || left.markers.length - right.markers.length
+        || left.sizes.join('|').localeCompare(right.sizes.join('|'));
+}
+
+function buildBestSpread(sizes, requested) {
+    const maxLayers = Math.max(...sizes.map((size) => requested.get(size)));
+    let best = null;
+
+    for (let layers = 1; layers <= maxLayers; layers += 1) {
+        const markerCounts = makeMarkerCounts(sizes, requested, layers);
+        const markers = makeMarkers(markerCounts);
+        const markerArea = markers.reduce((sum, marker) => sum + (marker.width * marker.height), 0);
+        if (markerArea > CUTTING_TABLE.width * CUTTING_TABLE.height) continue;
+
+        const packed = packMarkers(markers);
+        if (!packed) continue;
+
+        const usedLength = Math.round(Math.max(...packed.map((marker) => marker.y + marker.height)) * 10) / 10;
+        const counted = countCandidate(markerCounts, requested, layers);
+        const candidate = {
+            layers,
+            sizes,
+            markerCounts,
+            markers: packed,
+            usedLength,
+            fabricUsage: layers * usedLength,
+            ...counted
+        };
+
+        if (!best || compareSpreadCandidates(candidate, best) < 0) best = candidate;
+    }
+
+    return best;
+}
+
+function comparePlanCandidates(left, right) {
+    return left.spreads.length - right.spreads.length
+        || left.surplusPieces - right.surplusPieces
+        || left.fabricUsage - right.fabricUsage;
+}
+
+function partitionSizes(sizes, requested) {
+    const spreadByMask = new Map();
+    const fullMask = (1 << sizes.length) - 1;
+
+    for (let mask = 1; mask <= fullMask; mask += 1) {
+        const subset = sizes.filter((_, index) => (mask & (1 << index)) !== 0);
+        const spread = buildBestSpread(subset, requested);
+        if (spread) spreadByMask.set(mask, spread);
+    }
+
+    const memo = new Map([[0, { spreads: [], surplusPieces: 0, fabricUsage: 0 }]]);
+    const solve = (mask) => {
+        if (memo.has(mask)) return memo.get(mask);
+
+        const firstSizeBit = mask & -mask;
+        let best = null;
+
+        for (let subsetMask = mask; subsetMask > 0; subsetMask = (subsetMask - 1) & mask) {
+            if ((subsetMask & firstSizeBit) === 0 || !spreadByMask.has(subsetMask)) continue;
+
+            const remainder = solve(mask ^ subsetMask);
+            if (!remainder) continue;
+
+            const spread = spreadByMask.get(subsetMask);
+            const candidate = {
+                spreads: [spread, ...remainder.spreads],
+                surplusPieces: spread.surplusPieces + remainder.surplusPieces,
+                fabricUsage: spread.fabricUsage + remainder.fabricUsage
+            };
+            if (!best || comparePlanCandidates(candidate, best) < 0) best = candidate;
+        }
+
+        memo.set(mask, best);
+        return best;
+    };
+
+    return solve(fullMask);
+}
+
+function aggregateProducedParts(spreads) {
+    const produced = new Map();
+
+    spreads.forEach((spread) => {
+        spread.partTotals.forEach(({ tamanho, front, back, sleeve }) => {
+            const current = produced.get(tamanho) || { front: 0, back: 0, sleeve: 0 };
+            current.front += front;
+            current.back += back;
+            current.sleeve += sleeve;
+            produced.set(tamanho, current);
+        });
+    });
+    return produced;
+}
+
+function makeSurplusParts(produced, requested) {
+    const surplus = new Map();
+
+    produced.forEach((parts, size) => {
+        const quantity = requested.get(size) || 0;
+        const extra = {
+            tamanho: size,
+            front: Math.max(0, parts.front - quantity),
+            back: Math.max(0, parts.back - quantity),
+            sleeve: Math.max(0, parts.sleeve - (quantity * 2))
+        };
+        if (extra.front || extra.back || extra.sleeve) surplus.set(size, extra);
+    });
+
+    return sortGradeItems(Array.from(surplus.values()));
 }
 
 export function buildCuttingPlan(orders) {
-    const remaining = new Map();
     const requested = new Map();
-
     (orders || []).forEach((order) => {
         (order.grade || []).forEach(({ tamanho, quantidade }) => {
-            addTotal(remaining, tamanho, Number(quantidade) || 0);
             addTotal(requested, tamanho, Number(quantidade) || 0);
         });
     });
 
-    const spreads = [];
-
-    while (Array.from(remaining.values()).some((quantity) => quantity > 0)) {
-        const activeSizes = makeGradeFromMap(remaining).filter((item) => item.quantidade > 0).map((item) => item.tamanho);
-        const layers = Math.min(...activeSizes.map((size) => remaining.get(size)));
-        let sizes = [...activeSizes];
-
-        while (sizes.length && !addSpread(spreads, layers, sizes)) {
-            sizes = sizes.slice(0, -1);
-        }
-
-        if (!sizes.length) break;
-        sizes.forEach((size) => remaining.set(size, remaining.get(size) - layers));
-    }
-
-    const cutMap = new Map();
-    spreads.forEach((spread) => {
-        spread.cutTotals.forEach(({ tamanho, quantidade }) => addTotal(cutMap, tamanho, quantidade));
-    });
-
-    const shortages = makeGradeFromMap(remaining).filter((item) => item.quantidade > 0);
+    const gradeTotals = makeGradeFromMap(requested);
+    const supportedSizes = gradeTotals
+        .map((item) => item.tamanho)
+        .filter((size) => Boolean(SHIRT_MEASUREMENTS[size]));
+    const unsupportedSizes = gradeTotals.filter((item) => !SHIRT_MEASUREMENTS[item.tamanho]);
+    const solution = supportedSizes.length ? partitionSizes(supportedSizes, requested) : null;
+    const plannedSpreads = solution?.spreads || [];
+    const spreads = [...plannedSpreads]
+        .sort((left, right) => right.layers - left.layers || left.sizes.join('|').localeCompare(right.sizes.join('|')))
+        .map((spread, index) => ({
+            ...spread,
+            index: index + 1,
+            cutTotals: sortGradeItems(spread.partTotals.map(({ tamanho, front, back, sleeve }) => ({
+                tamanho,
+                quantidade: Math.min(front, back, Math.floor(sleeve / 2))
+            }))),
+            table: CUTTING_TABLE
+        }));
+    const producedParts = aggregateProducedParts(spreads);
+    const plannedSizes = new Set(spreads.flatMap((spread) => spread.sizes));
+    const shortages = [
+        ...unsupportedSizes,
+        ...gradeTotals.filter((item) => SHIRT_MEASUREMENTS[item.tamanho] && !plannedSizes.has(item.tamanho))
+    ];
+    const fulfilled = new Map(gradeTotals
+        .filter((item) => !shortages.some((shortage) => shortage.tamanho === item.tamanho))
+        .map((item) => [item.tamanho, item.quantidade]));
 
     return {
         table: CUTTING_TABLE,
         orders: orders || [],
         totalPieces: Array.from(requested.values()).reduce((sum, quantity) => sum + quantity, 0),
-        gradeTotals: makeGradeFromMap(requested),
-        cutTotals: makeGradeFromMap(cutMap),
-        shortages,
+        gradeTotals,
+        cutTotals: makeGradeFromMap(fulfilled),
+        producedParts: sortGradeItems(Array.from(producedParts.entries()).map(([tamanho, parts]) => ({ tamanho, ...parts }))),
+        surplusParts: makeSurplusParts(producedParts, requested),
+        shortages: sortGradeItems(shortages),
         spreads
     };
 }

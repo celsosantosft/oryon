@@ -3,6 +3,50 @@ import assert from 'node:assert/strict';
 
 import { buildCuttingPlan } from './cuttingPlanner.js';
 
+test('plans the real PP6 P11 M18 G12 GG4 grade in two spreads', () => {
+    const plan = buildCuttingPlan([
+        {
+            grade: [
+                { tamanho: 'PP', quantidade: 6 },
+                { tamanho: 'P', quantidade: 11 },
+                { tamanho: 'M', quantidade: 18 },
+                { tamanho: 'G', quantidade: 12 },
+                { tamanho: 'GG', quantidade: 4 }
+            ]
+        }
+    ]);
+
+    assert.equal(plan.spreads.length, 2);
+    assert.equal(plan.spreads[0].layers, 12);
+    assert.deepEqual(plan.spreads[0].markerCounts, {
+        P: { front: 1, back: 1, sleeve: 2 },
+        M: { front: 2, back: 2, sleeve: 3 },
+        G: { front: 1, back: 1, sleeve: 2 }
+    });
+    assert.equal(plan.spreads[1].layers, 4);
+    assert.deepEqual(plan.spreads[1].markerCounts, {
+        PP: { front: 2, back: 2, sleeve: 3 },
+        GG: { front: 1, back: 1, sleeve: 2 }
+    });
+    assert.equal(plan.shortages.length, 0);
+    assert.deepEqual(plan.surplusParts, [
+        { tamanho: 'PP', front: 2, back: 2, sleeve: 0 },
+        { tamanho: 'P', front: 1, back: 1, sleeve: 2 },
+        { tamanho: 'M', front: 6, back: 6, sleeve: 0 }
+    ]);
+
+    for (const spread of plan.spreads) {
+        assert.ok(spread.usedLength <= 280);
+        assert.ok(spread.markers.every(({ x, y, width, height, rotated }) => (
+            rotated === false
+            && x >= 0
+            && y >= 0
+            && x + width <= 180
+            && y + height <= 280
+        )));
+    }
+});
+
 test('builds fabric layers for selected shirt sizes without rotating pieces', () => {
     const plan = buildCuttingPlan([
         {
@@ -68,6 +112,10 @@ test('reports only the fabric length occupied by the markers', () => {
         }
     ]);
 
-    assert.equal(plan.spreads[0].usedLength, 204.8);
+    const lastMarkerEdge = Math.round(Math.max(
+        ...plan.spreads[0].markers.map((marker) => marker.y + marker.height)
+    ) * 10) / 10;
+
+    assert.equal(plan.spreads[0].usedLength, lastMarkerEdge);
     assert.ok(plan.spreads[0].usedLength < plan.table.height);
 });
