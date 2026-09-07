@@ -83,6 +83,7 @@ function addSpread(spreads, layers, sizes) {
     const markers = sizes.flatMap((size) => makeShirtMarkers(size));
     const packed = packMarkers(markers);
     if (!packed) return false;
+    const usedLength = Math.round(Math.max(...packed.map((marker) => marker.y + marker.height)) * 10) / 10;
 
     const cutMap = new Map();
     sizes.forEach((size) => addTotal(cutMap, size, layers));
@@ -92,6 +93,7 @@ function addSpread(spreads, layers, sizes) {
         layers,
         sizes,
         markers: packed,
+        usedLength,
         cutTotals: makeGradeFromMap(cutMap),
         table: CUTTING_TABLE
     });

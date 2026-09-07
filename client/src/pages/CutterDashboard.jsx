@@ -177,8 +177,8 @@ function printCuttingPlan(plan, selectedOrders) {
 
     const rows = plan.spreads.map((spread) => `
         <section class="spread">
-            <header><strong>Enfesto ${spread.index}</strong><span>${spread.layers} camada${spread.layers === 1 ? '' : 's'} · mesa ${plan.table.width}cm x ${plan.table.height}cm · sem girar moldes</span></header>
-            <svg viewBox="0 0 ${plan.table.width} ${plan.table.height}">
+            <header><strong>Enfesto ${spread.index}</strong><span>${spread.layers} camada${spread.layers === 1 ? '' : 's'} · malha ${plan.table.width}cm x ${spread.usedLength}cm · sem girar moldes</span></header>
+            <svg viewBox="0 0 ${plan.table.width} ${spread.usedLength}">
                 ${spread.markers.map((marker) => `
                     <g>
                         <rect x="${marker.x}" y="${marker.y}" width="${marker.width}" height="${marker.height}" />

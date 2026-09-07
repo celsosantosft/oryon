@@ -56,3 +56,18 @@ test('splits markers into more spreads when the table does not fit every size to
     assert.ok(plan.spreads.length > 1);
     assert.equal(plan.shortages.length, 0);
 });
+
+test('reports only the fabric length occupied by the markers', () => {
+    const plan = buildCuttingPlan([
+        {
+            grade: [
+                { tamanho: 'P', quantidade: 1 },
+                { tamanho: 'M', quantidade: 1 },
+                { tamanho: 'G', quantidade: 1 }
+            ]
+        }
+    ]);
+
+    assert.equal(plan.spreads[0].usedLength, 204.8);
+    assert.ok(plan.spreads[0].usedLength < plan.table.height);
+});
