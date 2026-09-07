@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { Icons } from '../components/Icons';
 import { useAuth } from '../context/AuthContext';
 import { buildCuttingFabricTabs } from '../utils/cuttingGrouping';
 import { buildCuttingPlan } from '../utils/cuttingPlanner';
@@ -150,7 +151,7 @@ function OrderCard({ order, selected, onToggle, onOpen }) {
                             selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-transparent'
                         }`}
                     >
-                        {Icons.Check}
+                        <Icons.Check />
                     </span>
                 </div>
             </div>
@@ -167,45 +168,6 @@ function OrderCard({ order, selected, onToggle, onOpen }) {
                 <span className="text-xs font-bold text-slate-500">Prazo {formatDate(order.delivery_date)}</span>
             </div>
         </article>
-    );
-}
-
-function PrintableCuttingPlan({ plan }) {
-    if (!plan) return null;
-
-    const viewBoxWidth = plan.table.width;
-    const viewBoxHeight = plan.table.height;
-
-    return (
-        <div className="space-y-4">
-            {plan.spreads.map((spread) => (
-                <div key={spread.index} className="break-after-page rounded-lg border border-slate-300 bg-white p-4">
-                    <div className="mb-3 flex items-start justify-between gap-4">
-                        <div>
-                            <h2 className="text-xl font-black text-slate-950">Enfesto {spread.index}</h2>
-                            <p className="text-sm font-bold text-slate-600">{spread.layers} camada{spread.layers === 1 ? '' : 's'} de tecido</p>
-                        </div>
-                        <div className="text-right text-sm font-black text-slate-700">
-                            <p>Mesa {plan.table.width}cm x {plan.table.height}cm</p>
-                            <p>Sem girar moldes</p>
-                        </div>
-                    </div>
-                    <svg viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`} className="w-full rounded-md border border-slate-900 bg-white">
-                        {spread.markers.map((marker) => (
-                            <g key={marker.id}>
-                                <rect x={marker.x} y={marker.y} width={marker.width} height={marker.height} fill="white" stroke="#ef0000" strokeWidth="0.7" />
-                                <text x={marker.x + marker.width / 2} y={marker.y + marker.height / 2 - 5} textAnchor="middle" fontSize="8" fontWeight="900" fill="#ef0000">{marker.label}</text>
-                                <text x={marker.x + marker.width / 2} y={marker.y + marker.height / 2 + 8} textAnchor="middle" fontSize="12" fontWeight="900" fill="#ef0000">{marker.size}</text>
-                            </g>
-                        ))}
-                    </svg>
-                    <div className="mt-3">
-                        <p className="text-xs font-black uppercase tracking-widest text-slate-500">Resultado deste enfesto</p>
-                        <GradePills grade={spread.cutTotals} compact />
-                    </div>
-                </div>
-            ))}
-        </div>
     );
 }
 
@@ -650,9 +612,6 @@ export default function CutterDashboard() {
                                 Gerar PDF
                             </button>
                         </div>
-                    </div>
-                    <div className="mx-auto mt-3 hidden max-w-6xl md:block">
-                        <PrintableCuttingPlan plan={cuttingPlan} />
                     </div>
                 </aside>
             )}
