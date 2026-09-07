@@ -4,6 +4,7 @@ import { Icons } from '../components/Icons';
 import { useAuth } from '../context/AuthContext';
 import { buildCuttingFabricTabs } from '../utils/cuttingGrouping';
 import { buildCuttingPlan } from '../utils/cuttingPlanner';
+import { buildCuttingPlanPrintHtml } from '../utils/cuttingPlanPrint';
 
 function parseDate(value) {
     if (!value) return null;
@@ -50,15 +51,6 @@ function gradeTotal(grade = []) {
 
 function getOrderSelectionKey(order) {
     return `${order.id_pedido}-${order.modelingLabel || ''}-${order.fabricLabel || ''}-${order.produto?.nome_produto || ''}-${order.produto?.tecido || ''}`;
-}
-
-function escapeHtml(value) {
-    return String(value || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
 }
 
 function GradePills({ grade, compact = false }) {
@@ -175,55 +167,7 @@ function printCuttingPlan(plan, selectedOrders) {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return false;
 
-    const rows = plan.spreads.map((spread) => `
-        <section class="spread">
-            <header><strong>Enfesto ${spread.index}</strong><span>${spread.layers} camada${spread.layers === 1 ? '' : 's'} · malha ${plan.table.width}cm x ${spread.usedLength}cm · sem girar moldes</span></header>
-            <svg viewBox="0 0 ${plan.table.width} ${spread.usedLength}">
-                ${spread.markers.map((marker) => `
-                    <g>
-                        <rect x="${marker.x}" y="${marker.y}" width="${marker.width}" height="${marker.height}" />
-                        <text x="${marker.x + marker.width / 2}" y="${marker.y + marker.height / 2 - 5}" text-anchor="middle" class="part">${marker.label}</text>
-                        <text x="${marker.x + marker.width / 2}" y="${marker.y + marker.height / 2 + 9}" text-anchor="middle" class="size">${marker.size}</text>
-                    </g>
-                `).join('')}
-            </svg>
-            <p><b>Corta:</b> ${spread.cutTotals.map((item) => `${item.tamanho} ${item.quantidade}`).join(' · ')}</p>
-        </section>
-    `).join('');
-
-    printWindow.document.write(`
-        <!doctype html>
-        <html>
-        <head>
-            <title>Plano de Corte</title>
-            <style>
-                body { font-family: Arial, sans-serif; color: #0f172a; margin: 24px; }
-                h1 { margin: 0 0 6px; font-size: 24px; }
-                .muted { color: #475569; font-size: 13px; }
-                .summary { border: 1px solid #cbd5e1; padding: 12px; margin: 18px 0; }
-                .spread { page-break-after: always; margin-top: 18px; }
-                .spread header { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 10px; }
-                svg { width: 100%; border: 2px solid #0f172a; background: white; }
-                rect { fill: white; stroke: #ef0000; stroke-width: 0.7; }
-                text { fill: #ef0000; font-weight: 900; }
-                .part { font-size: 8px; }
-                .size { font-size: 13px; }
-                @media print { body { margin: 10mm; } }
-            </style>
-        </head>
-        <body>
-            <h1>Plano de Corte PCP</h1>
-            <div class="muted">Pedidos: ${escapeHtml(selectedOrders.map((order) => order.tracking_code || `#${order.id_pedido}`).join(', '))}</div>
-            <div class="summary">
-                <b>Total solicitado:</b> ${plan.gradeTotals.map((item) => `${item.tamanho} ${item.quantidade}`).join(' · ')}<br>
-                <b>Total planejado:</b> ${plan.cutTotals.map((item) => `${item.tamanho} ${item.quantidade}`).join(' · ')}<br>
-                <b>Observação:</b> cada camisa usa 1 frente, 1 costas e 2 mangas. Moldes sem rotação por causa do fio da malha.
-            </div>
-            ${rows}
-            <script>window.onload = () => { window.print(); };</script>
-        </body>
-        </html>
-    `);
+    printWindow.document.write(buildCuttingPlanPrintHtml(plan, selectedOrders));
     printWindow.document.close();
     return true;
 }
