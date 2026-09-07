@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { buildCuttingFabricTabs } from '../utils/cuttingGrouping';
+import { buildCuttingPlan } from '../utils/cuttingPlanner';
 
 function parseDate(value) {
     if (!value) return null;
@@ -44,6 +45,19 @@ function getOrderUrgency(order) {
 
 function gradeTotal(grade = []) {
     return grade.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
+}
+
+function getOrderSelectionKey(order) {
+    return `${order.id_pedido}-${order.modelingLabel || ''}-${order.fabricLabel || ''}-${order.produto?.nome_produto || ''}-${order.produto?.tecido || ''}`;
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function GradePills({ grade, compact = false }) {
@@ -92,13 +106,17 @@ function DeadlineBadge({ order }) {
     );
 }
 
-function OrderCard({ order, onOpen }) {
+function OrderCard({ order, selected, onToggle, onOpen }) {
     const urgent = Boolean(getOrderUrgency(order));
 
     return (
-        <button
-            type="button"
+        <article
+            role="button"
+            tabIndex={0}
             onClick={() => onOpen(order)}
+            onKeyDown={(event) => {
+                if (event.key === 'Enter') onOpen(order);
+            }}
             className={`w-full rounded-lg border bg-white p-4 text-left shadow-sm transition active:scale-[0.99] ${
                 urgent ? 'border-red-200 ring-1 ring-red-100' : 'border-slate-200'
             }`}
@@ -111,7 +129,30 @@ function OrderCard({ order, onOpen }) {
                     <h4 className="mt-0.5 truncate text-base font-black text-slate-950">{order.cliente || 'Cliente não informado'}</h4>
                     <p className="mt-1 text-sm font-bold text-slate-700">{order.modelingLabel || order.produto?.nome_produto || 'Produto não informado'}</p>
                 </div>
-                <DeadlineBadge order={order} />
+                <div className="flex shrink-0 items-start gap-2">
+                    <DeadlineBadge order={order} />
+                    <span
+                        role="checkbox"
+                        aria-checked={selected}
+                        tabIndex={0}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onToggle(order);
+                        }}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                onToggle(order);
+                            }
+                        }}
+                        className={`flex h-9 w-9 items-center justify-center rounded-md border text-base font-black ${
+                            selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-transparent'
+                        }`}
+                    >
+                        {Icons.Check}
+                    </span>
+                </div>
             </div>
 
             <div className="mb-3 grid grid-cols-2 gap-2 text-xs font-bold text-slate-500">
@@ -125,8 +166,104 @@ function OrderCard({ order, onOpen }) {
                 <span className="text-sm font-black text-slate-900">{order.totalPieces || gradeTotal(order.grade)} peças</span>
                 <span className="text-xs font-bold text-slate-500">Prazo {formatDate(order.delivery_date)}</span>
             </div>
-        </button>
+        </article>
     );
+}
+
+function PrintableCuttingPlan({ plan }) {
+    if (!plan) return null;
+
+    const viewBoxWidth = plan.table.width;
+    const viewBoxHeight = plan.table.height;
+
+    return (
+        <div className="space-y-4">
+            {plan.spreads.map((spread) => (
+                <div key={spread.index} className="break-after-page rounded-lg border border-slate-300 bg-white p-4">
+                    <div className="mb-3 flex items-start justify-between gap-4">
+                        <div>
+                            <h2 className="text-xl font-black text-slate-950">Enfesto {spread.index}</h2>
+                            <p className="text-sm font-bold text-slate-600">{spread.layers} camada{spread.layers === 1 ? '' : 's'} de tecido</p>
+                        </div>
+                        <div className="text-right text-sm font-black text-slate-700">
+                            <p>Mesa {plan.table.width}cm x {plan.table.height}cm</p>
+                            <p>Sem girar moldes</p>
+                        </div>
+                    </div>
+                    <svg viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`} className="w-full rounded-md border border-slate-900 bg-white">
+                        {spread.markers.map((marker) => (
+                            <g key={marker.id}>
+                                <rect x={marker.x} y={marker.y} width={marker.width} height={marker.height} fill="white" stroke="#ef0000" strokeWidth="0.7" />
+                                <text x={marker.x + marker.width / 2} y={marker.y + marker.height / 2 - 5} textAnchor="middle" fontSize="8" fontWeight="900" fill="#ef0000">{marker.label}</text>
+                                <text x={marker.x + marker.width / 2} y={marker.y + marker.height / 2 + 8} textAnchor="middle" fontSize="12" fontWeight="900" fill="#ef0000">{marker.size}</text>
+                            </g>
+                        ))}
+                    </svg>
+                    <div className="mt-3">
+                        <p className="text-xs font-black uppercase tracking-widest text-slate-500">Resultado deste enfesto</p>
+                        <GradePills grade={spread.cutTotals} compact />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function printCuttingPlan(plan, selectedOrders) {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return false;
+
+    const rows = plan.spreads.map((spread) => `
+        <section class="spread">
+            <header><strong>Enfesto ${spread.index}</strong><span>${spread.layers} camada${spread.layers === 1 ? '' : 's'} · mesa ${plan.table.width}cm x ${plan.table.height}cm · sem girar moldes</span></header>
+            <svg viewBox="0 0 ${plan.table.width} ${plan.table.height}">
+                ${spread.markers.map((marker) => `
+                    <g>
+                        <rect x="${marker.x}" y="${marker.y}" width="${marker.width}" height="${marker.height}" />
+                        <text x="${marker.x + marker.width / 2}" y="${marker.y + marker.height / 2 - 5}" text-anchor="middle" class="part">${marker.label}</text>
+                        <text x="${marker.x + marker.width / 2}" y="${marker.y + marker.height / 2 + 9}" text-anchor="middle" class="size">${marker.size}</text>
+                    </g>
+                `).join('')}
+            </svg>
+            <p><b>Corta:</b> ${spread.cutTotals.map((item) => `${item.tamanho} ${item.quantidade}`).join(' · ')}</p>
+        </section>
+    `).join('');
+
+    printWindow.document.write(`
+        <!doctype html>
+        <html>
+        <head>
+            <title>Plano de Corte</title>
+            <style>
+                body { font-family: Arial, sans-serif; color: #0f172a; margin: 24px; }
+                h1 { margin: 0 0 6px; font-size: 24px; }
+                .muted { color: #475569; font-size: 13px; }
+                .summary { border: 1px solid #cbd5e1; padding: 12px; margin: 18px 0; }
+                .spread { page-break-after: always; margin-top: 18px; }
+                .spread header { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 10px; }
+                svg { width: 100%; border: 2px solid #0f172a; background: white; }
+                rect { fill: white; stroke: #ef0000; stroke-width: 0.7; }
+                text { fill: #ef0000; font-weight: 900; }
+                .part { font-size: 8px; }
+                .size { font-size: 13px; }
+                @media print { body { margin: 10mm; } }
+            </style>
+        </head>
+        <body>
+            <h1>Plano de Corte PCP</h1>
+            <div class="muted">Pedidos: ${escapeHtml(selectedOrders.map((order) => order.tracking_code || `#${order.id_pedido}`).join(', '))}</div>
+            <div class="summary">
+                <b>Total solicitado:</b> ${plan.gradeTotals.map((item) => `${item.tamanho} ${item.quantidade}`).join(' · ')}<br>
+                <b>Total planejado:</b> ${plan.cutTotals.map((item) => `${item.tamanho} ${item.quantidade}`).join(' · ')}<br>
+                <b>Observação:</b> cada camisa usa 1 frente, 1 costas e 2 mangas. Moldes sem rotação por causa do fio da malha.
+            </div>
+            ${rows}
+            <script>window.onload = () => { window.print(); };</script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+    return true;
 }
 
 function OrderDetails({ order, apiBaseUrl, completing, onClose, onComplete }) {
@@ -244,6 +381,7 @@ export default function CutterDashboard() {
     const [loadError, setLoadError] = useState('');
     const [notice, setNotice] = useState('');
     const [completingOrderId, setCompletingOrderId] = useState(null);
+    const [selectedCuttingKeys, setSelectedCuttingKeys] = useState([]);
 
     useEffect(() => {
         let isActive = true;
@@ -295,6 +433,13 @@ export default function CutterDashboard() {
     const urgentOrders = fabricTabs.reduce((sum, tab) => sum + tab.modelings.reduce((groupSum, group) => (
         groupSum + group.orders.filter((order) => Boolean(getOrderUrgency(order))).length
     ), 0), 0);
+    const selectedCuttingOrders = useMemo(() => {
+        const keys = new Set(selectedCuttingKeys);
+        return fabricTabs.flatMap((tab) => tab.modelings.flatMap((group) => group.orders)).filter((order) => keys.has(getOrderSelectionKey(order)));
+    }, [fabricTabs, selectedCuttingKeys]);
+    const cuttingPlan = useMemo(() => (
+        selectedCuttingOrders.length ? buildCuttingPlan(selectedCuttingOrders) : null
+    ), [selectedCuttingOrders]);
 
     useEffect(() => {
         if (!activeFabric) {
@@ -324,6 +469,7 @@ export default function CutterDashboard() {
 
             setOrders((current) => current.filter((item) => item.id_pedido !== order.id_pedido));
             setSelectedOrder(null);
+            setSelectedCuttingKeys((current) => current.filter((key) => key !== getOrderSelectionKey(order)));
             setNotice(`Pedido ${label} concluído e enviado para Costura Iniciada.`);
         } catch (error) {
             console.error('Erro ao concluir pedido no corte:', error);
@@ -333,8 +479,35 @@ export default function CutterDashboard() {
         }
     };
 
+    const toggleCuttingSelection = (order) => {
+        const key = getOrderSelectionKey(order);
+        const alreadySelected = selectedCuttingKeys.includes(key);
+        const firstSelected = selectedCuttingOrders[0];
+        if (!alreadySelected && firstSelected && (
+            firstSelected.fabricLabel !== order.fabricLabel || firstSelected.modelingLabel !== order.modelingLabel
+        )) {
+            setNotice('Selecione apenas pedidos da mesma malha e modelagem para gerar um plano de corte.');
+            return;
+        }
+
+        setSelectedCuttingKeys((current) => (
+            current.includes(key) ? current.filter((item) => item !== key) : [...current, key]
+        ));
+        setNotice('');
+    };
+
+    const handlePrintCuttingPlan = () => {
+        if (!cuttingPlan || cuttingPlan.shortages.length > 0) {
+            setNotice('Não foi possível gerar o PDF porque ainda existem peças sem encaixe no plano.');
+            return;
+        }
+
+        const opened = printCuttingPlan(cuttingPlan, selectedCuttingOrders);
+        if (!opened) setNotice('O navegador bloqueou a janela de impressão. Libere pop-ups para gerar o PDF do corte.');
+    };
+
     return (
-        <main className="min-h-screen bg-slate-50 text-slate-900">
+        <main className={`min-h-screen bg-slate-50 text-slate-900 ${cuttingPlan ? 'pb-44' : ''}`}>
             <div className="mx-auto max-w-6xl px-3 py-4 sm:px-6 lg:px-8">
                 <header className="mb-4">
                     <p className="text-xs font-black uppercase tracking-widest text-blue-700">Corte PCP</p>
@@ -440,6 +613,8 @@ export default function CutterDashboard() {
                                                 <OrderCard
                                                     key={`${order.id_pedido}-${order.produto?.nome_produto}-${order.produto?.tecido}`}
                                                     order={order}
+                                                    selected={selectedCuttingKeys.includes(getOrderSelectionKey(order))}
+                                                    onToggle={toggleCuttingSelection}
                                                     onOpen={setSelectedOrder}
                                                 />
                                             ))}
@@ -451,6 +626,36 @@ export default function CutterDashboard() {
                     </>
                 )}
             </div>
+
+            {cuttingPlan && (
+                <aside className="fixed inset-x-0 bottom-0 z-[900] border-t border-slate-200 bg-white p-3 shadow-2xl">
+                    <div className="mx-auto grid max-w-6xl gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                        <div>
+                            <p className="text-xs font-black uppercase tracking-widest text-blue-700">Plano de enfesto</p>
+                            <p className="text-sm font-bold text-slate-700">
+                                {selectedCuttingOrders.length} pedido{selectedCuttingOrders.length === 1 ? '' : 's'} · {cuttingPlan.totalPieces} peças · {cuttingPlan.spreads.length} enfesto{cuttingPlan.spreads.length === 1 ? '' : 's'}
+                            </p>
+                            <GradePills grade={cuttingPlan.gradeTotals} compact />
+                            {cuttingPlan.shortages.length > 0 && (
+                                <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                                    Sem encaixe para: {cuttingPlan.shortages.map((item) => `${item.tamanho} ${item.quantidade}`).join(', ')}
+                                </p>
+                            )}
+                        </div>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setSelectedCuttingKeys([])} className="h-11 rounded-lg border border-slate-300 px-4 text-sm font-black text-slate-700">
+                                Limpar
+                            </button>
+                            <button type="button" onClick={handlePrintCuttingPlan} className="h-11 rounded-lg bg-blue-600 px-4 text-sm font-black text-white shadow-sm hover:bg-blue-700">
+                                Gerar PDF
+                            </button>
+                        </div>
+                    </div>
+                    <div className="mx-auto mt-3 hidden max-w-6xl md:block">
+                        <PrintableCuttingPlan plan={cuttingPlan} />
+                    </div>
+                </aside>
+            )}
 
             <OrderDetails
                 order={selectedOrder}
