@@ -3,6 +3,7 @@ export const SIZE_ORDER = ['2', '4', '6', '8', '10', '12', '14', 'PP', 'P', 'M',
 export function normalizeCuttingKey(value) {
     return String(value || '')
         .trim()
+        .replace(/\s+/g, ' ')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase();
@@ -21,16 +22,7 @@ export function sortGradeItems(grade) {
 }
 
 export function normalizeBaseFabric(value) {
-    const rawValue = String(value || '').trim() || 'Não Informado';
-    const normalized = normalizeCuttingKey(rawValue);
-
-    if (normalized.includes('dryfit') || normalized.includes('dry fit')) return 'Dryfit';
-    if (normalized.includes('helanca')) return 'Helanca';
-    if (normalized.includes('algodao')) return 'Algodão';
-    if (normalized.includes('moletom')) return 'Moletom';
-    if (normalized.includes('pv')) return 'PV';
-
-    return rawValue.split(/\s+/)[0] || 'Não Informado';
+    return String(value || '').trim().replace(/\s+/g, ' ') || 'Não Informado';
 }
 
 export function detectModeling(value) {

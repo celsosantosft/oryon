@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { buildCuttingFabricTabs } from './cuttingGrouping.js';
 
-test('groups fabric variations into one fabric tab and separates modelings inside it', () => {
+test('keeps different registered fabric names in separate tabs', () => {
     const tabs = buildCuttingFabricTabs([
         {
             id_pedido: 1,
@@ -45,11 +45,31 @@ test('groups fabric variations into one fabric tab and separates modelings insid
         }
     ]);
 
-    assert.equal(tabs.length, 1);
-    assert.equal(tabs[0].label, 'Dryfit');
-    assert.deepEqual(tabs[0].modelings.map((group) => group.label), ['Camisa', 'Camisa Raglan', 'Short']);
-    assert.deepEqual(tabs[0].modelings[0].gradeTotals, [{ tamanho: 'M', quantidade: 10 }]);
-    assert.equal(tabs[0].modelings[1].orders[0].tracking_code, '#ATOS-2');
+    assert.deepEqual(tabs.map((tab) => tab.label), ['Dryfit', 'Dryfit Branco 140g', 'Dryfit Premium Azul']);
+    assert.deepEqual(tabs[0].modelings.map((group) => group.label), ['Short']);
+    assert.deepEqual(tabs[1].modelings.map((group) => group.label), ['Camisa Raglan']);
+    assert.equal(tabs[1].modelings[0].orders[0].tracking_code, '#ATOS-2');
+    assert.deepEqual(tabs[2].modelings[0].gradeTotals, [{ tamanho: 'M', quantidade: 10 }]);
+});
+
+test('separates Dryfit Furadinho from Dryfit Liso but ignores cosmetic name differences', () => {
+    const tabs = buildCuttingFabricTabs([
+        {
+            id_pedido: 4,
+            produtos: [{ nome_produto: 'Camisa', tecido: 'Dryfit Liso', grade: { M: 2 } }]
+        },
+        {
+            id_pedido: 5,
+            produtos: [{ nome_produto: 'Camisa', tecido: 'Dryfit Furadinho', grade: { G: 3 } }]
+        },
+        {
+            id_pedido: 6,
+            produtos: [{ nome_produto: 'Camisa', tecido: '  DRYFIT LISO  ', grade: { P: 1 } }]
+        }
+    ]);
+
+    assert.deepEqual(tabs.map((tab) => tab.label), ['Dryfit Furadinho', 'Dryfit Liso']);
+    assert.equal(tabs.find((tab) => tab.label === 'Dryfit Liso').orderCount, 2);
 });
 
 test('creates only tabs for fabrics with real active orders', () => {
@@ -72,7 +92,7 @@ test('creates only tabs for fabrics with real active orders', () => {
         }
     ]);
 
-    assert.deepEqual(tabs.map((tab) => tab.label), ['Dryfit', 'Helanca']);
+    assert.deepEqual(tabs.map((tab) => tab.label), ['Dryfit com Elastano Azul', 'Helanca Light Branca']);
 });
 
 test('keeps each card tied to its real order id and sorts urgent then nearest deadline', () => {
@@ -94,7 +114,7 @@ test('keeps each card tied to its real order id and sorts urgent then nearest de
             delivery_date: '2026-09-30',
             priority: 'high',
             produtos: [
-                { nome_produto: 'Camisa', tecido: 'Dryfit Premium', grade: { M: 1 } }
+                { nome_produto: 'Camisa', tecido: 'Dryfit', grade: { M: 1 } }
             ]
         },
         {
@@ -104,7 +124,7 @@ test('keeps each card tied to its real order id and sorts urgent then nearest de
             delivery_date: '2026-09-01',
             priority: 'normal',
             produtos: [
-                { nome_produto: 'Camisa', tecido: 'Dryfit Branco', grade: { M: 1 } }
+                { nome_produto: 'Camisa', tecido: 'Dryfit', grade: { M: 1 } }
             ]
         }
     ]);
