@@ -3,8 +3,8 @@ const router = express.Router();
 const db = require('../database');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 
-const ACTIVE_PRODUCTION_EXCLUDED_STATUSES = ['Entregue/Concluído', 'Cancelado', 'Arte Arquivada'];
-const COMPLETABLE_CUTTING_STATUSES = ['Arte Aprovada/Liberada', 'Corte Iniciado'];
+const ACTIVE_CUTTING_STATUSES = ['Arte Aprovada/Liberada', 'Corte Iniciado'];
+const COMPLETABLE_CUTTING_STATUSES = ACTIVE_CUTTING_STATUSES;
 const HISTORICAL_CUTTING_STATUSES = ['Corte Concluido', 'Corte Concluído', 'Na Costura', 'Costura Iniciada'];
 const FINALIZED_CUTTING_STATUS = 'Costura Iniciada';
 const CUTTING_PART_TYPES = ['frente', 'costas', 'mangas'];
@@ -76,13 +76,15 @@ function isCottonProduction(row) {
     return productionDetails.includes('algodao');
 }
 
+function isActiveCuttingStatus(status) {
+    return ACTIVE_CUTTING_STATUSES.includes(status);
+}
+
 router.get('/corte/pedidos', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_operacoes', 'corte']), (req, res) => {
     const isHistory = normalizeText(req.query.aba).trim() === 'historico';
-    const statuses = isHistory ? HISTORICAL_CUTTING_STATUSES : ACTIVE_PRODUCTION_EXCLUDED_STATUSES;
+    const statuses = isHistory ? HISTORICAL_CUTTING_STATUSES : ACTIVE_CUTTING_STATUSES;
     const statusPlaceholders = statuses.map(() => '?').join(', ');
-    const statusFilter = isHistory
-        ? `o.status IN (${statusPlaceholders})`
-        : `o.status NOT IN (${statusPlaceholders})`;
+    const statusFilter = `o.status IN (${statusPlaceholders})`;
 
     db.all(`
         SELECT
@@ -319,5 +321,9 @@ router.post('/corte/salvar-progresso', authenticateToken, authorizeRole(['admin'
         });
     });
 });
+
+router._test = {
+    isActiveCuttingStatus
+};
 
 module.exports = router;
