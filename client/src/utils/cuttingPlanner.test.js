@@ -18,22 +18,25 @@ test('plans the real PP6 P11 M18 G12 GG4 grade in two spreads', () => {
 
     assert.equal(plan.spreads.length, 2);
     assert.equal(plan.spreads[0].layers, 12);
-    assert.deepEqual(plan.spreads[0].markerCounts, {
+    assert.deepEqual(plan.spreads[0].baseMarkerCounts, {
         P: { front: 1, back: 1, sleeve: 2 },
         M: { front: 2, back: 2, sleeve: 3 },
         G: { front: 1, back: 1, sleeve: 2 }
     });
     assert.equal(plan.spreads[1].layers, 4);
-    assert.deepEqual(plan.spreads[1].markerCounts, {
+    assert.deepEqual(plan.spreads[1].baseMarkerCounts, {
         PP: { front: 2, back: 2, sleeve: 3 },
         GG: { front: 1, back: 1, sleeve: 2 }
     });
     assert.equal(plan.shortages.length, 0);
-    assert.deepEqual(plan.surplusParts, [
-        { tamanho: 'PP', front: 2, back: 2, sleeve: 0 },
-        { tamanho: 'P', front: 1, back: 1, sleeve: 2 },
-        { tamanho: 'M', front: 6, back: 6, sleeve: 0 }
-    ]);
+    assert.ok(plan.spreads.every((spread) => spread.fillMarkers.length > 0));
+
+    const surplusBySize = new Map(plan.surplusParts.map((item) => [item.tamanho, item]));
+    assert.ok(surplusBySize.get('PP').front >= 2);
+    assert.ok(surplusBySize.get('PP').back >= 2);
+    assert.ok(surplusBySize.get('P').front >= 1);
+    assert.ok(surplusBySize.get('M').front >= 6);
+    assert.ok(surplusBySize.get('M').back >= 6);
 
     for (const spread of plan.spreads) {
         assert.ok(spread.usedLength <= 280);

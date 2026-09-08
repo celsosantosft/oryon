@@ -150,25 +150,113 @@ function makeMarkers(markerCounts) {
     }));
 }
 
+function makePartTotals(markerCounts, layers) {
+    return Object.entries(markerCounts).map(([size, counts]) => ({
+        tamanho: size,
+        front: counts.front * layers,
+        back: counts.back * layers,
+        sleeve: counts.sleeve * layers
+    }));
+}
+
 function countCandidate(markerCounts, requested, layers) {
-    const partTotals = [];
+    const partTotals = makePartTotals(markerCounts, layers);
     let surplusPieces = 0;
 
-    Object.entries(markerCounts).forEach(([size, counts]) => {
-        const quantity = requested.get(size);
-        const totals = {
-            tamanho: size,
-            front: counts.front * layers,
-            back: counts.back * layers,
-            sleeve: counts.sleeve * layers
-        };
-        surplusPieces += totals.front - quantity;
-        surplusPieces += totals.back - quantity;
-        surplusPieces += totals.sleeve - (quantity * 2);
-        partTotals.push(totals);
+    partTotals.forEach(({ tamanho, front, back, sleeve }) => {
+        const quantity = requested.get(tamanho);
+        surplusPieces += front - quantity;
+        surplusPieces += back - quantity;
+        surplusPieces += sleeve - (quantity * 2);
     });
 
     return { partTotals, surplusPieces };
+}
+
+function cloneMarkerCounts(markerCounts) {
+    return Object.fromEntries(Object.entries(markerCounts).map(([size, counts]) => [size, { ...counts }]));
+}
+
+function makeSingleMarker(size, part, index) {
+    const [width, height] = SHIRT_MEASUREMENTS[size][part];
+    return {
+        id: `${size}-${part}-${index}`,
+        part,
+        label: PART_LABELS[part],
+        size,
+        width,
+        height,
+        rotated: false,
+        extra: true
+    };
+}
+
+function compareFillOptions(left, right) {
+    return (right.marker.width * right.marker.height) - (left.marker.width * left.marker.height)
+        || left.usedLength - right.usedLength
+        || left.marker.id.localeCompare(right.marker.id);
+}
+
+function fillSpread(spread, availableSizes, requested) {
+    const baseMarkerCounts = cloneMarkerCounts(spread.markerCounts);
+    const markerCounts = cloneMarkerCounts(spread.markerCounts);
+    let markers = makeMarkers(markerCounts);
+    let packed = spread.markers;
+
+    while (true) {
+        const options = [];
+
+        availableSizes.forEach((size) => {
+            PARTS.forEach((part) => {
+                const index = markerCounts[size]?.[part] || 0;
+                const marker = makeSingleMarker(size, part, index);
+                const candidatePacked = packMarkers([...markers, marker]);
+                if (!candidatePacked) return;
+
+                options.push({
+                    marker,
+                    packed: candidatePacked,
+                    usedLength: Math.max(...candidatePacked.map((item) => item.y + item.height))
+                });
+            });
+        });
+
+        if (!options.length) break;
+
+        options.sort(compareFillOptions);
+        const selected = options[0];
+        if (!markerCounts[selected.marker.size]) {
+            markerCounts[selected.marker.size] = { front: 0, back: 0, sleeve: 0 };
+        }
+        markerCounts[selected.marker.size][selected.marker.part] += 1;
+        markers = [...markers, selected.marker];
+        packed = selected.packed;
+    }
+
+    const usedLength = Math.round(Math.max(...packed.map((marker) => marker.y + marker.height)) * 10) / 10;
+    const partTotals = makePartTotals(markerCounts, spread.layers);
+    const baseSizes = new Set(spread.sizes);
+    const surplusParts = sortGradeItems(partTotals.map((item) => {
+        const quantity = baseSizes.has(item.tamanho) ? requested.get(item.tamanho) : 0;
+        return {
+            tamanho: item.tamanho,
+            front: Math.max(0, item.front - quantity),
+            back: Math.max(0, item.back - quantity),
+            sleeve: Math.max(0, item.sleeve - (quantity * 2))
+        };
+    }).filter((item) => item.front || item.back || item.sleeve));
+
+    return {
+        ...spread,
+        baseMarkerCounts,
+        markerCounts,
+        markers: packed,
+        fillMarkers: packed.filter((marker) => marker.extra),
+        partTotals,
+        surplusParts,
+        usedLength,
+        fabricUsage: spread.layers * usedLength
+    };
 }
 
 function compareSpreadCandidates(left, right) {
@@ -300,7 +388,7 @@ export function buildCuttingPlan(orders) {
         .filter((size) => Boolean(SHIRT_MEASUREMENTS[size]));
     const unsupportedSizes = gradeTotals.filter((item) => !SHIRT_MEASUREMENTS[item.tamanho]);
     const solution = supportedSizes.length ? partitionSizes(supportedSizes, requested) : null;
-    const plannedSpreads = solution?.spreads || [];
+    const plannedSpreads = (solution?.spreads || []).map((spread) => fillSpread(spread, supportedSizes, requested));
     const spreads = [...plannedSpreads]
         .sort((left, right) => right.layers - left.layers || left.sizes.join('|').localeCompare(right.sizes.join('|')))
         .map((spread, index) => ({

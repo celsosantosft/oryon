@@ -19,19 +19,6 @@ function formatPartTotals(parts = []) {
     )).join(' · ');
 }
 
-function spreadSurplus(spread, requestedGrade) {
-    const requested = new Map(requestedGrade.map((item) => [item.tamanho, item.quantidade]));
-    return spread.partTotals.map((item) => {
-        const quantity = requested.get(item.tamanho) || 0;
-        return {
-            tamanho: item.tamanho,
-            front: Math.max(0, item.front - quantity),
-            back: Math.max(0, item.back - quantity),
-            sleeve: Math.max(0, item.sleeve - (quantity * 2))
-        };
-    }).filter((item) => item.front || item.back || item.sleeve);
-}
-
 function renderMarkers(spread) {
     return spread.markers.map((marker) => `
         <g>
@@ -48,7 +35,7 @@ export function buildCuttingPlanPrintHtml(plan, selectedOrders) {
         .join(', '));
     const requestedLabel = formatGrade(plan.gradeTotals);
     const pages = plan.spreads.map((spread, pageIndex) => {
-        const surplus = spreadSurplus(spread, plan.gradeTotals);
+        const surplus = spread.surplusParts || [];
         return `
             <section class="spread-page">
                 <div class="title-row">
@@ -91,12 +78,18 @@ export function buildCuttingPlanPrintHtml(plan, selectedOrders) {
                 body { font-family: Arial, sans-serif; color: #0f172a; }
                 .spread-page {
                     width: 100%;
-                    height: 280mm;
+                    height: 270mm;
                     display: flex;
                     flex-direction: column;
                     overflow: hidden;
+                    break-inside: avoid;
+                    page-break-inside: avoid;
                     break-after: page;
                     page-break-after: always;
+                }
+                .spread-page + .spread-page {
+                    break-before: page;
+                    page-break-before: always;
                 }
                 .spread-page:last-child {
                     break-after: auto;
