@@ -124,257 +124,334 @@ function packMarkers(markers) {
     return packed;
 }
 
-function makeMarkerCounts(sizes, requested, layers) {
-    return Object.fromEntries(sizes.map((size) => {
-        const quantity = requested.get(size);
-        return [size, {
-            front: Math.ceil(quantity / layers),
-            back: Math.ceil(quantity / layers),
-            sleeve: Math.ceil((quantity * 2) / layers)
-        }];
-    }));
-}
-
-function makeMarkers(markerCounts) {
-    return Object.entries(markerCounts).flatMap(([size, counts]) => PARTS.flatMap((part) => {
-        const [width, height] = SHIRT_MEASUREMENTS[size][part];
-        return Array.from({ length: counts[part] }, (_, index) => ({
-            id: `${size}-${part}-${index}`,
-            part,
-            label: PART_LABELS[part],
-            size,
-            width,
-            height,
-            rotated: false
-        }));
-    }));
-}
-
-function makePartTotals(markerCounts, layers) {
-    return Object.entries(markerCounts).map(([size, counts]) => ({
-        tamanho: size,
-        front: counts.front * layers,
-        back: counts.back * layers,
-        sleeve: counts.sleeve * layers
-    }));
-}
-
-function countCandidate(markerCounts, requested, layers) {
-    const partTotals = makePartTotals(markerCounts, layers);
-    let surplusPieces = 0;
-
-    partTotals.forEach(({ tamanho, front, back, sleeve }) => {
-        const quantity = requested.get(tamanho);
-        surplusPieces += front - quantity;
-        surplusPieces += back - quantity;
-        surplusPieces += sleeve - (quantity * 2);
-    });
-
-    return { partTotals, surplusPieces };
-}
-
-function cloneMarkerCounts(markerCounts) {
-    return Object.fromEntries(Object.entries(markerCounts).map(([size, counts]) => [size, { ...counts }]));
-}
-
-function makeSingleMarker(size, part, index) {
+function makeMarker(size, part, id, transformation = null) {
     const [width, height] = SHIRT_MEASUREMENTS[size][part];
     return {
-        id: `${size}-${part}-${index}`,
+        id,
         part,
         label: PART_LABELS[part],
         size,
         width,
         height,
         rotated: false,
-        extra: true
+        transformation
     };
 }
 
-function compareFillOptions(left, right) {
-    return (right.marker.width * right.marker.height) - (left.marker.width * left.marker.height)
-        || left.usedLength - right.usedLength
-        || left.marker.id.localeCompare(right.marker.id);
+function emptyParts() {
+    return { front: 0, back: 0, sleeve: 0 };
 }
 
-function fillSpread(spread, availableSizes, requested) {
-    const baseMarkerCounts = cloneMarkerCounts(spread.markerCounts);
-    const markerCounts = cloneMarkerCounts(spread.markerCounts);
-    let markers = makeMarkers(markerCounts);
-    let packed = spread.markers;
+function addParts(map, size, additions) {
+    const current = map.get(size) || emptyParts();
+    map.set(size, {
+        front: current.front + (additions.front || 0),
+        back: current.back + (additions.back || 0),
+        sleeve: current.sleeve + (additions.sleeve || 0)
+    });
+}
 
-    while (true) {
-        const options = [];
+function partsToArray(map, includeEmpty = false) {
+    return sortGradeItems(Array.from(map.entries()).map(([tamanho, parts]) => ({
+        tamanho,
+        ...parts
+    })).filter((item) => includeEmpty || item.front || item.back || item.sleeve));
+}
 
-        availableSizes.forEach((size) => {
-            PARTS.forEach((part) => {
-                const index = markerCounts[size]?.[part] || 0;
-                const marker = makeSingleMarker(size, part, index);
-                const candidatePacked = packMarkers([...markers, marker]);
-                if (!candidatePacked) return;
+function subtractQuantity(map, size, quantity) {
+    map.set(size, Math.max(0, (map.get(size) || 0) - quantity));
+}
 
-                options.push({
-                    marker,
-                    packed: candidatePacked,
-                    usedLength: Math.max(...candidatePacked.map((item) => item.y + item.height))
-                });
-            });
-        });
+function markerArea(markers) {
+    return markers.reduce((sum, marker) => sum + (marker.width * marker.height), 0);
+}
 
-        if (!options.length) break;
+function makeFullUnit(size, layers, index) {
+    const prefix = `${size}-full-${layers}-${index}`;
+    return {
+        size,
+        quantity: layers,
+        markers: [
+            makeMarker(size, 'front', `${prefix}-front`),
+            makeMarker(size, 'back', `${prefix}-back`),
+            makeMarker(size, 'sleeve', `${prefix}-sleeve-0`),
+            makeMarker(size, 'sleeve', `${prefix}-sleeve-1`)
+        ],
+        transformations: []
+    };
+}
 
-        options.sort(compareFillOptions);
-        const selected = options[0];
-        if (!markerCounts[selected.marker.size]) {
-            markerCounts[selected.marker.size] = { front: 0, back: 0, sleeve: 0 };
+function makeHalfUnit(size, layers) {
+    const quantity = layers / 2;
+    const transformation = { tamanho: size, bodies: layers, keepBack: quantity, toFront: quantity };
+    const prefix = `${size}-half-${layers}`;
+    return {
+        size,
+        quantity,
+        markers: [
+            makeMarker(size, 'back', `${prefix}-back`, transformation),
+            makeMarker(size, 'sleeve', `${prefix}-sleeve`)
+        ],
+        transformations: [transformation]
+    };
+}
+
+function makeEconomyUnits(remaining, layers) {
+    const units = [];
+
+    remaining.forEach((quantity, size) => {
+        const fullRuns = Math.floor(quantity / layers);
+        for (let index = 0; index < fullRuns; index += 1) {
+            units.push(makeFullUnit(size, layers, index));
         }
-        markerCounts[selected.marker.size][selected.marker.part] += 1;
-        markers = [...markers, selected.marker];
-        packed = selected.packed;
-    }
+
+        const remainder = quantity % layers;
+        if (layers % 2 === 0 && remainder >= layers / 2) {
+            units.push(makeHalfUnit(size, layers));
+        }
+    });
+
+    return units.sort((left, right) => (
+        (markerArea(left.markers) / left.quantity) - (markerArea(right.markers) / right.quantity)
+        || right.quantity - left.quantity
+        || left.size.localeCompare(right.size)
+        || left.markers[0].id.localeCompare(right.markers[0].id)
+    ));
+}
+
+function summarizeSpread(layers, packed, acceptedUnits) {
+    const produced = new Map();
+    const applied = new Map();
+    const transformations = acceptedUnits.flatMap((unit) => unit.transformations);
+
+    packed.forEach((marker) => {
+        if (marker.transformation) {
+            addParts(produced, marker.size, {
+                front: marker.transformation.toFront,
+                back: layers - marker.transformation.toFront
+            });
+            return;
+        }
+        addParts(produced, marker.size, { [marker.part]: layers });
+    });
+    acceptedUnits.forEach((unit) => {
+        addParts(applied, unit.size, {
+            front: unit.quantity,
+            back: unit.quantity,
+            sleeve: unit.quantity * 2
+        });
+    });
 
     const usedLength = Math.round(Math.max(...packed.map((marker) => marker.y + marker.height)) * 10) / 10;
-    const partTotals = makePartTotals(markerCounts, spread.layers);
-    const baseSizes = new Set(spread.sizes);
-    const surplusParts = sortGradeItems(partTotals.map((item) => {
-        const quantity = baseSizes.has(item.tamanho) ? requested.get(item.tamanho) : 0;
-        return {
-            tamanho: item.tamanho,
-            front: Math.max(0, item.front - quantity),
-            back: Math.max(0, item.back - quantity),
-            sleeve: Math.max(0, item.sleeve - (quantity * 2))
-        };
-    }).filter((item) => item.front || item.back || item.sleeve));
+    const surplus = new Map();
+    produced.forEach((parts, size) => {
+        const used = applied.get(size) || emptyParts();
+        addParts(surplus, size, {
+            front: Math.max(0, parts.front - used.front),
+            back: Math.max(0, parts.back - used.back),
+            sleeve: Math.max(0, parts.sleeve - used.sleeve)
+        });
+    });
 
     return {
-        ...spread,
-        baseMarkerCounts,
-        markerCounts,
+        layers,
+        sizes: [...new Set(acceptedUnits.map((unit) => unit.size))],
         markers: packed,
-        fillMarkers: packed.filter((marker) => marker.extra),
-        partTotals,
-        surplusParts,
+        transformations,
+        partTotals: partsToArray(produced),
+        appliedParts: partsToArray(applied),
+        surplusParts: partsToArray(surplus),
         usedLength,
-        fabricUsage: spread.layers * usedLength
+        fabricUsage: layers * usedLength,
+        appliedShirts: acceptedUnits.reduce((sum, unit) => sum + unit.quantity, 0)
     };
 }
 
-function compareSpreadCandidates(left, right) {
-    return left.surplusPieces - right.surplusPieces
-        || left.fabricUsage - right.fabricUsage
+function buildEconomyCandidate(remaining, layers) {
+    const units = makeEconomyUnits(remaining, layers);
+    if (!units.length) return null;
+
+    let markers = [];
+    let packed = [];
+    const accepted = [];
+
+    units.forEach((unit) => {
+        const nextPacked = packMarkers([...markers, ...unit.markers]);
+        if (!nextPacked) return;
+        markers = [...markers, ...unit.markers];
+        packed = nextPacked;
+        accepted.push(unit);
+    });
+
+    return accepted.length ? summarizeSpread(layers, packed, accepted) : null;
+}
+
+function compareEconomyCandidates(left, right) {
+    return right.appliedShirts - left.appliedShirts
+        || (left.fabricUsage / left.appliedShirts) - (right.fabricUsage / right.appliedShirts)
         || left.markers.length - right.markers.length
         || left.sizes.join('|').localeCompare(right.sizes.join('|'));
 }
 
-function buildBestSpread(sizes, requested) {
-    const maxLayers = Math.max(...sizes.map((size) => requested.get(size)));
-    let best = null;
+function buildEconomySolution(requested) {
+    const remaining = new Map(requested);
+    const spreads = [];
 
-    for (let layers = 1; layers <= maxLayers; layers += 1) {
-        const markerCounts = makeMarkerCounts(sizes, requested, layers);
-        const markers = makeMarkers(markerCounts);
-        const markerArea = markers.reduce((sum, marker) => sum + (marker.width * marker.height), 0);
-        if (markerArea > CUTTING_TABLE.width * CUTTING_TABLE.height) continue;
+    while (Math.max(0, ...remaining.values()) >= 2) {
+        const maxLayers = Math.max(...remaining.values());
+        let best = null;
 
-        const packed = packMarkers(markers);
-        if (!packed) continue;
+        for (let layers = 2; layers <= maxLayers; layers += 1) {
+            const candidate = buildEconomyCandidate(remaining, layers);
+            if (candidate && (!best || compareEconomyCandidates(candidate, best) < 0)) best = candidate;
+        }
 
-        const usedLength = Math.round(Math.max(...packed.map((marker) => marker.y + marker.height)) * 10) / 10;
-        const counted = countCandidate(markerCounts, requested, layers);
-        const candidate = {
-            layers,
-            sizes,
-            markerCounts,
-            markers: packed,
-            usedLength,
-            fabricUsage: layers * usedLength,
-            ...counted
-        };
-
-        if (!best || compareSpreadCandidates(candidate, best) < 0) best = candidate;
+        if (!best) break;
+        best.appliedParts.forEach((item) => subtractQuantity(remaining, item.tamanho, item.front));
+        spreads.push(best);
     }
 
-    return best;
+    const loose = new Map();
+    remaining.forEach((quantity, size) => {
+        if (quantity <= 0) return;
+        addParts(loose, size, { front: quantity, back: quantity, sleeve: quantity * 2 });
+    });
+    return { spreads, loose };
 }
 
-function comparePlanCandidates(left, right) {
+function makeRoundedSizeUnit(size, quantity, layers) {
+    if (layers > quantity * 2) return null;
+
+    const markers = [];
+    const transformations = [];
+    const fullRuns = Math.floor(quantity / layers);
+    for (let index = 0; index < fullRuns; index += 1) {
+        const unit = makeFullUnit(size, layers, index);
+        markers.push(...unit.markers.slice(0, 2));
+    }
+
+    const remainder = quantity % layers;
+    if (remainder > 0 && remainder * 2 <= layers) {
+        const transformation = {
+            tamanho: size,
+            bodies: layers,
+            keepBack: remainder,
+            toFront: remainder
+        };
+        transformations.push(transformation);
+        markers.push(makeMarker(size, 'back', `${size}-rounded-${layers}-back`, transformation));
+    } else if (remainder > 0) {
+        markers.push(makeMarker(size, 'front', `${size}-rounded-${layers}-front`));
+        markers.push(makeMarker(size, 'back', `${size}-rounded-${layers}-back`));
+    }
+
+    const sleeveMarkers = Math.ceil((quantity * 2) / layers);
+    for (let index = 0; index < sleeveMarkers; index += 1) {
+        markers.push(makeMarker(size, 'sleeve', `${size}-rounded-${layers}-sleeve-${index}`));
+    }
+
+    return { size, quantity, markers, transformations };
+}
+
+function buildRoundedSpread(sizes, requested, layers) {
+    const units = sizes.map((size) => makeRoundedSizeUnit(size, requested.get(size), layers));
+    if (units.some((unit) => !unit)) return null;
+    const markers = units.flatMap((unit) => unit.markers);
+    const packed = packMarkers(markers);
+    return packed ? summarizeSpread(layers, packed, units) : null;
+}
+
+function countSurplus(spread) {
+    return spread.surplusParts.reduce((sum, item) => sum + item.front + item.back + item.sleeve, 0);
+}
+
+function compareRoundedSpreads(left, right) {
+    return countSurplus(left) - countSurplus(right)
+        || left.fabricUsage - right.fabricUsage
+        || left.layers - right.layers;
+}
+
+function compareRoundedPlans(left, right) {
     return left.spreads.length - right.spreads.length
         || left.surplusPieces - right.surplusPieces
         || left.fabricUsage - right.fabricUsage;
 }
 
-function partitionSizes(sizes, requested) {
+function buildRoundedSolution(sizes, requested) {
     const spreadByMask = new Map();
     const fullMask = (1 << sizes.length) - 1;
+    const maxQuantity = Math.max(...requested.values());
+    const maxLayers = maxQuantity + 10;
 
     for (let mask = 1; mask <= fullMask; mask += 1) {
         const subset = sizes.filter((_, index) => (mask & (1 << index)) !== 0);
-        const spread = buildBestSpread(subset, requested);
-        if (spread) spreadByMask.set(mask, spread);
+        let best = null;
+        for (let layers = 1; layers <= maxLayers; layers += 1) {
+            const spread = buildRoundedSpread(subset, requested, layers);
+            if (spread && (!best || compareRoundedSpreads(spread, best) < 0)) best = spread;
+        }
+        if (best) spreadByMask.set(mask, best);
     }
 
     const memo = new Map([[0, { spreads: [], surplusPieces: 0, fabricUsage: 0 }]]);
     const solve = (mask) => {
         if (memo.has(mask)) return memo.get(mask);
-
-        const firstSizeBit = mask & -mask;
+        const firstBit = mask & -mask;
         let best = null;
 
-        for (let subsetMask = mask; subsetMask > 0; subsetMask = (subsetMask - 1) & mask) {
-            if ((subsetMask & firstSizeBit) === 0 || !spreadByMask.has(subsetMask)) continue;
-
-            const remainder = solve(mask ^ subsetMask);
+        for (let subset = mask; subset > 0; subset = (subset - 1) & mask) {
+            if ((subset & firstBit) === 0 || !spreadByMask.has(subset)) continue;
+            const remainder = solve(mask ^ subset);
             if (!remainder) continue;
-
-            const spread = spreadByMask.get(subsetMask);
+            const spread = spreadByMask.get(subset);
             const candidate = {
                 spreads: [spread, ...remainder.spreads],
-                surplusPieces: spread.surplusPieces + remainder.surplusPieces,
+                surplusPieces: countSurplus(spread) + remainder.surplusPieces,
                 fabricUsage: spread.fabricUsage + remainder.fabricUsage
             };
-            if (!best || comparePlanCandidates(candidate, best) < 0) best = candidate;
+            if (!best || compareRoundedPlans(candidate, best) < 0) best = candidate;
         }
-
         memo.set(mask, best);
         return best;
     };
 
-    return solve(fullMask);
+    return solve(fullMask) || { spreads: [], surplusPieces: 0, fabricUsage: 0 };
 }
 
-function aggregateProducedParts(spreads) {
-    const produced = new Map();
-
+function aggregateSpreadParts(spreads, field) {
+    const totals = new Map();
     spreads.forEach((spread) => {
-        spread.partTotals.forEach(({ tamanho, front, back, sleeve }) => {
-            const current = produced.get(tamanho) || { front: 0, back: 0, sleeve: 0 };
-            current.front += front;
-            current.back += back;
-            current.sleeve += sleeve;
-            produced.set(tamanho, current);
+        (spread[field] || []).forEach(({ tamanho, front, back, sleeve }) => {
+            addParts(totals, tamanho, { front, back, sleeve });
         });
     });
-    return produced;
+    return totals;
 }
 
-function makeSurplusParts(produced, requested) {
-    const surplus = new Map();
+function makeRequestedParts(requested) {
+    const parts = new Map();
+    requested.forEach((quantity, size) => {
+        parts.set(size, { front: quantity, back: quantity, sleeve: quantity * 2 });
+    });
+    return parts;
+}
 
-    produced.forEach((parts, size) => {
-        const quantity = requested.get(size) || 0;
+function makeSurplusParts(produced, loose, applied) {
+    const surplus = new Map();
+    applied.forEach((needed, size) => {
+        const made = produced.get(size) || emptyParts();
+        const cutLoose = loose.get(size) || emptyParts();
         const extra = {
-            tamanho: size,
-            front: Math.max(0, parts.front - quantity),
-            back: Math.max(0, parts.back - quantity),
-            sleeve: Math.max(0, parts.sleeve - (quantity * 2))
+            front: Math.max(0, made.front + cutLoose.front - needed.front),
+            back: Math.max(0, made.back + cutLoose.back - needed.back),
+            sleeve: Math.max(0, made.sleeve + cutLoose.sleeve - needed.sleeve)
         };
         if (extra.front || extra.back || extra.sleeve) surplus.set(size, extra);
     });
-
-    return sortGradeItems(Array.from(surplus.values()));
+    return surplus;
 }
 
-export function buildCuttingPlan(orders) {
+export function buildCuttingPlan(orders, strategy = 'economy') {
     const requested = new Map();
     (orders || []).forEach((order) => {
         (order.grade || []).forEach(({ tamanho, quantidade }) => {
@@ -387,38 +464,52 @@ export function buildCuttingPlan(orders) {
         .map((item) => item.tamanho)
         .filter((size) => Boolean(SHIRT_MEASUREMENTS[size]));
     const unsupportedSizes = gradeTotals.filter((item) => !SHIRT_MEASUREMENTS[item.tamanho]);
-    const solution = supportedSizes.length ? partitionSizes(supportedSizes, requested) : null;
-    const plannedSpreads = (solution?.spreads || []).map((spread) => fillSpread(spread, supportedSizes, requested));
-    const spreads = [...plannedSpreads]
+    const supportedRequested = new Map(supportedSizes.map((size) => [size, requested.get(size)]));
+    const economy = buildEconomySolution(supportedRequested);
+    const rounded = supportedSizes.length ? buildRoundedSolution(supportedSizes, supportedRequested) : { spreads: [] };
+    const useRounded = strategy === 'fewer-spreads' && rounded.spreads.length < economy.spreads.length;
+    const selected = useRounded ? { spreads: rounded.spreads, loose: new Map() } : economy;
+    const spreads = [...selected.spreads]
         .sort((left, right) => right.layers - left.layers || left.sizes.join('|').localeCompare(right.sizes.join('|')))
         .map((spread, index) => ({
             ...spread,
             index: index + 1,
-            cutTotals: sortGradeItems(spread.partTotals.map(({ tamanho, front, back, sleeve }) => ({
+            cutTotals: sortGradeItems(spread.appliedParts.map(({ tamanho, front, back, sleeve }) => ({
                 tamanho,
                 quantidade: Math.min(front, back, Math.floor(sleeve / 2))
             }))),
             table: CUTTING_TABLE
         }));
-    const producedParts = aggregateProducedParts(spreads);
-    const plannedSizes = new Set(spreads.flatMap((spread) => spread.sizes));
-    const shortages = [
-        ...unsupportedSizes,
-        ...gradeTotals.filter((item) => SHIRT_MEASUREMENTS[item.tamanho] && !plannedSizes.has(item.tamanho))
-    ];
+    const loose = selected.loose || new Map();
+    const producedParts = aggregateSpreadParts(spreads, 'partTotals');
+    const appliedParts = makeRequestedParts(supportedRequested);
+    const surplusParts = makeSurplusParts(producedParts, loose, appliedParts);
+    const shortages = [...unsupportedSizes];
     const fulfilled = new Map(gradeTotals
         .filter((item) => !shortages.some((shortage) => shortage.tamanho === item.tamanho))
         .map((item) => [item.tamanho, item.quantidade]));
+    const fabricUsage = spreads.reduce((sum, spread) => sum + spread.fabricUsage, 0);
+    const looseCuts = partsToArray(loose);
+    const surplusArray = partsToArray(surplusParts);
 
     return {
+        strategy,
         table: CUTTING_TABLE,
         orders: orders || [],
         totalPieces: Array.from(requested.values()).reduce((sum, quantity) => sum + quantity, 0),
         gradeTotals,
         cutTotals: makeGradeFromMap(fulfilled),
-        producedParts: sortGradeItems(Array.from(producedParts.entries()).map(([tamanho, parts]) => ({ tamanho, ...parts }))),
-        surplusParts: makeSurplusParts(producedParts, requested),
+        producedParts: partsToArray(producedParts),
+        appliedParts: partsToArray(appliedParts),
+        looseCuts,
+        surplusParts: surplusArray,
         shortages: sortGradeItems(shortages),
-        spreads
+        spreads,
+        metrics: {
+            spreadCount: spreads.length,
+            looseCutPieces: looseCuts.reduce((sum, item) => sum + item.front + item.back + item.sleeve, 0),
+            surplusPieces: surplusArray.reduce((sum, item) => sum + item.front + item.back + item.sleeve, 0),
+            fabricMeters: Number((fabricUsage / 100).toFixed(2))
+        }
     };
 }
