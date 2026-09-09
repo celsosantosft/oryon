@@ -12,7 +12,6 @@ export const SHIRT_MEASUREMENTS = {
     EXG: { front: [65, 83], back: [65, 85], sleeve: [48, 27.5] }
 };
 
-const PARTS = ['front', 'back', 'sleeve'];
 const PART_LABELS = {
     front: 'FRENTE',
     back: 'COSTAS',

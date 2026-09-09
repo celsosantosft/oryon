@@ -25,8 +25,8 @@ function renderMarkers(spread) {
             <rect x="${marker.x}" y="${marker.y}" width="${marker.width}" height="${marker.height}" />
             <text x="${marker.x + marker.width / 2}" y="${marker.y + marker.height / 2 - 15}" text-anchor="middle" class="part">${escapeHtml(marker.label)}</text>
             <text x="${marker.x + marker.width / 2}" y="${marker.y + marker.height / 2 - 3}" text-anchor="middle" class="size">${escapeHtml(marker.size)}</text>
-            <text x="${marker.x + marker.width / 2}" y="${marker.y + marker.height / 2 + 10}" text-anchor="middle" class="instruction">MANTER ${marker.transformation.keepBack} COSTAS</text>
-            <text x="${marker.x + marker.width / 2}" y="${marker.y + marker.height / 2 + 17}" text-anchor="middle" class="instruction">TRANSFORMAR ${marker.transformation.toFront} EM FRENTE</text>
+            <text x="${marker.x + marker.width / 2}" y="${marker.y + marker.height / 2 + 10}" text-anchor="middle" class="instruction" textLength="${marker.width - 4}" lengthAdjust="spacingAndGlyphs">MANTER ${marker.transformation.keepBack} COSTAS</text>
+            <text x="${marker.x + marker.width / 2}" y="${marker.y + marker.height / 2 + 17}" text-anchor="middle" class="instruction" textLength="${marker.width - 4}" lengthAdjust="spacingAndGlyphs">TRANSFORMAR ${marker.transformation.toFront} EM FRENTE</text>
         </g>
     ` : `
         <g>

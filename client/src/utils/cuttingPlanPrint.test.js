@@ -21,6 +21,7 @@ test('prints one A4 page per spread with back-to-front instructions', () => {
     assert.equal((html.match(/<h1>Plano de Corte PCP<\/h1>/g) || []).length, plan.spreads.length);
     assert.match(html, /MANTER 5 COSTAS/);
     assert.match(html, /TRANSFORMAR 5 EM FRENTE/);
+    assert.match(html, /class="instruction" textLength="[\d.]+" lengthAdjust="spacingAndGlyphs"/);
     assert.match(html, /@page \{ size: A4 portrait; margin: 8mm; \}/);
     assert.match(html, /preserveAspectRatio="xMidYMin meet"/);
 });
