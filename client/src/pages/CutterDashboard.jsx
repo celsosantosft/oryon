@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { buildCuttingFabricTabs } from '../utils/cuttingGrouping';
 import { buildCuttingPlan } from '../utils/cuttingPlanner';
 import { buildCuttingPlanPrintHtml } from '../utils/cuttingPlanPrint';
+import { chooseCuttingPlanAlert } from '../utils/alerts';
 
 function parseDate(value) {
     if (!value) return null;
@@ -343,9 +344,13 @@ export default function CutterDashboard() {
         const keys = new Set(selectedCuttingKeys);
         return fabricTabs.flatMap((tab) => tab.modelings.flatMap((group) => group.orders)).filter((order) => keys.has(getOrderSelectionKey(order)));
     }, [fabricTabs, selectedCuttingKeys]);
-    const cuttingPlan = useMemo(() => (
-        selectedCuttingOrders.length ? buildCuttingPlan(selectedCuttingOrders) : null
+    const cuttingPlans = useMemo(() => (
+        selectedCuttingOrders.length ? {
+            economy: buildCuttingPlan(selectedCuttingOrders, 'economy'),
+            fewerSpreads: buildCuttingPlan(selectedCuttingOrders, 'fewer-spreads')
+        } : null
     ), [selectedCuttingOrders]);
+    const cuttingPlan = cuttingPlans?.economy || null;
 
     useEffect(() => {
         if (!activeFabric) {
@@ -402,13 +407,22 @@ export default function CutterDashboard() {
         setNotice('');
     };
 
-    const handlePrintCuttingPlan = () => {
+    const handlePrintCuttingPlan = async () => {
         if (!cuttingPlan || cuttingPlan.shortages.length > 0) {
             setNotice('Não foi possível gerar o PDF porque ainda existem peças sem encaixe no plano.');
             return;
         }
 
-        const opened = printCuttingPlan(cuttingPlan, selectedCuttingOrders);
+        const strategy = await chooseCuttingPlanAlert(cuttingPlans);
+        if (!strategy) return;
+
+        const selectedPlan = strategy === 'fewer-spreads' ? cuttingPlans.fewerSpreads : cuttingPlans.economy;
+        if (selectedPlan.shortages.length > 0) {
+            setNotice('Não foi possível gerar o PDF porque ainda existem peças sem encaixe no plano escolhido.');
+            return;
+        }
+
+        const opened = printCuttingPlan(selectedPlan, selectedCuttingOrders);
         if (!opened) setNotice('O navegador bloqueou a janela de impressão. Libere pop-ups para gerar o PDF do corte.');
     };
 

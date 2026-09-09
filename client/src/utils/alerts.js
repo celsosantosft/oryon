@@ -1,5 +1,66 @@
 const getSwal = async () => (await import('sweetalert2')).default;
 
+const escapeAlertHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const pluralize = (quantity, singular, plural) => `${quantity} ${quantity === 1 ? singular : plural}`;
+
+const formatSurplus = (parts = []) => parts.map((item) => (
+    `${escapeAlertHtml(item.tamanho)}: ${item.front} frente${item.front === 1 ? '' : 's'}, `
+    + `${item.back} costa${item.back === 1 ? '' : 's'}, `
+    + `${item.sleeve} manga${item.sleeve === 1 ? '' : 's'}`
+)).join(' · ');
+
+const formatPlanCard = (title, plan, recommended = false) => {
+    const metrics = plan?.metrics || {};
+    const surplus = formatSurplus(plan?.surplusParts);
+    return `
+        <div style="border: 1px solid ${recommended ? '#93c5fd' : '#cbd5e1'}; background: ${recommended ? '#eff6ff' : '#f8fafc'}; padding: 14px; border-radius: 8px; text-align: left;">
+            <strong style="display: block; color: #0f172a; margin-bottom: 7px;">${escapeAlertHtml(title)}${recommended ? ' · Recomendado' : ''}</strong>
+            <span style="display: block; color: #334155; line-height: 1.55;">
+                ${pluralize(metrics.spreadCount || 0, 'enfesto', 'enfestos')} ·
+                ${Number(metrics.fabricMeters || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m ·
+                ${pluralize(metrics.looseCutPieces || 0, 'componente em retalho', 'componentes em retalho')} ·
+                ${pluralize(metrics.surplusPieces || 0, 'componente excedente', 'componentes excedentes')}
+            </span>
+            ${surplus ? `<small style="display: block; color: #92400e; margin-top: 7px; line-height: 1.45;">Sobras: ${surplus}</small>` : ''}
+        </div>
+    `;
+};
+
+export const buildCuttingPlanChoiceHtml = ({ economy, fewerSpreads }) => `
+    <div style="display: grid; gap: 10px; margin-top: 8px;">
+        ${formatPlanCard('Economizar malha', economy, true)}
+        ${formatPlanCard('Reduzir enfestos', fewerSpreads)}
+    </div>
+`;
+
+export const chooseCuttingPlanAlert = async (plans) => {
+    const Swal = await getSwal();
+    const result = await Swal.fire({
+        title: 'Como deseja preparar o corte?',
+        html: buildCuttingPlanChoiceHtml(plans),
+        icon: 'question',
+        showDenyButton: true,
+        showCancelButton: true,
+        confirmButtonColor: '#2563EB',
+        denyButtonColor: '#D97706',
+        cancelButtonColor: '#94A3B8',
+        confirmButtonText: 'Economizar malha',
+        denyButtonText: 'Reduzir enfestos',
+        cancelButtonText: 'Cancelar',
+        focusConfirm: true
+    });
+
+    if (result.isConfirmed) return 'economy';
+    if (result.isDenied) return 'fewer-spreads';
+    return null;
+};
+
 // Toast Verde para "Adicionado com Sucesso"
 export const showToastSuccess = async (title = 'Adicionado com sucesso!') => {
     const Swal = await getSwal();

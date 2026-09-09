@@ -17,3 +17,13 @@ test('renders the selection check icon from the shared icon set', () => {
     assert.match(source, /import \{ Icons \} from '\.\.\/components\/Icons';/);
     assert.match(source, /<Icons\.Check \/>/);
 });
+
+test('asks which calculated cutting strategy should be printed', () => {
+    const source = readFileSync(new URL('./CutterDashboard.jsx', import.meta.url), 'utf8');
+
+    assert.match(source, /chooseCuttingPlanAlert/);
+    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'economy'\)/);
+    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'fewer-spreads'\)/);
+    assert.match(source, /await chooseCuttingPlanAlert/);
+    assert.match(source, /printCuttingPlan\(selectedPlan, selectedCuttingOrders\)/);
+});
