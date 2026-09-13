@@ -3,6 +3,8 @@ import axios from 'axios';
 import Modal from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
 import Swal from 'sweetalert2';
+import { formatMoney } from '../utils/helpers';
+import { buildWeeklyDeliveryView, getDeliveryFinancialSummary } from '../utils/weeklyDeliveries';
 
 // ============================================================================
 // --- ÍCONES ---
@@ -148,12 +150,13 @@ const WeeklyDeliveries = () => {
     
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [showAllDeliveries, setShowAllDeliveries] = useState(false);
     const [detailsModalOpen, setDetailsModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
 
     const fetchOrders = useCallback(async () => {
         try {
-            const response = await axios.get(`${API_BASE_URL}/api/orders/upcoming`, { headers: { Authorization: `Bearer ${token}` } });
+            const response = await axios.get(`${API_BASE_URL}/api/orders/upcoming?all=true`, { headers: { Authorization: `Bearer ${token}` } });
             setOrders(response.data.orders);
         } catch (err) { 
             console.error('Erro ao carregar entregas:', err); 
@@ -162,6 +165,7 @@ const WeeklyDeliveries = () => {
         }
     }, [API_BASE_URL, token]);
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
     // ⭐ O ALERTA PREMIUM PARA CONFIRMAR ENTREGA (TAMANHO E BOTÕES CORRIGIDOS) ⭐
@@ -204,16 +208,22 @@ const WeeklyDeliveries = () => {
                     showConfirmButton: false,
                     customClass: { popup: 'premium-swal-popup', title: 'premium-swal-title' }
                 });
-            } catch (error) {
+            } catch {
                 Swal.fire('Falha na atualização', 'Houve um erro ao marcar como entregue.', 'error');
                 setLoading(false);
             }
         }
     };
 
-    const finalOrdersList = useMemo(() => {
-        return [...orders].sort((a, b) => parseDateSafe(a.delivery_date) - parseDateSafe(b.delivery_date));
-    }, [orders]);
+    const deliveryView = useMemo(
+        () => buildWeeklyDeliveryView(orders, new Date(), showAllDeliveries),
+        [orders, showAllDeliveries]
+    );
+
+    const financialSummary = useMemo(
+        () => getDeliveryFinancialSummary(selectedOrder),
+        [selectedOrder]
+    );
 
     const handleViewDetails = async (code) => { 
         if(!detailsModalOpen) setLoading(true); 
@@ -224,7 +234,7 @@ const WeeklyDeliveries = () => {
             d.sizes_json = {...d.sizes_json}; 
             setSelectedOrder(d); 
             setDetailsModalOpen(true); 
-        } catch(e){
+        } catch {
             Swal.fire('Erro', 'Não foi possível carregar os detalhes.', 'error');
         } finally{
             setLoading(false);
@@ -274,6 +284,9 @@ const WeeklyDeliveries = () => {
                 
                 .markDeliveredButton { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
                 .markDeliveredButton:hover { background: #10B981 !important; color: #FFFFFF !important; border-color: #059669 !important; transform: scale(1.05); }
+                .showMoreDeliveriesButton { transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease; }
+                .showMoreDeliveriesButton:hover { background-color: #EFF6FF !important; border-color: #93C5FD !important; transform: translateY(-1px); }
+                .showMoreDeliveriesButton:active { transform: translateY(0); }
                 .statusBadge { padding: 6px 12px !important; font-size: 0.75rem !important; white-space: nowrap; letter-spacing: 0.02em !important; }
                 @media (max-width: 1000px) { .th, .td { padding: 10px 12px !important; } }
             `}</style>
@@ -285,7 +298,9 @@ const WeeklyDeliveries = () => {
                     </div>
                     <div>
                         <h2 style={styles.title}>Entregas da Semana</h2>
-                        <p style={{margin:0, color:'#64748b', fontSize:'0.9rem', fontWeight: '500'}}>Pedidos com prazo de entrega nos próximos 7 dias</p>
+                        <p style={{margin:0, color:'#64748b', fontSize:'0.9rem', fontWeight: '500'}}>
+                            {showAllDeliveries ? 'Todos os pedidos com prazo de entrega' : 'Pedidos com prazo de entrega nos próximos 7 dias'}
+                        </p>
                     </div>
                 </div>
             </header>
@@ -305,7 +320,7 @@ const WeeklyDeliveries = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {finalOrdersList.map((order) => (
+                            {deliveryView.orders.map((order) => (
                                 <DeliveryRow 
                                     key={order.id} 
                                     order={order} 
@@ -316,6 +331,18 @@ const WeeklyDeliveries = () => {
                         </tbody>
                     </table>
                 </div>
+                {deliveryView.remainingCount > 0 && (
+                    <div style={styles.showMoreFooter}>
+                        <button
+                            type="button"
+                            onClick={() => setShowAllDeliveries(true)}
+                            className="showMoreDeliveriesButton"
+                            style={styles.showMoreButton}
+                        >
+                            Mostrar mais entregas ({deliveryView.remainingCount})
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* MODAL DE DETALHES PADRONIZADO (Igual ao Orçamentos/Pedidos) */}
@@ -341,6 +368,21 @@ const WeeklyDeliveries = () => {
                             <p style={{fontWeight:'600', marginBottom:'5px', color: '#475569', fontSize: '0.85rem', textTransform: 'uppercase'}}>Grade Solicitada:</p>
                             <div style={{display:'flex', flexWrap:'wrap', gap:'6px'}}>
                                 {Object.entries(selectedOrder.sizes_json).map(([key, val]) => (val > 0 && <span key={key} style={{padding:'6px 12px', backgroundColor:'#f1f5f9', borderRadius:'6px', fontSize:'0.85rem', border:'1px solid #e2e8f0', color: '#0F172A'}}><b>{key}:</b> {val}</span>))}
+                            </div>
+                        </div>
+
+                        <div style={styles.financialGrid}>
+                            <div style={styles.financialItem}>
+                                <span style={styles.financialLabel}>Valor total</span>
+                                <strong style={styles.financialValue}>{formatMoney(financialSummary.total)}</strong>
+                            </div>
+                            <div style={styles.financialItem}>
+                                <span style={styles.financialLabel}>Valor pago</span>
+                                <strong style={{...styles.financialValue, color:'#047857'}}>{formatMoney(financialSummary.paid)}</strong>
+                            </div>
+                            <div style={{...styles.financialItem, backgroundColor: financialSummary.remaining > 0 ? '#FEF2F2' : '#ECFDF5'}}>
+                                <span style={styles.financialLabel}>Falta pagar</span>
+                                <strong style={{...styles.financialValue, color: financialSummary.remaining > 0 ? '#DC2626' : '#047857'}}>{formatMoney(financialSummary.remaining)}</strong>
                             </div>
                         </div>
                         
@@ -375,6 +417,8 @@ const styles = {
     title: { color: '#0f172a', fontSize: 'clamp(1.35rem, 5vw, 1.75rem)', fontWeight: '800', margin: '0 0 4px 0', letterSpacing: '0' },
     tableContainer: { backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden', border: '1px solid #e2e8f0', maxWidth: '100%' },
     responsiveTableWrapper: { overflowX: 'auto', WebkitOverflowScrolling: 'touch' }, 
+    showMoreFooter: { padding: '16px', display: 'flex', justifyContent: 'center', borderTop: '1px solid #e2e8f0', backgroundColor: '#F8FAFC' },
+    showMoreButton: { width: '100%', maxWidth: '360px', minHeight: '44px', border: '1px solid #CBD5E1', borderRadius: '8px', backgroundColor: '#FFFFFF', color: '#1D4ED8', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer' },
     table: { width: '100%', borderCollapse: 'collapse', minWidth: '700px' }, 
     th: { backgroundColor: '#f8fafc', padding: '16px 24px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', color: '#475569', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' },
     td: { padding: '16px 24px', borderBottom: '1px solid #e2e8f0', color: '#334155', fontSize: '0.95rem' },
@@ -384,6 +428,10 @@ const styles = {
     iconButton: { backgroundColor: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', padding: '6px', borderRadius: '6px', transition: 'background 0.2s' },
     markDeliveredButton: { background: '#F3F4F6', color: '#64748B', border: '1px solid #E5E7EB', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
     detailsContainer: { padding: '10px 0' },
+    financialGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '24px' },
+    financialItem: { display: 'flex', flexDirection: 'column', gap: '6px', padding: '14px', borderRadius: '8px', border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC' },
+    financialLabel: { color: '#64748B', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase' },
+    financialValue: { color: '#0F172A', fontSize: '1rem', fontWeight: '800' },
     actionsContainer: { backgroundColor: '#f8fafc', padding: 'clamp(14px, 4vw, 24px)', borderRadius: '12px', marginBottom: '24px', border: '1px solid #e2e8f0' },
     historyTimeline: { position: 'relative', paddingLeft: '24px', borderLeft: '2px solid #cbd5e1', marginLeft: '10px' },
     historyItem: { marginBottom: '28px', position: 'relative' },

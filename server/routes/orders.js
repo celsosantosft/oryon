@@ -1341,6 +1341,9 @@ router.delete('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'ger
 
 router.get('/api/orders/upcoming', authenticateToken, (req, res) => {
     const nextWeekDate = new Date(); nextWeekDate.setDate(nextWeekDate.getDate() + 7);
+    const includeAllDeliveries = req.query.all === 'true';
+    const deliveryFilter = includeAllDeliveries ? 'AND delivery_date IS NOT NULL' : 'AND delivery_date <= ?';
+    const params = includeAllDeliveries ? [] : [nextWeekDate.toISOString().split('T')[0]];
     db.all(`
         SELECT
             orders.*,
@@ -1349,9 +1352,9 @@ router.get('/api/orders/upcoming', authenticateToken, (req, res) => {
             ${buildEffectiveOrderClientLockExpression('orders')} AS effective_is_locked_by_client
         FROM orders
         WHERE status NOT IN ('Entregue/Concluído', 'Cancelado', 'Arte Arquivada')
-          AND delivery_date <= ?
+          ${deliveryFilter}
         ORDER BY delivery_date ASC
-    `, [nextWeekDate.toISOString().split('T')[0]], (err, rows) => {
+    `, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message, orders: [] });
         attachEffectiveSubmittedSizes(rows || [], (sizesErr, hydratedRows) => {
             if (sizesErr) return res.status(500).json({ error: sizesErr.message, orders: [] });
