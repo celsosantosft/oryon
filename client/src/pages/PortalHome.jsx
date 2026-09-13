@@ -211,7 +211,7 @@ const styles = {
         background: 'radial-gradient(circle at center, #1E293B 0%, #0F172A 100%)', 
         padding: '24px', 
         fontFamily: "'Inter', sans-serif",
-        zIndex: 9999, 
+        zIndex: 1,
         overflowY: 'auto'
     },
     logoWrapper: { 
