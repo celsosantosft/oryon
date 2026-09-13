@@ -14,6 +14,7 @@ const {
 } = require('../config/evolution');
 const { appConfig, buildTrackingCode, normalizeTrackingCode } = require('../config/appConfig');
 const { appPaths } = require('../config/paths');
+const { normalizePlayerNumber } = require('../utils/playerNumber');
 
 db.run("ALTER TABLE orders ADD COLUMN amount_paid REAL DEFAULT 0", (err) => { /* Ignora se já existir */ });
 db.run("ALTER TABLE orders ADD COLUMN client_id INTEGER", () => {});
@@ -47,6 +48,15 @@ function safeParseJSON(jsonString) { try { if (!jsonString || jsonString === '[o
 function generateTrackingCode() { return buildTrackingCode(appConfig.orderPrefix); }
 function generateQuoteTrackingCode() { return buildTrackingCode(appConfig.quotePrefix); }
 function generatePortalToken() { return crypto.randomBytes(24).toString('base64url'); }
+function normalizePortalItems(items) {
+    const normalizedItems = items.map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const playerNumber = normalizePlayerNumber(item.player_number);
+        return playerNumber === null ? null : { ...item, player_number: playerNumber };
+    });
+
+    return normalizedItems.includes(null) ? null : normalizedItems;
+}
 const portalLookupLimit = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 30,
@@ -1742,6 +1752,8 @@ router.post('/api/tracking/portal/:code/save-draft', (req, res) => {
     const refType = isQuote ? 'quote' : 'order';
 
     if (!Array.isArray(items)) return res.status(400).json({ error: 'Lista inválida.' });
+    const normalizedItems = normalizePortalItems(items);
+    if (!normalizedItems) return res.status(400).json({ error: 'Use apenas números ou √ seguido de números.' });
 
     const lockExpression = isQuote
         ? buildEffectiveQuoteClientLockExpression(table)
@@ -1773,7 +1785,7 @@ router.post('/api/tracking/portal/:code/save-draft', (req, res) => {
                 ? db.prepare(`INSERT INTO quote_items (quote_id, player_name, player_number, size, model) VALUES (?, ?, ?, ?, ?)`)
                 : db.prepare(`INSERT INTO order_items (order_id, player_name, player_number, size, model, reference_type) VALUES (?, ?, ?, ?, ?, ?)`);
 
-            items.forEach(item => {
+            normalizedItems.forEach(item => {
                 const safeName = (item.player_name || '').replace(/,/g, '');
                 if (isQuote) {
                     stmt.run([record.id, safeName, item.player_number, item.size, item.model || '']);
@@ -1796,6 +1808,8 @@ router.post('/api/tracking/portal/:code/submit', (req, res) => {
     const refType = isQuote ? 'quote' : 'order';
 
     if (!Array.isArray(items)) return res.status(400).json({ error: 'Lista inválida.' });
+    const normalizedItems = normalizePortalItems(items);
+    if (!normalizedItems) return res.status(400).json({ error: 'Use apenas números ou √ seguido de números.' });
 
     const lockExpression = isQuote
         ? buildEffectiveQuoteClientLockExpression(table)
@@ -1815,7 +1829,7 @@ router.post('/api/tracking/portal/:code/submit', (req, res) => {
         const newSizes = {};
         let totalQty = 0;
         
-        items.forEach(item => {
+        normalizedItems.forEach(item => {
             if (item.size) { newSizes[item.size] = (newSizes[item.size] || 0) + 1; totalQty++; }
         });
         const sizesJsonStr = JSON.stringify(newSizes);
@@ -1878,7 +1892,7 @@ router.post('/api/tracking/portal/:code/submit', (req, res) => {
                     ? db.prepare(`INSERT INTO quote_items (quote_id, player_name, player_number, size, model) VALUES (?, ?, ?, ?, ?)`)
                     : db.prepare(`INSERT INTO order_items (order_id, player_name, player_number, size, model, reference_type) VALUES (?, ?, ?, ?, ?, ?)`);
 
-                items.forEach(item => {
+                normalizedItems.forEach(item => {
                     const safeName = (item.player_name || '').replace(/,/g, '');
                     if (isQuote) {
                         stmt.run([record.id, safeName, item.player_number, item.size, item.model || '']);

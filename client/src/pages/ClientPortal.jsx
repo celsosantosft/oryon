@@ -12,6 +12,7 @@ import { Icons } from '../components/Icons';
 import { styles, injectGlobalStyles } from '../utils/ClientPortalStyles';
 import { formatMoney, parseNull, getAsArray, generateId } from '../utils/helpers';
 import { showToastSuccess, showToastEdit, confirmSubmitListAlert, confirmBulkSubmitAlert, confirmApproveArtAlert } from '../utils/alerts';
+import { PLAYER_NUMBER_MAX_LENGTH, isValidPlayerNumber, normalizePlayerNumberInput } from '../utils/playerNumber';
 
 // Componentes / Abas
 import { HomeTab } from '../components/tabs/HomeTab';
@@ -118,6 +119,7 @@ const ClientPortal = () => {
 
     const saveEdit = async () => {
         if (!editingItem.size) return fireAlert('Atenção', 'Selecione o tamanho.', 'warning');
+        if (!isValidPlayerNumber(editingItem.player_number)) return fireAlert('Atenção', 'Use apenas números ou √ seguido de números.', 'warning');
         saveEditedItem(editingItem);
         setEditingItem(null);
         handleSaveDraft(items.map(item => item.id === editingItem.id ? editingItem : item));
@@ -315,7 +317,7 @@ const ClientPortal = () => {
                             <div style={{ display: 'flex', gap: '12px' }}>
                                 <div style={{ flex: 1 }}>
                                     <label style={styles.label}>Número</label>
-                                    <input type="number" value={editingItem.player_number} onChange={(e) => setEditingItem({...editingItem, player_number: e.target.value})} style={{ ...styles.input, width: '100%', textAlign: 'center' }} />
+                                    <input type="text" inputMode="text" maxLength={PLAYER_NUMBER_MAX_LENGTH} autoComplete="off" placeholder="10 ou √9" value={editingItem.player_number} onChange={(e) => setEditingItem({...editingItem, player_number: normalizePlayerNumberInput(e.target.value)})} style={{ ...styles.input, width: '100%', textAlign: 'center' }} />
                                 </div>
                                 <div style={{ flex: 1 }}>
                                     <label style={styles.label}>Tamanho</label>
@@ -371,7 +373,7 @@ const ClientPortal = () => {
                 {activeTab === 'tracking' && <TrackingTab order={order} currentStepIndex={derivedData.currentStepIndex} STATUS_STEPS_CONFIG={STATUS_STEPS_CONFIG} />}
                 {activeTab === 'finance' && <FinanceTab remainingOrder={derivedData.remainingOrder} percentPaid={derivedData.percentPaid} totalOrder={derivedData.totalOrder} paidOrder={derivedData.paidOrder} formatMoney={formatMoney} />}
                 {activeTab === 'bulk' && <BulkTab isQuote={order.tracking_code?.startsWith('#ORC-')} isLocked={derivedData.isLocked} isUsingNominalList={derivedData.isUsingNominalList} hasAdminSizes={derivedData.hasAdminSizes} availableSizes={derivedData.availableSizes} summaryCounts={derivedData.summaryCounts} totalConfirmed={derivedData.totalConfirmed} bulkSizes={bulkSizes} setBulkSizes={setBulkSizes} handleBulkSubmit={handleBulkSubmit} />}
-                {activeTab === 'list' && <ListTab isLocked={derivedData.isLocked} items={derivedData.nominalItemsForTab} activeItems={derivedData.activeItems} confirmedItems={derivedData.nominalConfirmedItems} availableSizes={derivedData.availableSizes} summaryCounts={derivedData.summaryCounts} lastAddedItem={derivedData.lastAddedNominalItem} handleRemoveItem={handleRemoveItem} handleItemChange={updateItem} handleConfirmItem={handleConfirmItem} handleSubmit={handleSubmit} handleEditItem={setEditingItem} />}
+                {activeTab === 'list' && <ListTab isLocked={derivedData.isLocked} items={derivedData.nominalItemsForTab} activeItems={derivedData.activeItems} confirmedItems={derivedData.nominalConfirmedItems} availableSizes={derivedData.availableSizes} lastAddedItem={derivedData.lastAddedNominalItem} handleRemoveItem={handleRemoveItem} handleItemChange={updateItem} handleConfirmItem={handleConfirmItem} handleSubmit={handleSubmit} handleEditItem={setEditingItem} />}
             </div>
             
             <div style={styles.bottomNav}>

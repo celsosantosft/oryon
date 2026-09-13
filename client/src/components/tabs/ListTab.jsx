@@ -1,9 +1,10 @@
 import React from 'react';
 import { Icons } from '../Icons';
 import { styles } from '../../utils/ClientPortalStyles';
+import { PLAYER_NUMBER_MAX_LENGTH, isValidPlayerNumber, normalizePlayerNumberInput } from '../../utils/playerNumber';
 
 export const ListTab = ({
-    isQuote, isLocked, items, activeItems, confirmedItems, availableSizes, summaryCounts, 
+    isQuote, isLocked, items, activeItems, confirmedItems, availableSizes,
     lastAddedItem, handleRemoveItem, handleItemChange, handleConfirmItem, 
     handleSubmit, handleEditItem
 }) => {
@@ -38,7 +39,7 @@ export const ListTab = ({
 
             {/* ⭐ FORMULÁRIOS LIBERADOS PARA ORÇAMENTO! ⭐ */}
             {!isLocked && activeItems.map((item, index) => {
-                const isFilled = item.size !== '';
+                const isFilled = item.size !== '' && isValidPlayerNumber(item.player_number);
                 return (
                     <div key={item.id} style={{ ...styles.glassCard, width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
                         <div style={{...styles.itemCardHeader, width: '100%', boxSizing: 'border-box', flexWrap: 'wrap'}}>
@@ -53,7 +54,7 @@ export const ListTab = ({
                             </div>
                             <div style={{ flex: '1 1 calc(50% - 4px)', minWidth: 0, boxSizing: 'border-box' }}>
                                 <label style={styles.label}>Nº</label>
-                                <input type="number" placeholder="10" value={item.player_number} onChange={(e) => handleItemChange(item.id, 'player_number', e.target.value)} style={{ ...styles.input, width: '100%', textAlign: 'center', boxSizing: 'border-box' }} />
+                                <input type="text" inputMode="text" maxLength={PLAYER_NUMBER_MAX_LENGTH} autoComplete="off" placeholder="10 ou √9" value={item.player_number} onChange={(e) => handleItemChange(item.id, 'player_number', normalizePlayerNumberInput(e.target.value))} style={{ ...styles.input, width: '100%', textAlign: 'center', boxSizing: 'border-box' }} />
                             </div>
                             <div style={{ flex: '1 1 calc(50% - 4px)', minWidth: 0, boxSizing: 'border-box' }}>
                                 <label style={styles.label}>Tam.</label>
