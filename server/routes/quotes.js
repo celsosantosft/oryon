@@ -3,8 +3,9 @@ const router = express.Router();
 const db = require('../database');
 const crypto = require('crypto');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
-const { appConfig, buildTrackingCode, normalizePrefix } = require('../config/appConfig');
+const { appConfig, buildTrackingCode } = require('../config/appConfig');
 const { createLayoutUpload } = require('../utils/layoutUpload');
+const { buildOrderCodeFromQuoteCode } = require('../utils/quoteOrderTracking');
 db.run("ALTER TABLE quotes ADD COLUMN portal_token TEXT", () => {});
 db.run("ALTER TABLE orders ADD COLUMN portal_token TEXT", () => {});
 
@@ -41,11 +42,6 @@ function generatePortalToken() {
 
 function buildPortalPath(record) {
     return `/portal/${encodeURIComponent(record.tracking_code)}?token=${encodeURIComponent(record.portal_token || '')}`;
-}
-
-function buildOrderCodeFromQuoteCode(quoteCode) {
-    const suffix = String(quoteCode || '').trim().toUpperCase().match(/(\d+)$/)?.[1];
-    return suffix ? `#${normalizePrefix(appConfig.orderPrefix)}-${suffix}` : generateTrackingCode();
 }
 
 const QUOTE_CONVERTED_STATUS = 'Convertido em Pedido';
@@ -745,12 +741,12 @@ router.post('/api/quotes/:id/convert', authenticateToken, authorizeRole(['admin'
                 return;
             }
 
-            const newOrderCode = buildOrderCodeFromQuoteCode(quote.tracking_code);
+            const newOrderCode = buildOrderCodeFromQuoteCode(quote.tracking_code) || generateTrackingCode();
 
             db.serialize(() => {
                 db.run('BEGIN TRANSACTION');
 
-                db.get(`SELECT id, tracking_code, quote_id, client_name FROM orders WHERE tracking_code = ?`, [newOrderCode], (codeErr, codeOwner) => {
+                db.get(`SELECT id, tracking_code, quote_id, client_name FROM orders WHERE tracking_code = ? OR legacy_tracking_code = ?`, [newOrderCode, newOrderCode], (codeErr, codeOwner) => {
                     if (codeErr) {
                         db.run('ROLLBACK');
                         return res.status(500).json({ error: 'Erro ao verificar código do pedido.' });

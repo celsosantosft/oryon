@@ -57,6 +57,11 @@ function normalizePortalItems(items) {
 
     return normalizedItems.includes(null) ? null : normalizedItems;
 }
+function getPortalRecordLookup(table, isQuote, code) {
+    return isQuote
+        ? { clause: `${table}.tracking_code = ?`, params: [code] }
+        : { clause: `(${table}.tracking_code = ? OR ${table}.legacy_tracking_code = ?)`, params: [code, code] };
+}
 const portalLookupLimit = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 30,
@@ -159,7 +164,7 @@ function findPortalRecordByCode(code, callback) {
     const candidates = getPortalCodeCandidates(code);
     const placeholders = candidates.map(() => '?').join(',');
 
-    db.get(`SELECT id, tracking_code, portal_token FROM orders WHERE tracking_code IN (${placeholders}) ORDER BY id DESC LIMIT 1`, candidates, (orderErr, order) => {
+    db.get(`SELECT id, tracking_code, portal_token FROM orders WHERE tracking_code IN (${placeholders}) OR legacy_tracking_code IN (${placeholders}) ORDER BY id DESC LIMIT 1`, [...candidates, ...candidates], (orderErr, order) => {
         if (orderErr) return callback(orderErr);
         if (order) {
             return ensurePortalToken('orders', order, (ensureErr, ensuredOrder) => {
@@ -1090,7 +1095,7 @@ router.put('/api/design-requests/:id', authenticateToken, upload.single('layout_
 });
 
 router.post('/api/orders/:code/convert-to-quote', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes', 'designer']), (req, res) => {
-    db.get(`SELECT * FROM orders WHERE tracking_code=?`, [req.params.code], (err, order) => {
+    db.get(`SELECT * FROM orders WHERE tracking_code=? OR legacy_tracking_code=?`, [req.params.code, req.params.code], (err, order) => {
         if (!order) return res.status(404).json({ message: "Arte não encontrada." });
         const newQuoteCode = generateQuoteTrackingCode();
 
@@ -1407,8 +1412,8 @@ router.get('/api/orders/:code/history', authenticateToken, (req, res) => {
             ${buildEffectiveOrderTotalExpression('orders')} AS effective_total_price,
             ${buildEffectiveOrderClientLockExpression('orders')} AS effective_is_locked_by_client
         FROM orders
-        WHERE tracking_code=?
-    `, [req.params.code], (err, order) => {
+        WHERE tracking_code=? OR legacy_tracking_code=?
+    `, [req.params.code, req.params.code], (err, order) => {
         if (err) return res.status(500).json({ message: err.message });
         if (!order) return res.status(404).json({ message: "Não encontrado." });
         db.all(`SELECT oh.status_text, oh.change_timestamp, COALESCE(u.name, 'Cliente') AS changed_by_name FROM order_history oh LEFT JOIN users u ON oh.changed_by_user_id = u.id WHERE oh.order_id = ? ORDER BY oh.change_timestamp ASC`, [order.id], (err2, history) => {
@@ -1434,7 +1439,7 @@ router.post('/api/orders/:code/status', authenticateToken, authorizeRole(['admin
         return res.status(400).json({ error: 'Status de pedido inválido.' });
     }
 
-    db.get(`SELECT id, tracking_code, status, client_id, client_name, client_phone FROM orders WHERE tracking_code=?`, [req.params.code], (err, order) => {
+    db.get(`SELECT id, tracking_code, status, client_id, client_name, client_phone FROM orders WHERE tracking_code=? OR legacy_tracking_code=?`, [req.params.code, req.params.code], (err, order) => {
         if (err) return res.status(500).json({ message: err.message });
         if (!order) return res.status(404).json({ message: "Não encontrado." });
         db.run(`UPDATE orders SET status=?, board_order=999999 WHERE id=?`, [new_status, order.id], err2 => {
@@ -1459,7 +1464,7 @@ router.post('/api/orders/:code/status', authenticateToken, authorizeRole(['admin
 });
 
 router.post('/api/orders/:code/reset', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
-    db.get(`SELECT id FROM orders WHERE tracking_code=?`, [req.params.code], (err, order) => {
+    db.get(`SELECT id FROM orders WHERE tracking_code=? OR legacy_tracking_code=?`, [req.params.code, req.params.code], (err, order) => {
         if (err) return res.status(500).json({ message: err.message });
         if (!order) return res.status(404).json({ message: "Pedido não encontrado." });
 
@@ -1707,8 +1712,8 @@ router.get('/api/tracking/portal/:code', (req, res) => {
             ${buildEffectiveOrderTotalExpression('orders')} AS effective_total_price,
             ${buildEffectiveOrderClientLockExpression('orders')} AS effective_is_locked_by_client
         FROM orders
-        WHERE tracking_code = ?
-    `, [code], (err, order) => {
+        WHERE tracking_code = ? OR legacy_tracking_code = ?
+    `, [code, code], (err, order) => {
         if (err || !order) return res.status(404).json({ error: 'Pedido não encontrado.' });
 
         ensurePortalToken('orders', order, (tokenErr, securedOrder) => {
@@ -1750,6 +1755,7 @@ router.post('/api/tracking/portal/:code/save-draft', (req, res) => {
     const isQuote = code.startsWith('#ORC-');
     const table = isQuote ? 'quotes' : 'orders';
     const refType = isQuote ? 'quote' : 'order';
+    const lookup = getPortalRecordLookup(table, isQuote, code);
 
     if (!Array.isArray(items)) return res.status(400).json({ error: 'Lista inválida.' });
     const normalizedItems = normalizePortalItems(items);
@@ -1766,8 +1772,8 @@ router.post('/api/tracking/portal/:code/save-draft', (req, res) => {
             ${table}.is_locked_by_client,
             ${lockExpression} AS effective_is_locked_by_client
         FROM ${table}
-        WHERE ${table}.tracking_code = ?
-    `, [code], (err, record) => {
+        WHERE ${lookup.clause}
+    `, lookup.params, (err, record) => {
         if (err || !record) return res.status(404).json({ error: 'Inválido.' });
         if (!requirePortalToken(record, req, res)) return;
         if (normalizeClientLockRow(record).is_locked_by_client) return res.status(403).json({ error: 'Lista bloqueada.' });
@@ -1806,6 +1812,7 @@ router.post('/api/tracking/portal/:code/submit', (req, res) => {
     const isQuote = code.startsWith('#ORC-');
     const table = isQuote ? 'quotes' : 'orders';
     const refType = isQuote ? 'quote' : 'order';
+    const lookup = getPortalRecordLookup(table, isQuote, code);
 
     if (!Array.isArray(items)) return res.status(400).json({ error: 'Lista inválida.' });
     const normalizedItems = normalizePortalItems(items);
@@ -1820,8 +1827,8 @@ router.post('/api/tracking/portal/:code/submit', (req, res) => {
             ${table}.*,
             ${lockExpression} AS effective_is_locked_by_client
         FROM ${table}
-        WHERE ${table}.tracking_code = ?
-    `, [code], (err, record) => {
+        WHERE ${lookup.clause}
+    `, lookup.params, (err, record) => {
         if (err || !record) return res.status(404).json({ error: 'Inválido.' });
         if (!requirePortalToken(record, req, res)) return;
         if (normalizeClientLockRow(record).is_locked_by_client) return res.status(403).json({ error: 'Lista já confirmada.' });
@@ -1944,8 +1951,9 @@ router.post('/api/tracking/portal/:code/approve-art', (req, res) => {
     const code = normalizePortalTrackingCode(req.params.code);
     const isQuote = code.startsWith('#ORC-');
     const table = isQuote ? 'quotes' : 'orders';
+    const lookup = getPortalRecordLookup(table, isQuote, code);
 
-    db.get(`SELECT id, portal_token, status FROM ${table} WHERE tracking_code = ?`, [code], (err, record) => {
+    db.get(`SELECT id, portal_token, status FROM ${table} WHERE ${lookup.clause}`, lookup.params, (err, record) => {
         if (err || !record) return res.status(404).json({ error: 'Inválido.' });
         if (!requirePortalToken(record, req, res)) return;
         

@@ -4,6 +4,7 @@ const crypto = require('crypto');
 require('./config/env').loadEnv();
 const { appConfig } = require('./config/appConfig');
 const { appPaths } = require('./config/paths');
+const { repairLinkedOrderTrackingCodes } = require('./utils/quoteOrderTracking');
 
 function generatePortalToken() {
     return crypto.randomBytes(24).toString('base64url');
@@ -115,6 +116,7 @@ function createTables() {
     db.run(`ALTER TABLE orders ADD COLUMN client_id INTEGER`, () => {});
     db.run(`ALTER TABLE orders ADD COLUMN client_phone TEXT`, () => {});
     db.run(`ALTER TABLE orders ADD COLUMN portal_token TEXT`, () => {});
+    db.run(`ALTER TABLE orders ADD COLUMN legacy_tracking_code TEXT`, () => {});
 
     db.run(`CREATE TABLE IF NOT EXISTS whatsapp_order_status_messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -297,10 +299,17 @@ function createTables() {
     db.run(`ALTER TABLE quotes ADD COLUMN allowed_models TEXT`, () => {});
     db.run(`ALTER TABLE quotes ADD COLUMN amount_paid REAL DEFAULT 0`, () => {});
     db.run(`ALTER TABLE quotes ADD COLUMN portal_token TEXT`, () => {});
+    db.run(`CREATE INDEX IF NOT EXISTS idx_orders_legacy_tracking_code ON orders(legacy_tracking_code)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_orders_portal_token ON orders(portal_token)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_quotes_portal_token ON quotes(portal_token)`);
     backfillPortalTokens('orders');
     backfillPortalTokens('quotes');
+    repairLinkedOrderTrackingCodes(db)
+        .then(({ repaired, collisions }) => {
+            if (repaired > 0) console.log(`Códigos de ${repaired} pedido(s) convertido(s) foram restaurados.`);
+            if (collisions > 0) console.warn(`${collisions} código(s) convertido(s) não foram restaurados por colisão.`);
+        })
+        .catch((error) => console.error('Erro ao restaurar códigos de pedidos convertidos:', error.message));
 
     db.run(`CREATE TABLE IF NOT EXISTS quote_product_lines (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
