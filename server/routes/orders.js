@@ -15,6 +15,7 @@ const {
 const { appConfig, buildTrackingCode, normalizeTrackingCode } = require('../config/appConfig');
 const { appPaths } = require('../config/paths');
 const { normalizePlayerNumber } = require('../utils/playerNumber');
+const { chooseEffectiveOrderItems } = require('../utils/effectiveOrderItems');
 
 db.run("ALTER TABLE orders ADD COLUMN amount_paid REAL DEFAULT 0", (err) => { /* Ignora se já existir */ });
 db.run("ALTER TABLE orders ADD COLUMN client_id INTEGER", () => {});
@@ -363,24 +364,38 @@ function summarizeItemsBySize(items = []) {
     }, {});
 }
 
-function fetchSubmittedOrderSizes(orderId, callback) {
-    db.all(`
-        SELECT size, COUNT(*) AS qty
-        FROM order_items
-        WHERE order_id = ?
-          AND (reference_type = 'order' OR reference_type IS NULL)
-          AND COALESCE(size, '') <> ''
-        GROUP BY size
-    `, [orderId], (err, rows = []) => {
-        if (err) return callback(err);
+function fetchEffectiveOrderItems(orderId, callback) {
+    db.get(`SELECT quote_id FROM orders WHERE id = ?`, [orderId], (orderErr, order) => {
+        if (orderErr) return callback(orderErr);
+        if (!order) return callback(null, []);
 
-        const sizes = {};
-        rows.forEach((row) => {
-            const size = String(row.size || '').trim();
-            if (size) sizes[size] = Number(row.qty || 0);
+        db.all(`
+            SELECT *
+            FROM order_items
+            WHERE order_id = ?
+              AND (reference_type = 'order' OR reference_type IS NULL)
+            ORDER BY id ASC
+        `, [orderId], (itemsErr, orderItems = []) => {
+            if (itemsErr) return callback(itemsErr);
+            if (!order.quote_id) return callback(null, orderItems);
+
+            db.all(`
+                SELECT id, quote_id AS order_id, player_name, player_number, size, model, created_at, 'quote' AS reference_type
+                FROM quote_items
+                WHERE quote_id = ?
+                ORDER BY id ASC
+            `, [order.quote_id], (quoteItemsErr, quoteItems = []) => {
+                if (quoteItemsErr) return callback(quoteItemsErr);
+                callback(null, chooseEffectiveOrderItems(orderItems, quoteItems));
+            });
         });
+    });
+}
 
-        callback(null, sizes);
+function fetchSubmittedOrderSizes(orderId, callback) {
+    fetchEffectiveOrderItems(orderId, (err, items = []) => {
+        if (err) return callback(err);
+        callback(null, summarizeItemsBySize(items));
     });
 }
 
@@ -1418,7 +1433,7 @@ router.get('/api/orders/:code/history', authenticateToken, (req, res) => {
         if (!order) return res.status(404).json({ message: "Não encontrado." });
         db.all(`SELECT oh.status_text, oh.change_timestamp, COALESCE(u.name, 'Cliente') AS changed_by_name FROM order_history oh LEFT JOIN users u ON oh.changed_by_user_id = u.id WHERE oh.order_id = ? ORDER BY oh.change_timestamp ASC`, [order.id], (err2, history) => {
             if (err2) return res.status(500).json({ message: err2.message });
-            db.all(`SELECT * FROM order_items WHERE order_id = ? AND (reference_type = 'order' OR reference_type IS NULL) ORDER BY id ASC`, [order.id], (err3, items) => {
+            fetchEffectiveOrderItems(order.id, (err3, items) => {
                 if (err3) return res.status(500).json({ message: err3.message });
                 fetchOrderProductLines(order.id, (linesErr, productLines) => {
                     if (linesErr) return res.status(500).json({ message: linesErr.message });
@@ -1720,7 +1735,7 @@ router.get('/api/tracking/portal/:code', (req, res) => {
             if (tokenErr) return res.status(500).json({ error: tokenErr.message });
             if (!requirePortalToken(securedOrder, req, res)) return;
 
-        db.all(`SELECT * FROM order_items WHERE order_id = ? AND (reference_type = 'order' OR reference_type IS NULL) ORDER BY id ASC`, [securedOrder.id], (err2, items) => {
+        fetchEffectiveOrderItems(securedOrder.id, (err2, items) => {
             if (err2) return res.status(500).json({ error: err2.message });
 
             db.all(`
@@ -1733,7 +1748,7 @@ router.get('/api/tracking/portal/:code', (req, res) => {
                 if (err3) return res.status(500).json({ error: err3.message });
                 const submittedSizes = summarizeItemsBySize(items || []);
                 const storedSizes = safeParseJSON(securedOrder.sizes_json);
-                const effectiveSizes = sumSizes(storedSizes) > 0 ? storedSizes : submittedSizes;
+                const effectiveSizes = sumSizes(submittedSizes) > 0 ? submittedSizes : storedSizes;
 
                 res.json({
                     ...normalizeOrderFinancialRow({ ...securedOrder, portal_token: undefined }),
@@ -2003,7 +2018,7 @@ router.post('/api/quotes/:id/unlock', authenticateToken, authorizeRole(['admin',
 });
 
 router.get('/api/orders/:id/export-txt', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao']), (req, res) => {
-    db.all(`SELECT * FROM order_items WHERE order_id = ? AND (reference_type = 'order' OR reference_type IS NULL)`, [req.params.id], (err, items) => {
+    fetchEffectiveOrderItems(req.params.id, (err, items) => {
         if (err || !items || items.length === 0) return res.status(404).json({ error: 'Vazio.' });
 
         const grouped = {};
