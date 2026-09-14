@@ -2,6 +2,17 @@ import { sortGradeItems } from './cuttingGrouping.js';
 
 export const CUTTING_TABLE = { width: 180, height: 280 };
 
+export function getEffectiveCuttingArea(table = CUTTING_TABLE, fabricWidth = CUTTING_TABLE.width) {
+    const tableWidth = Number(table?.width) > 0 ? Number(table.width) : CUTTING_TABLE.width;
+    const tableHeight = Number(table?.height) > 0 ? Number(table.height) : CUTTING_TABLE.height;
+    const usableFabricWidth = Number(fabricWidth) > 0 ? Number(fabricWidth) : CUTTING_TABLE.width;
+
+    return {
+        width: Math.min(tableWidth, usableFabricWidth),
+        height: tableHeight
+    };
+}
+
 export const SHIRT_MEASUREMENTS = {
     PP: { front: [50.7, 69.2], back: [50.7, 74], sleeve: [39.1, 24.3] },
     P: { front: [53.4, 70.8], back: [53.4, 74], sleeve: [41.5, 24.6] },
@@ -84,14 +95,14 @@ function pruneFreeRectangles(rectangles) {
     )));
 }
 
-function packMarkers(markers) {
+function packMarkers(markers, table) {
     const sorted = [...markers].sort((left, right) => (
         (right.width * right.height) - (left.width * left.height)
         || right.height - left.height
         || left.id.localeCompare(right.id)
     ));
     const packed = [];
-    let freeRectangles = [{ x: 0, y: 0, width: CUTTING_TABLE.width, height: CUTTING_TABLE.height }];
+    let freeRectangles = [{ x: 0, y: 0, width: table.width, height: table.height }];
 
     for (const marker of sorted) {
         let placement = null;
@@ -266,7 +277,7 @@ function summarizeSpread(layers, packed, acceptedUnits) {
     };
 }
 
-function buildEconomyCandidate(remaining, layers) {
+function buildEconomyCandidate(remaining, layers, table) {
     const units = makeEconomyUnits(remaining, layers);
     if (!units.length) return null;
 
@@ -275,7 +286,7 @@ function buildEconomyCandidate(remaining, layers) {
     const accepted = [];
 
     units.forEach((unit) => {
-        const nextPacked = packMarkers([...markers, ...unit.markers]);
+        const nextPacked = packMarkers([...markers, ...unit.markers], table);
         if (!nextPacked) return;
         markers = [...markers, ...unit.markers];
         packed = nextPacked;
@@ -292,7 +303,7 @@ function compareEconomyCandidates(left, right) {
         || left.sizes.join('|').localeCompare(right.sizes.join('|'));
 }
 
-function buildEconomySolution(requested) {
+function buildEconomySolution(requested, table) {
     const remaining = new Map(requested);
     const spreads = [];
 
@@ -301,7 +312,7 @@ function buildEconomySolution(requested) {
         let best = null;
 
         for (let layers = 2; layers <= maxLayers; layers += 1) {
-            const candidate = buildEconomyCandidate(remaining, layers);
+            const candidate = buildEconomyCandidate(remaining, layers, table);
             if (candidate && (!best || compareEconomyCandidates(candidate, best) < 0)) best = candidate;
         }
 
@@ -352,11 +363,11 @@ function makeRoundedSizeUnit(size, quantity, layers) {
     return { size, quantity, markers, transformations };
 }
 
-function buildRoundedSpread(sizes, requested, layers) {
+function buildRoundedSpread(sizes, requested, layers, table) {
     const units = sizes.map((size) => makeRoundedSizeUnit(size, requested.get(size), layers));
     if (units.some((unit) => !unit)) return null;
     const markers = units.flatMap((unit) => unit.markers);
-    const packed = packMarkers(markers);
+    const packed = packMarkers(markers, table);
     return packed ? summarizeSpread(layers, packed, units) : null;
 }
 
@@ -376,7 +387,7 @@ function compareRoundedPlans(left, right) {
         || left.fabricUsage - right.fabricUsage;
 }
 
-function buildRoundedSolution(sizes, requested) {
+function buildRoundedSolution(sizes, requested, table) {
     const spreadByMask = new Map();
     const fullMask = (1 << sizes.length) - 1;
     const maxQuantity = Math.max(...requested.values());
@@ -386,7 +397,7 @@ function buildRoundedSolution(sizes, requested) {
         const subset = sizes.filter((_, index) => (mask & (1 << index)) !== 0);
         let best = null;
         for (let layers = 1; layers <= maxLayers; layers += 1) {
-            const spread = buildRoundedSpread(subset, requested, layers);
+            const spread = buildRoundedSpread(subset, requested, layers, table);
             if (spread && (!best || compareRoundedSpreads(spread, best) < 0)) best = spread;
         }
         if (best) spreadByMask.set(mask, best);
@@ -450,7 +461,11 @@ function makeSurplusParts(produced, loose, applied) {
     return surplus;
 }
 
-export function buildCuttingPlan(orders, strategy = 'economy') {
+export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUTTING_TABLE) {
+    const table = {
+        width: Number(cuttingArea?.width) || CUTTING_TABLE.width,
+        height: Number(cuttingArea?.height) || CUTTING_TABLE.height
+    };
     const requested = new Map();
     (orders || []).forEach((order) => {
         (order.grade || []).forEach(({ tamanho, quantidade }) => {
@@ -464,8 +479,8 @@ export function buildCuttingPlan(orders, strategy = 'economy') {
         .filter((size) => Boolean(SHIRT_MEASUREMENTS[size]));
     const unsupportedSizes = gradeTotals.filter((item) => !SHIRT_MEASUREMENTS[item.tamanho]);
     const supportedRequested = new Map(supportedSizes.map((size) => [size, requested.get(size)]));
-    const economy = buildEconomySolution(supportedRequested);
-    const rounded = supportedSizes.length ? buildRoundedSolution(supportedSizes, supportedRequested) : { spreads: [] };
+    const economy = buildEconomySolution(supportedRequested, table);
+    const rounded = supportedSizes.length ? buildRoundedSolution(supportedSizes, supportedRequested, table) : { spreads: [] };
     const useRounded = strategy === 'fewer-spreads' && rounded.spreads.length < economy.spreads.length;
     const selected = useRounded ? { spreads: rounded.spreads, loose: new Map() } : economy;
     const spreads = [...selected.spreads]
@@ -477,7 +492,7 @@ export function buildCuttingPlan(orders, strategy = 'economy') {
                 tamanho,
                 quantidade: Math.min(front, back, Math.floor(sleeve / 2))
             }))),
-            table: CUTTING_TABLE
+            table
         }));
     const loose = selected.loose || new Map();
     const producedParts = aggregateSpreadParts(spreads, 'partTotals');
@@ -493,7 +508,7 @@ export function buildCuttingPlan(orders, strategy = 'economy') {
 
     return {
         strategy,
-        table: CUTTING_TABLE,
+        table,
         orders: orders || [],
         totalPieces: Array.from(requested.values()).reduce((sum, quantity) => sum + quantity, 0),
         gradeTotals,

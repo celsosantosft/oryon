@@ -8,6 +8,7 @@ const COMPLETABLE_CUTTING_STATUSES = ACTIVE_CUTTING_STATUSES;
 const HISTORICAL_CUTTING_STATUSES = ['Corte Concluido', 'Corte Concluído', 'Na Costura', 'Costura Iniciada'];
 const FINALIZED_CUTTING_STATUS = 'Costura Iniciada';
 const CUTTING_PART_TYPES = ['frente', 'costas', 'mangas'];
+const CUTTING_ROLES = ['admin', 'gerente', 'gerente_producao', 'gerente_operacoes', 'corte'];
 
 function ensureProgressTable(callback) {
     db.run(`
@@ -80,7 +81,117 @@ function isActiveCuttingStatus(status) {
     return ACTIVE_CUTTING_STATUSES.includes(status);
 }
 
-router.get('/corte/pedidos', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_producao', 'gerente_operacoes', 'corte']), (req, res) => {
+function parseCuttingDimension(value, label) {
+    const parsed = Number(String(value ?? '').trim().replace(',', '.'));
+    if (!Number.isFinite(parsed) || parsed < 30 || parsed > 5000) {
+        throw new Error(`${label} deve estar entre 30 e 5000 cm.`);
+    }
+    return Math.round(parsed * 10) / 10;
+}
+
+function parseCuttingFabricPayload(payload = {}) {
+    const malhaNome = String(payload.malha_nome || '').trim().replace(/\s+/g, ' ');
+    if (!malhaNome) throw new Error('Informe a malha que será configurada.');
+
+    return {
+        malha_key: normalizeText(malhaNome).trim().replace(/\s+/g, ' '),
+        malha_nome: malhaNome,
+        malha_largura_cm: parseCuttingDimension(payload.malha_largura_cm, 'A largura da malha')
+    };
+}
+
+function parseCuttingTablePayload(payload = {}) {
+    return {
+        mesa_largura_cm: parseCuttingDimension(payload.mesa_largura_cm, 'A largura da mesa'),
+        mesa_comprimento_cm: parseCuttingDimension(payload.mesa_comprimento_cm, 'O comprimento da mesa')
+    };
+}
+
+router.get('/corte/configuracoes', authenticateToken, authorizeRole(CUTTING_ROLES), (req, res) => {
+    db.get(`
+        SELECT largura_cm, comprimento_cm, updated_at
+        FROM corte_configuracao_mesa
+        WHERE id = 1
+    `, [], (tableErr, mesa) => {
+        if (tableErr) return res.status(500).json({ error: tableErr.message });
+
+        db.all(`
+            SELECT malha_key, malha_nome, largura_cm, updated_at
+            FROM corte_configuracao_malha
+            ORDER BY malha_nome COLLATE NOCASE ASC
+        `, [], (fabricErr, malhas) => {
+            if (fabricErr) return res.status(500).json({ error: fabricErr.message });
+            res.json({
+                mesa: {
+                    largura_cm: Number(mesa?.largura_cm) || 180,
+                    comprimento_cm: Number(mesa?.comprimento_cm) || 280
+                },
+                malhas: malhas || []
+            });
+        });
+    });
+});
+
+router.put('/corte/configuracoes/mesa', authenticateToken, authorizeRole(CUTTING_ROLES), (req, res) => {
+    let settings;
+    try {
+        settings = parseCuttingTablePayload(req.body);
+    } catch (error) {
+        return res.status(400).json({ error: error.message });
+    }
+
+    db.run(`
+        INSERT INTO corte_configuracao_mesa
+            (id, largura_cm, comprimento_cm, updated_by_user_id, updated_at)
+        VALUES (1, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+            largura_cm = excluded.largura_cm,
+            comprimento_cm = excluded.comprimento_cm,
+            updated_by_user_id = excluded.updated_by_user_id,
+            updated_at = CURRENT_TIMESTAMP
+    `, [settings.mesa_largura_cm, settings.mesa_comprimento_cm, req.user.id || null], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({
+            message: 'Medidas da mesa atualizadas.',
+            mesa: {
+                largura_cm: settings.mesa_largura_cm,
+                comprimento_cm: settings.mesa_comprimento_cm
+            }
+        });
+    });
+});
+
+router.put('/corte/configuracoes/malha', authenticateToken, authorizeRole(CUTTING_ROLES), (req, res) => {
+    let settings;
+    try {
+        settings = parseCuttingFabricPayload(req.body);
+    } catch (error) {
+        return res.status(400).json({ error: error.message });
+    }
+
+    db.run(`
+        INSERT INTO corte_configuracao_malha
+            (malha_key, malha_nome, largura_cm, updated_by_user_id, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(malha_key) DO UPDATE SET
+            malha_nome = excluded.malha_nome,
+            largura_cm = excluded.largura_cm,
+            updated_by_user_id = excluded.updated_by_user_id,
+            updated_at = CURRENT_TIMESTAMP
+    `, [settings.malha_key, settings.malha_nome, settings.malha_largura_cm, req.user.id || null], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({
+            message: 'Largura da malha atualizada.',
+            malha: {
+                malha_key: settings.malha_key,
+                malha_nome: settings.malha_nome,
+                largura_cm: settings.malha_largura_cm
+            }
+        });
+    });
+});
+
+router.get('/corte/pedidos', authenticateToken, authorizeRole(CUTTING_ROLES), (req, res) => {
     const isHistory = normalizeText(req.query.aba).trim() === 'historico';
     const statuses = isHistory ? HISTORICAL_CUTTING_STATUSES : ACTIVE_CUTTING_STATUSES;
     const statusPlaceholders = statuses.map(() => '?').join(', ');
@@ -323,7 +434,9 @@ router.post('/corte/salvar-progresso', authenticateToken, authorizeRole(['admin'
 });
 
 router._test = {
-    isActiveCuttingStatus
+    isActiveCuttingStatus,
+    parseCuttingFabricPayload,
+    parseCuttingTablePayload
 };
 
 module.exports = router;

@@ -604,6 +604,27 @@ function createTables() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 
+    db.run(`CREATE TABLE IF NOT EXISTS corte_configuracao_mesa (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        largura_cm REAL NOT NULL DEFAULT 180,
+        comprimento_cm REAL NOT NULL DEFAULT 280,
+        updated_by_user_id INTEGER,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS corte_configuracao_malha (
+        malha_key TEXT PRIMARY KEY,
+        malha_nome TEXT NOT NULL,
+        largura_cm REAL NOT NULL DEFAULT 180,
+        updated_by_user_id INTEGER,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    db.run(`
+        INSERT OR IGNORE INTO corte_configuracao_mesa (id, largura_cm, comprimento_cm)
+        VALUES (1, 180, 280)
+    `);
+
     db.run(`CREATE TABLE IF NOT EXISTS finance_goal_settings (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         revenue REAL NOT NULL DEFAULT 25000,

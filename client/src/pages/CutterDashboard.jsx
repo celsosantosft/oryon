@@ -1,11 +1,25 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { Icons } from '../components/Icons';
 import { useAuth } from '../context/AuthContext';
-import { buildCuttingFabricTabs } from '../utils/cuttingGrouping';
-import { buildCuttingPlan } from '../utils/cuttingPlanner';
+import { buildCuttingFabricTabs, normalizeCuttingKey } from '../utils/cuttingGrouping';
+import { buildCuttingPlan, getEffectiveCuttingArea } from '../utils/cuttingPlanner';
 import { buildCuttingPlanPrintHtml } from '../utils/cuttingPlanPrint';
 import { chooseCuttingPlanAlert } from '../utils/alerts';
+
+const DEFAULT_CUTTING_SETTINGS = {
+    table: { width: 180, height: 280 },
+    fabricWidths: {}
+};
+
+function formatCentimeters(value) {
+    return Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+}
+
+function parseCentimeters(value) {
+    const parsed = Number(String(value ?? '').trim().replace(',', '.'));
+    return Math.round(parsed * 10) / 10;
+}
 
 function parseDate(value) {
     if (!value) return null;
@@ -289,6 +303,23 @@ export default function CutterDashboard() {
     const [notice, setNotice] = useState('');
     const [completingOrderId, setCompletingOrderId] = useState(null);
     const [selectedCuttingKeys, setSelectedCuttingKeys] = useState([]);
+    const [cuttingSettings, setCuttingSettings] = useState(DEFAULT_CUTTING_SETTINGS);
+    const [settingsLoaded, setSettingsLoaded] = useState(false);
+    const [settingsLoadError, setSettingsLoadError] = useState('');
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [settingsSaving, setSettingsSaving] = useState(false);
+    const [settingsError, setSettingsError] = useState('');
+    const [settingsDraft, setSettingsDraft] = useState({
+        fabricId: '',
+        fabricName: '',
+        fabricWidth: '180',
+        tableWidth: '180',
+        tableLength: '280',
+        originalFabricWidth: 180,
+        originalTableWidth: 180,
+        originalTableLength: 280
+    });
+    const settingsRevisionRef = useRef(0);
 
     useEffect(() => {
         let isActive = true;
@@ -304,7 +335,14 @@ export default function CutterDashboard() {
                 });
 
                 if (!isActive) return;
-                setOrders(Array.isArray(response.data) ? response.data : []);
+                const loadedOrders = Array.isArray(response.data) ? response.data : [];
+                const availableFabrics = buildCuttingFabricTabs(loadedOrders);
+                setOrders(loadedOrders);
+                setSelectedFabricId((current) => (
+                    availableFabrics.some((fabric) => fabric.id === current)
+                        ? current
+                        : (availableFabrics[0]?.id || '')
+                ));
                 setLoadError('');
             } catch (error) {
                 if (!isActive) return;
@@ -331,6 +369,64 @@ export default function CutterDashboard() {
         };
     }, [API_BASE_URL, token]);
 
+    useEffect(() => {
+        let isActive = true;
+        let requestInFlight = false;
+        let hasLoadedSettings = false;
+
+        const loadCuttingSettings = async () => {
+            if (requestInFlight) return;
+            requestInFlight = true;
+            const requestRevision = settingsRevisionRef.current;
+            try {
+                const response = await axios.get(`${API_BASE_URL}/corte/configuracoes`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (!isActive || requestRevision !== settingsRevisionRef.current) return;
+
+                const table = response.data?.mesa || {};
+                const fabricWidths = Object.fromEntries((response.data?.malhas || []).map((fabric) => [
+                    fabric.malha_key,
+                    Number(fabric.largura_cm) || 180
+                ]));
+                setCuttingSettings({
+                    table: {
+                        width: Number(table.largura_cm) || 180,
+                        height: Number(table.comprimento_cm) || 280
+                    },
+                    fabricWidths
+                });
+                hasLoadedSettings = true;
+                setSettingsLoaded(true);
+                setSettingsLoadError('');
+            } catch (error) {
+                if (!isActive) return;
+                console.error('Erro ao carregar medidas do corte:', error);
+                if (hasLoadedSettings) {
+                    setSettingsLoadError('Não foi possível atualizar as medidas agora. O sistema mantém a última configuração carregada.');
+                } else {
+                    setSettingsLoaded(false);
+                    setSettingsLoadError('Não foi possível carregar as medidas da mesa e das malhas. O PDF está bloqueado para evitar um corte incorreto.');
+                }
+            } finally {
+                requestInFlight = false;
+            }
+        };
+
+        if (token) {
+            loadCuttingSettings();
+            const pollingId = window.setInterval(loadCuttingSettings, 15000);
+            return () => {
+                isActive = false;
+                window.clearInterval(pollingId);
+            };
+        }
+
+        return () => {
+            isActive = false;
+        };
+    }, [API_BASE_URL, token]);
+
     const fabricTabs = useMemo(() => buildCuttingFabricTabs(orders), [orders]);
     const activeFabric = fabricTabs.find((tab) => tab.id === selectedFabricId) || fabricTabs[0] || null;
     const totalOrders = useMemo(() => new Set(fabricTabs.flatMap((tab) => (
@@ -344,24 +440,116 @@ export default function CutterDashboard() {
         const keys = new Set(selectedCuttingKeys);
         return fabricTabs.flatMap((tab) => tab.modelings.flatMap((group) => group.orders)).filter((order) => keys.has(getOrderSelectionKey(order)));
     }, [fabricTabs, selectedCuttingKeys]);
+    const selectedPlanFabricKey = selectedCuttingOrders[0]
+        ? normalizeCuttingKey(selectedCuttingOrders[0].fabricLabel)
+        : activeFabric?.id;
+    const selectedFabricWidth = cuttingSettings.fabricWidths[selectedPlanFabricKey] || 180;
+    const effectiveCuttingArea = useMemo(() => (
+        getEffectiveCuttingArea(cuttingSettings.table, selectedFabricWidth)
+    ), [cuttingSettings.table, selectedFabricWidth]);
     const cuttingPlans = useMemo(() => (
-        selectedCuttingOrders.length ? {
-            economy: buildCuttingPlan(selectedCuttingOrders, 'economy'),
-            fewerSpreads: buildCuttingPlan(selectedCuttingOrders, 'fewer-spreads')
+        selectedCuttingOrders.length && settingsLoaded ? {
+            economy: buildCuttingPlan(selectedCuttingOrders, 'economy', effectiveCuttingArea),
+            fewerSpreads: buildCuttingPlan(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea)
         } : null
-    ), [selectedCuttingOrders]);
+    ), [effectiveCuttingArea, selectedCuttingOrders, settingsLoaded]);
     const cuttingPlan = cuttingPlans?.economy || null;
+    const activeFabricWidth = activeFabric ? (cuttingSettings.fabricWidths[activeFabric.id] || 180) : 180;
+    const activeCuttingArea = getEffectiveCuttingArea(cuttingSettings.table, activeFabricWidth);
+    const isEditingActiveFabric = Boolean(
+        settingsOpen && activeFabric && settingsDraft.fabricId === activeFabric.id
+    );
+    const hasUnsavedSettings = isEditingActiveFabric && (
+        settingsDraft.fabricWidth !== String(settingsDraft.originalFabricWidth)
+        || settingsDraft.tableWidth !== String(settingsDraft.originalTableWidth)
+        || settingsDraft.tableLength !== String(settingsDraft.originalTableLength)
+    );
 
-    useEffect(() => {
-        if (!activeFabric) {
-            if (selectedFabricId) setSelectedFabricId('');
+    const saveCuttingSettings = async (event) => {
+        event.preventDefault();
+        if (!activeFabric || settingsDraft.fabricId !== activeFabric.id) {
+            setSettingsOpen(false);
+            setSettingsError('');
+            setNotice('A malha ativa mudou. Abra novamente os ajustes antes de salvar.');
             return;
         }
 
-        if (selectedFabricId !== activeFabric.id) {
-            setSelectedFabricId(activeFabric.id);
+        const fabricWidth = parseCentimeters(settingsDraft.fabricWidth);
+        const tableWidth = parseCentimeters(settingsDraft.tableWidth);
+        const tableLength = parseCentimeters(settingsDraft.tableLength);
+        const dimensions = [fabricWidth, tableWidth, tableLength];
+        if (dimensions.some((value) => !Number.isFinite(value) || value < 30 || value > 5000)) {
+            setSettingsError('Informe medidas válidas entre 30 e 5000 cm.');
+            return;
         }
-    }, [activeFabric, selectedFabricId]);
+
+        const tableChanged = tableWidth !== settingsDraft.originalTableWidth
+            || tableLength !== settingsDraft.originalTableLength;
+        const fabricChanged = fabricWidth !== settingsDraft.originalFabricWidth;
+        if (!tableChanged && !fabricChanged) {
+            setSettingsOpen(false);
+            return;
+        }
+
+        setSettingsSaving(true);
+        setSettingsError('');
+        settingsRevisionRef.current += 1;
+        try {
+            const requests = [];
+            if (tableChanged) {
+                requests.push(axios.put(`${API_BASE_URL}/corte/configuracoes/mesa`, {
+                    mesa_largura_cm: tableWidth,
+                    mesa_comprimento_cm: tableLength
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                }).then(() => ({ type: 'table' })));
+            }
+            if (fabricChanged) {
+                requests.push(axios.put(`${API_BASE_URL}/corte/configuracoes/malha`, {
+                    malha_nome: settingsDraft.fabricName,
+                    malha_largura_cm: fabricWidth
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                }).then(() => ({ type: 'fabric' })));
+            }
+
+            const results = await Promise.allSettled(requests);
+            settingsRevisionRef.current += 1;
+            const savedTypes = results
+                .filter((result) => result.status === 'fulfilled')
+                .map((result) => result.value.type);
+            const failed = results.find((result) => result.status === 'rejected');
+
+            if (savedTypes.includes('table')) {
+                setCuttingSettings((current) => ({
+                    ...current,
+                    table: { width: tableWidth, height: tableLength }
+                }));
+            }
+            if (savedTypes.includes('fabric')) {
+                setCuttingSettings((current) => ({
+                    ...current,
+                    fabricWidths: { ...current.fabricWidths, [settingsDraft.fabricId]: fabricWidth }
+                }));
+            }
+
+            if (failed) {
+                const message = failed.reason?.response?.data?.error || 'Não foi possível salvar todas as medidas do corte.';
+                setSettingsError(savedTypes.length ? `Uma parte foi salva. ${message}` : message);
+                return;
+            }
+
+            setSettingsLoaded(true);
+            setSettingsLoadError('');
+            setSettingsOpen(false);
+            setNotice(`Medidas atualizadas para ${settingsDraft.fabricName}.`);
+        } catch (error) {
+            console.error('Erro ao salvar medidas do corte:', error);
+            setSettingsError(error.response?.data?.error || 'Não foi possível salvar as medidas do corte.');
+        } finally {
+            setSettingsSaving(false);
+        }
+    };
 
     const completeOrder = async (order) => {
         const label = order.tracking_code || `#${order.id_pedido}`;
@@ -408,6 +596,11 @@ export default function CutterDashboard() {
     };
 
     const handlePrintCuttingPlan = async () => {
+        if (settingsSaving || hasUnsavedSettings) {
+            setNotice('Salve ou cancele os ajustes de medida antes de gerar o PDF.');
+            return;
+        }
+
         if (!cuttingPlan || cuttingPlan.shortages.length > 0) {
             setNotice('Não foi possível gerar o PDF porque ainda existem peças sem encaixe no plano.');
             return;
@@ -482,7 +675,11 @@ export default function CutterDashboard() {
                                     <button
                                         key={tab.id}
                                         type="button"
-                                        onClick={() => setSelectedFabricId(tab.id)}
+                                        onClick={() => {
+                                            setSelectedFabricId(tab.id);
+                                            setSettingsOpen(false);
+                                            setSettingsError('');
+                                        }}
                                         className={`rounded-lg border px-4 py-3 text-sm font-black transition ${
                                             activeFabric?.id === tab.id
                                                 ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
@@ -511,6 +708,133 @@ export default function CutterDashboard() {
                                         </span>
                                     </div>
                                     <GradePills grade={activeFabric.gradeTotals} compact />
+
+                                    <div className="mt-4 border-t border-slate-200 pt-4">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <p className="text-xs font-black uppercase tracking-widest text-slate-500">Área útil do corte</p>
+                                                <p className="mt-1 text-base font-black text-slate-950">
+                                                    {formatCentimeters(activeCuttingArea.width)} × {formatCentimeters(activeCuttingArea.height)} cm
+                                                </p>
+                                                <p className="mt-0.5 text-xs font-bold text-slate-500">
+                                                    Malha {formatCentimeters(activeFabricWidth)} cm · Mesa {formatCentimeters(cuttingSettings.table.width)} × {formatCentimeters(cuttingSettings.table.height)} cm
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                disabled={!settingsLoaded}
+                                                onClick={() => {
+                                                    if (!isEditingActiveFabric) {
+                                                        setSettingsDraft({
+                                                            fabricId: activeFabric.id,
+                                                            fabricName: activeFabric.label,
+                                                            fabricWidth: String(activeFabricWidth),
+                                                            tableWidth: String(cuttingSettings.table.width),
+                                                            tableLength: String(cuttingSettings.table.height),
+                                                            originalFabricWidth: activeFabricWidth,
+                                                            originalTableWidth: cuttingSettings.table.width,
+                                                            originalTableLength: cuttingSettings.table.height
+                                                        });
+                                                    }
+                                                    setSettingsOpen(!isEditingActiveFabric);
+                                                    setSettingsError('');
+                                                }}
+                                                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                                            >
+                                                <Icons.Edit />
+                                                Ajustar medidas
+                                            </button>
+                                        </div>
+
+                                        {settingsLoadError && (
+                                            <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+                                                {settingsLoadError}
+                                            </p>
+                                        )}
+
+                                        {isEditingActiveFabric && (
+                                            <form onSubmit={saveCuttingSettings} className="mt-4 border-t border-slate-200 pt-4">
+                                                <div className="grid gap-3 sm:grid-cols-3">
+                                                    <label className="block text-sm font-black text-slate-700">
+                                                        Largura da malha
+                                                        <span className="relative mt-1 block">
+                                                            <input
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={settingsDraft.fabricWidth}
+                                                                onChange={(event) => setSettingsDraft((current) => ({ ...current, fabricWidth: event.target.value }))}
+                                                                className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 pr-12 text-base font-black text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                                aria-label={`Largura da malha ${activeFabric.label} em centímetros`}
+                                                            />
+                                                            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-bold text-slate-400">cm</span>
+                                                        </span>
+                                                    </label>
+                                                    <label className="block text-sm font-black text-slate-700">
+                                                        Largura da mesa
+                                                        <span className="relative mt-1 block">
+                                                            <input
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={settingsDraft.tableWidth}
+                                                                onChange={(event) => setSettingsDraft((current) => ({ ...current, tableWidth: event.target.value }))}
+                                                                className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 pr-12 text-base font-black text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                                aria-label="Largura da mesa em centímetros"
+                                                            />
+                                                            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-bold text-slate-400">cm</span>
+                                                        </span>
+                                                    </label>
+                                                    <label className="block text-sm font-black text-slate-700">
+                                                        Comprimento da mesa
+                                                        <span className="relative mt-1 block">
+                                                            <input
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={settingsDraft.tableLength}
+                                                                onChange={(event) => setSettingsDraft((current) => ({ ...current, tableLength: event.target.value }))}
+                                                                className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 pr-12 text-base font-black text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                                aria-label="Comprimento da mesa em centímetros"
+                                                            />
+                                                            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-bold text-slate-400">cm</span>
+                                                        </span>
+                                                    </label>
+                                                </div>
+
+                                                {settingsError && (
+                                                    <p className="mt-3 text-sm font-bold text-red-700">{settingsError}</p>
+                                                )}
+
+                                                <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSettingsDraft({
+                                                                fabricId: activeFabric.id,
+                                                                fabricName: activeFabric.label,
+                                                                fabricWidth: String(activeFabricWidth),
+                                                                tableWidth: String(cuttingSettings.table.width),
+                                                                tableLength: String(cuttingSettings.table.height),
+                                                                originalFabricWidth: activeFabricWidth,
+                                                                originalTableWidth: cuttingSettings.table.width,
+                                                                originalTableLength: cuttingSettings.table.height
+                                                            });
+                                                            setSettingsOpen(false);
+                                                            setSettingsError('');
+                                                        }}
+                                                        className="h-11 rounded-lg border border-slate-300 px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50 active:scale-[0.98]"
+                                                    >
+                                                        Cancelar
+                                                    </button>
+                                                    <button
+                                                        type="submit"
+                                                        disabled={settingsSaving}
+                                                        className="h-11 rounded-lg bg-blue-600 px-5 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98] disabled:cursor-wait disabled:bg-slate-400"
+                                                    >
+                                                        {settingsSaving ? 'Salvando...' : 'Salvar medidas'}
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {activeFabric.modelings.map((group) => (
@@ -566,7 +890,12 @@ export default function CutterDashboard() {
                             <button type="button" onClick={() => setSelectedCuttingKeys([])} className="h-11 rounded-lg border border-slate-300 px-4 text-sm font-black text-slate-700">
                                 Limpar
                             </button>
-                            <button type="button" onClick={handlePrintCuttingPlan} className="h-11 rounded-lg bg-blue-600 px-4 text-sm font-black text-white shadow-sm hover:bg-blue-700">
+                            <button
+                                type="button"
+                                disabled={settingsSaving || hasUnsavedSettings}
+                                onClick={handlePrintCuttingPlan}
+                                className="h-11 rounded-lg bg-blue-600 px-4 text-sm font-black text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                            >
                                 Gerar PDF
                             </button>
                         </div>

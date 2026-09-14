@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildCuttingPlan } from './cuttingPlanner.js';
+import * as cuttingPlanner from './cuttingPlanner.js';
 
 function bySize(items = []) {
     return new Map(items.map((item) => [item.tamanho, item]));
@@ -198,4 +199,39 @@ test('reports only the fabric length occupied by the markers', () => {
 
     assert.equal(plan.spreads[0].usedLength, lastMarkerEdge);
     assert.ok(plan.spreads[0].usedLength < plan.table.height);
+});
+
+test('respects the configured cutting area when packing markers', () => {
+    const cuttingArea = { width: 120, height: 240 };
+    const plan = buildCuttingPlan([
+        {
+            grade: [
+                { tamanho: 'P', quantidade: 4 },
+                { tamanho: 'M', quantidade: 4 }
+            ]
+        }
+    ], 'economy', cuttingArea);
+
+    assert.deepEqual(plan.table, cuttingArea);
+    assert.ok(plan.spreads.length > 0);
+    assert.ok(plan.spreads.every((spread) => spread.markers.every((marker) => (
+        marker.x + marker.width <= cuttingArea.width
+        && marker.y + marker.height <= cuttingArea.height
+        && marker.rotated === false
+    ))));
+});
+
+test('exposes the effective cutting area calculation', () => {
+    assert.equal(typeof cuttingPlanner.getEffectiveCuttingArea, 'function');
+});
+
+test('limits cutting width by the narrower value between table and fabric', () => {
+    assert.deepEqual(
+        cuttingPlanner.getEffectiveCuttingArea({ width: 180, height: 320 }, 160),
+        { width: 160, height: 320 }
+    );
+    assert.deepEqual(
+        cuttingPlanner.getEffectiveCuttingArea({ width: 180, height: 320 }, 220),
+        { width: 180, height: 320 }
+    );
 });

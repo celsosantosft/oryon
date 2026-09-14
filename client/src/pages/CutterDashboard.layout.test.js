@@ -22,8 +22,33 @@ test('asks which calculated cutting strategy should be printed', () => {
     const source = readFileSync(new URL('./CutterDashboard.jsx', import.meta.url), 'utf8');
 
     assert.match(source, /chooseCuttingPlanAlert/);
-    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'economy'\)/);
-    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'fewer-spreads'\)/);
+    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'economy', effectiveCuttingArea\)/);
+    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea\)/);
     assert.match(source, /await chooseCuttingPlanAlert/);
     assert.match(source, /printCuttingPlan\(selectedPlan, selectedCuttingOrders\)/);
+});
+
+test('configures table and fabric measurements inside the active fabric section', () => {
+    const source = readFileSync(new URL('./CutterDashboard.jsx', import.meta.url), 'utf8');
+
+    assert.match(source, /\/corte\/configuracoes/);
+    assert.match(source, /Largura da malha/);
+    assert.match(source, /Largura da mesa/);
+    assert.match(source, /Comprimento da mesa/);
+    assert.match(source, /getEffectiveCuttingArea/);
+    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'economy', effectiveCuttingArea\)/);
+    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea\)/);
+});
+
+test('keeps cutting settings synchronized without saving them to another fabric', () => {
+    const source = readFileSync(new URL('./CutterDashboard.jsx', import.meta.url), 'utf8');
+
+    assert.match(source, /\/corte\/configuracoes\/mesa/);
+    assert.match(source, /\/corte\/configuracoes\/malha/);
+    assert.match(source, /window\.setInterval\(loadCuttingSettings, 15000\)/);
+    assert.match(source, /settingsDraft\.fabricId !== activeFabric\.id/);
+    assert.match(source, /requestRevision !== settingsRevisionRef\.current/);
+    assert.equal((source.match(/settingsRevisionRef\.current \+= 1/g) || []).length, 2);
+    assert.match(source, /setSelectedFabricId\(\(current\) =>/);
+    assert.match(source, /settingsSaving \|\| hasUnsavedSettings/);
 });
