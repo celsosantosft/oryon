@@ -13,13 +13,6 @@
 - The current configuration represents this with `keepOpen: true` and no session expiry.
 - Saving preserves the primary bot identity and sessions; obsolete duplicate integrations for the same URL and Typebot ID are removed first.
 
-## Presentation Flow
-
-- The Atos introduction is linear and informational. It must not ask questions or branch on free-form customer replies.
-- Customer messages during the presentation do not restart or redirect the flow; after it ends, a human continues the service.
-- Replace Typebot `Wait` blocks with presence-aware waits: `composing` before text and `recording` before audio.
-- Presence calls use Evolution's runtime Typebot variables. Never hard-code or expose its API key.
-
 ## Safety
 
 - Never expose the Evolution API key in frontend code or memory notes.
