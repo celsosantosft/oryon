@@ -26,6 +26,14 @@ async function saveTypebotConfig(evolution, instance, body) {
     };
     // Atualizar conserva o botId e as sessões que impedem novos disparos por contato.
     if (existing?.id) {
+        const duplicates = bots.filter(bot =>
+            bot.id !== existing.id
+            && bot.url === body.url
+            && bot.typebot === body.typebot
+        );
+        for (const duplicate of duplicates) {
+            await evolution.delete(`/typebot/delete/${encodeURIComponent(duplicate.id)}/${instancePath}`);
+        }
         return evolution.put(`/typebot/update/${encodeURIComponent(existing.id)}/${instancePath}`, payload);
     }
     return evolution.post(`/typebot/create/${instancePath}`, payload);

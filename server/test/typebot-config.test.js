@@ -34,3 +34,28 @@ test('new integration can retain repeated attendance when explicitly selected', 
     }, 'AtosVendas', { typebot: 'new-bot', oncePerContact: false });
     assert.equal(result.data.keepOpen, false);
 });
+
+test('duplicate integrations are removed before updating the primary bot', async () => {
+    const calls = [];
+    const api = {
+        get: async () => ({ data: [
+            { id: 'primary', url: 'https://typebot.co', typebot: 'my-bot' },
+            { id: 'duplicate', url: 'https://typebot.co', typebot: 'my-bot' }
+        ] }),
+        delete: async (url) => { calls.push({ method: 'delete', url }); },
+        put: async (url) => { calls.push({ method: 'put', url }); return { data: { id: 'primary' } }; }
+    };
+
+    await saveTypebotConfig(api, 'AtosVendas', {
+        id: 'primary',
+        enabled: true,
+        url: 'https://typebot.co',
+        typebot: 'my-bot',
+        oncePerContact: true
+    });
+
+    assert.deepEqual(calls, [
+        { method: 'delete', url: '/typebot/delete/duplicate/AtosVendas' },
+        { method: 'put', url: '/typebot/update/primary/AtosVendas' }
+    ]);
+});
