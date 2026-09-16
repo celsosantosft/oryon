@@ -488,6 +488,8 @@ const WhatsappDashboard = () => {
         event.preventDefault();
         const formData = new FormData(event.target);
         const payload = {
+            id: typebotConfig?.id,
+            oncePerContact: formData.get('oncePerContact') === 'on',
             enabled: formData.get('enabled') === 'on' || formData.get('enabled') === 'true',
             url: formData.get('url'),
             typebot: formData.get('typebot')
@@ -504,7 +506,7 @@ const WhatsappDashboard = () => {
 
         try {
             const response = await axios.post(`${API_BASE_URL}/whatsapp/typebot/config`, payload, authConfig);
-            setTypebotConfig(response.data?.typebot || payload);
+            setTypebotConfig(response.data?.id ? response.data : payload);
             setSuccess('Configurações do Typebot salvas com sucesso!');
         } catch (requestError) {
             setError(requestError.response?.data?.error || 'Erro ao salvar configurações do Typebot.');
@@ -730,6 +732,18 @@ const WhatsappDashboard = () => {
                             </label>
                             <p className="pl-8 text-sm font-medium text-slate-500">
                                 Quando ativado, a Evolution API irá rotear as conversas para o seu Typebot.
+                            </p>
+                            <label className="flex cursor-pointer items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    name="oncePerContact"
+                                    defaultChecked={typebotConfig?.keepOpen === true}
+                                    className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-600"
+                                />
+                                <span className="font-semibold text-slate-900">Iniciar apenas uma vez por contato</span>
+                            </label>
+                            <p className="pl-8 text-sm font-medium text-slate-500">
+                                Ao terminar o fluxo, novas mensagens não reiniciam o bot. O histórico é mantido ao salvar esta configuração.
                             </p>
                         </div>
 

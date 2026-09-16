@@ -21,6 +21,8 @@ const {
     getMetaCapiDiagnostics
 } = require('../services/metaCapiService');
 
+const { saveTypebotConfig } = require('../services/typebotConfig');
+
 const router = express.Router();
 let QRCode = null;
 const WHATSAPP_ROLES = ['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes'];
@@ -4524,51 +4526,7 @@ router.get('/whatsapp/typebot/config', authenticateToken, authorizeRole(WHATSAPP
 router.post('/whatsapp/typebot/config', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const evolution = createEvolutionClient();
-        const payload = {
-            enabled: req.body.enabled,
-            url: req.body.url,
-            typebot: req.body.typebot,
-            expire: 0,
-            keywordFinish: "#SAIR",
-            delayMessage: 1000,
-            unknownMessage: "Mensagem não reconhecida",
-            listeningFromMe: false,
-            stopBotFromMe: false,
-            keepOpen: false,
-            debounceTime: 0,
-            ignoreJids: [],
-            triggerType: "all",
-            triggerOperator: "contains",
-            triggerValue: ""
-        };
-        // Buscar todos os typebots existentes e apagar
-        try {
-            const existing = await evolution.get(`/typebot/find/${EVOLUTION_INSTANCE}`);
-            if (existing.data && Array.isArray(existing.data)) {
-                for (const t of existing.data) {
-                    if (t.id) {
-                        try { await evolution.delete(`/typebot/delete/${t.id}/${EVOLUTION_INSTANCE}`); } catch(e) {}
-                        try { await evolution.delete(`/typebot/delete/${EVOLUTION_INSTANCE}?typebotName=${t.typebot}`); } catch(e) {}
-                        try { await evolution.delete(`/typebot/delete/${EVOLUTION_INSTANCE}?typebotId=${t.id}`); } catch(e) {}
-                        try { await evolution.delete(`/typebot/delete/${t.typebot}/${EVOLUTION_INSTANCE}`); } catch(e) {}
-                    }
-                }
-            }
-        } catch (e) {
-            console.log('Erro ao buscar typebots antigos para limpar:', e.message);
-        }
-
-        let response;
-        try {
-            response = await evolution.post(`/typebot/create/${EVOLUTION_INSTANCE}`, payload);
-        } catch (firstError) {
-            if (firstError.response?.status === 404) {
-                // Tenta endpoint da v2 se a v1 não existir
-                response = await evolution.post(`/typebot/settings/${EVOLUTION_INSTANCE}`, payload);
-            } else {
-                throw firstError;
-            }
-        }
+        const response = await saveTypebotConfig(evolution, EVOLUTION_INSTANCE, req.body);
         res.json(response.data);
     } catch (error) {
         const evolutionError = error.response?.data?.response?.message || error.response?.data?.message || error.response?.data?.error;
