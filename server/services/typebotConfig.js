@@ -18,7 +18,8 @@ async function saveTypebotConfig(evolution, instance, body) {
         listeningFromMe: existing?.listeningFromMe ?? false,
         stopBotFromMe: existing?.stopBotFromMe ?? false,
         keepOpen: typeof body.oncePerContact === 'boolean' ? body.oncePerContact : (existing?.keepOpen ?? false),
-        debounceTime: existing?.debounceTime ?? 0,
+        // Evolution uses seconds here; a small window coalesces duplicate webhook bursts.
+        debounceTime: Math.max(Number(existing?.debounceTime) || 0, 2),
         ignoreJids: existing?.ignoreJids ?? [],
         triggerType: existing?.triggerType ?? 'all',
         triggerOperator: existing?.triggerOperator ?? 'contains',

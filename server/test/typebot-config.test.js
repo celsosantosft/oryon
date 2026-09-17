@@ -35,6 +35,36 @@ test('new integration can retain repeated attendance when explicitly selected', 
     assert.equal(result.data.keepOpen, false);
 });
 
+test('typebot debounce prevents duplicate webhook bursts by default', async () => {
+    let payload;
+    await saveTypebotConfig({
+        get: async () => ({ data: [{ id: 'existing', typebot: 'my-bot', debounceTime: 0 }] }),
+        put: async (_url, body) => { payload = body; return { data: body }; }
+    }, 'AtosVendas', {
+        id: 'existing',
+        enabled: true,
+        url: 'https://typebot.co',
+        typebot: 'my-bot',
+        oncePerContact: true
+    });
+    assert.equal(payload.debounceTime, 2);
+});
+
+test('typebot preserves a larger configured debounce window', async () => {
+    let payload;
+    await saveTypebotConfig({
+        get: async () => ({ data: [{ id: 'existing', typebot: 'my-bot', debounceTime: 10 }] }),
+        put: async (_url, body) => { payload = body; return { data: body }; }
+    }, 'AtosVendas', {
+        id: 'existing',
+        enabled: true,
+        url: 'https://typebot.co',
+        typebot: 'my-bot',
+        oncePerContact: true
+    });
+    assert.equal(payload.debounceTime, 10);
+});
+
 test('duplicate integrations are removed before updating the primary bot', async () => {
     const calls = [];
     const api = {
