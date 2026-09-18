@@ -44,6 +44,7 @@ const changedOrder = {
     }],
     items: [
         { player_name: 'DUDEX', player_number: '16', size: 'G' },
+        { player_name: 'LARISSA', player_number: '10', size: 'G' },
         { player_name: 'PROF CLECIO', player_number: '67', size: 'XG' }
     ]
 };
@@ -63,4 +64,19 @@ test('prints the current customer list with names and numbers', () => {
     assert.match(html, /PROF CLECIO/);
     assert.match(html, />16</);
     assert.match(html, />67</);
+});
+
+test('places the compact customer list below the layout and groups entries by size', () => {
+    const html = renderPrintHtml(changedOrder);
+    const layoutPosition = html.indexOf('LAYOUTS DO PEDIDO');
+    const listPosition = html.indexOf('NOMES E NÚMEROS POR TAMANHO');
+    const gGroup = html.match(/<section class="customer-size-group" data-size="G">[\s\S]*?<\/section>/)?.[0] || '';
+
+    assert.ok(layoutPosition >= 0 && layoutPosition < listPosition);
+    assert.match(html, /class="customer-groups"/);
+    assert.match(gGroup, /DUDEX/);
+    assert.match(gGroup, /LARISSA/);
+    assert.match(gGroup, />16</);
+    assert.match(gGroup, />10</);
+    assert.doesNotMatch(gGroup, /PROF CLECIO/);
 });

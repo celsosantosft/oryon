@@ -216,6 +216,19 @@ const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printD
     const submittedItems = Array.isArray(order.items)
         ? order.items.filter((item) => item.player_name || item.player_number || item.size)
         : [];
+    const preferredSizeOrder = [...new Set(
+        normalizedLines.flatMap((line) => line.combinedVisibleSizes.map((size) => String(size).trim().toUpperCase()))
+    )];
+    const itemsBySize = submittedItems.reduce((groups, item) => {
+        const size = String(item.size || '').trim().toUpperCase() || 'SEM TAMANHO';
+        if (!groups.has(size)) groups.set(size, []);
+        groups.get(size).push(item);
+        return groups;
+    }, new Map());
+    const submittedItemGroups = [
+        ...preferredSizeOrder.filter((size) => itemsBySize.has(size)),
+        ...[...itemsBySize.keys()].filter((size) => !preferredSizeOrder.includes(size))
+    ].map((size) => ({ size, items: itemsBySize.get(size) }));
     const hasSingleLayout = layoutLines.length === 1;
 
     return `
@@ -244,11 +257,15 @@ const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printD
             td { border-right: 1px solid #E5E7EB; padding: 0; text-align: center; font-size: 13px; font-weight: 700; color: #111827; border-top: 1px solid #E5E7EB; height: 28px; }
             .row-label { text-align: left; padding-left: 8px; font-size: 8px; color: #6B728B; font-weight: 700; background: #fff; width: 70px; }
             .total-col { background: #F9FAFB; color: #2563EB; font-weight: 800; width: 56px; }
-            .customer-list { table-layout: auto; page-break-inside: auto; }
-            .customer-list tr { page-break-inside: avoid; }
-            .customer-list td { height: 24px; padding: 4px 7px; font-size: 10px; }
-            .customer-list .item-col, .customer-list .number-col, .customer-list .size-col { text-align: center; width: 72px; }
-            .customer-list .name-col { text-align: left; }
+            .customer-list-title { margin-top: 7px; margin-bottom: 4px; }
+            .customer-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; margin-bottom: 6px; }
+            .customer-size-group { border-top: 1px solid #CBD5E1; padding-top: 3px; min-width: 0; page-break-inside: avoid; }
+            .customer-size-heading { display: flex; align-items: center; justify-content: space-between; gap: 4px; color: #1D4ED8; font-size: 7px; font-weight: 800; text-transform: uppercase; }
+            .customer-size-count { color: #64748B; font-size: 6px; font-weight: 700; }
+            .customer-size-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 6px; margin-top: 3px; }
+            .customer-person { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 3px; min-width: 0; color: #334155; font-size: 6.5px; line-height: 1.2; }
+            .customer-person-name { overflow-wrap: anywhere; }
+            .customer-person-number { color: #0F172A; font-weight: 800; white-space: nowrap; }
             .layouts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
             .layout-card { border: 1px solid #E5E7EB; border-radius: 10px; padding: 10px; background: #FFFFFF; page-break-inside: avoid; }
             .layout-card-title { font-size: 11px; font-weight: 800; color: #0F172A; margin-bottom: 4px; }
@@ -259,7 +276,7 @@ const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printD
             .single-layout { margin-top: 8px; }
             .single-layout-card { border: none; padding: 0; background: transparent; }
             .single-layout-frame { border: 1px solid #E5E7EB; border-radius: 10px; padding: 10px; text-align: center; background: #FFFFFF; }
-            .single-layout-frame img { width: 100%; max-height: 480px; border-radius: 6px; object-fit: contain; }
+            .single-layout-frame img { width: 100%; max-height: ${submittedItems.length ? '350px' : '480px'}; border-radius: 6px; object-fit: contain; }
             .line-financials { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 8px; justify-content: end; }
             .line-financial-card { border: 1px solid #E5E7EB; border-radius: 8px; padding: 8px 10px; background: #F8FAFC; }
             .line-financial-card.full { grid-column: 1 / -1; }
@@ -296,27 +313,6 @@ const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printD
                 </div>` : ''}
             </div>
         </div>`).join('')}
-        ${submittedItems.length ? `
-        <div class="section-title">LISTA CONFIRMADA PELO CLIENTE</div>
-        <table class="customer-list">
-            <thead>
-                <tr>
-                    <th class="item-col">ITEM</th>
-                    <th class="name-col">NOME</th>
-                    <th class="number-col">NÚMERO</th>
-                    <th class="size-col">TAMANHO</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${submittedItems.map((item, index) => `
-                <tr>
-                    <td class="item-col">${index + 1}</td>
-                    <td class="name-col">${escapeHtml(item.player_name || '-')}</td>
-                    <td class="number-col">${escapeHtml(item.player_number || '-')}</td>
-                    <td class="size-col">${escapeHtml(item.size || '-')}</td>
-                </tr>`).join('')}
-            </tbody>
-        </table>` : ''}
         <div class="section-title">LAYOUTS DO PEDIDO</div>
         ${layoutLines.length ? `
         ${hasSingleLayout ? `
@@ -338,6 +334,24 @@ const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printD
                 .join('')}
         </div>`}` : `
         <div class="layout-empty">Nenhum layout anexado neste pedido.</div>`}
+        ${submittedItemGroups.length ? `
+        <div class="section-title customer-list-title">NOMES E NÚMEROS POR TAMANHO</div>
+        <div class="customer-groups">
+            ${submittedItemGroups.map((group) => `
+            <section class="customer-size-group" data-size="${escapeHtml(group.size)}">
+                <div class="customer-size-heading">
+                    <span>TAMANHO ${escapeHtml(group.size)}</span>
+                    <span class="customer-size-count">${group.items.length} peça(s)</span>
+                </div>
+                <div class="customer-size-items">
+                    ${group.items.map((item) => `
+                    <div class="customer-person">
+                        <span class="customer-person-name">${escapeHtml(item.player_name || '-')}</span>
+                        <strong class="customer-person-number">${escapeHtml(item.player_number || '-')}</strong>
+                    </div>`).join('')}
+                </div>
+            </section>`).join('')}
+        </div>` : ''}
         ${notedLines.length ? `
         <div class="section-title">OBSERVAÇÕES DE PRODUÇÃO</div>
         <div class="notes-list">
