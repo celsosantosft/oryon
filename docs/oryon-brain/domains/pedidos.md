@@ -6,3 +6,4 @@
 - Order and quote submissions must be idempotent from the user's perspective: repeated clicks must not create duplicates.
 - Modal forms close only through an intentional backdrop click or the close control, not because the pointer was dragged outside.
 - Operational views must use real database records and show explicit errors when loading fails.
+- A ficha de produção deve usar a grade e a lista nominal atuais do pedido. Na impressão, o layout vem primeiro e os nomes/números ficam compactos abaixo, agrupados por tamanho, priorizando uma única folha A4.
