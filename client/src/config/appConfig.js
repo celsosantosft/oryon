@@ -5,7 +5,7 @@ const DEFAULT_ORDER_PREFIX = 'ATOS';
 const trimTrailingSlash = (value) => String(value || '').replace(/\/+$/, '');
 
 const readEnv = (key, fallback = '') => {
-    const value = import.meta.env[key];
+    const value = import.meta.env?.[key];
     return String(value || '').trim() || fallback;
 };
 

@@ -1,5 +1,5 @@
 // src/utils/printUtils.js
-import { appConfig } from '../config/appConfig';
+import { appConfig } from '../config/appConfig.js';
 
 // --- FUNÇÃO AUXILIAR DE DATA ---
 const formatDateSafe = (dateString) => {
@@ -44,19 +44,31 @@ const buildLineDescription = (productType, fabricType) => {
 const buildLineSizeData = (sizes = {}) => {
     const infantSizes = ['2', '4', '6', '8', '10', '12', '14'];
     const adultSizes = ['PP', 'P', 'M', 'G', 'GG', 'XG', 'XXG', 'XXXG', 'ESP'];
-    const visibleInfantSizes = infantSizes.filter((size) => Number(sizes[size] || 0) > 0);
-    const visibleAdultSizes = adultSizes.filter((size) => Number(sizes[size] || 0) > 0);
-    const combinedVisibleSizes = [...visibleInfantSizes, ...visibleAdultSizes];
+    const visibleSizes = Object.keys(sizes).filter((size) => Number(sizes[size] || 0) > 0);
+    const infantRank = (size) => infantSizes.indexOf(String(size).toUpperCase().replace(/\s*ANOS?$/, ''));
+    const adultRank = (size) => adultSizes.indexOf(String(size).toUpperCase());
+    const visibleInfantSizes = visibleSizes
+        .filter((size) => infantRank(size) >= 0)
+        .sort((left, right) => infantRank(left) - infantRank(right));
+    const visibleAdultSizes = visibleSizes
+        .filter((size) => adultRank(size) >= 0)
+        .sort((left, right) => adultRank(left) - adultRank(right));
+    const knownSizes = new Set([...visibleInfantSizes, ...visibleAdultSizes]);
+    const visibleOtherSizes = visibleSizes.filter((size) => !knownSizes.has(size));
+    const combinedVisibleSizes = [...visibleInfantSizes, ...visibleAdultSizes, ...visibleOtherSizes];
     const totalInfant = visibleInfantSizes.reduce((sum, size) => sum + Number(sizes[size] || 0), 0);
     const totalAdult = visibleAdultSizes.reduce((sum, size) => sum + Number(sizes[size] || 0), 0);
+    const totalOther = visibleOtherSizes.reduce((sum, size) => sum + Number(sizes[size] || 0), 0);
 
     return {
         visibleInfantSizes,
         visibleAdultSizes,
+        visibleOtherSizes,
         combinedVisibleSizes,
         totalInfant,
         totalAdult,
-        totalPieces: totalInfant + totalAdult
+        totalOther,
+        totalPieces: totalInfant + totalAdult + totalOther
     };
 };
 
@@ -201,6 +213,9 @@ const buildNormalizedLines = (order, apiBaseUrl) => {
 const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printDate }) => {
     const layoutLines = normalizedLines.filter((line) => line.layoutUrl);
     const notedLines = normalizedLines.filter((line) => line.production_notes);
+    const submittedItems = Array.isArray(order.items)
+        ? order.items.filter((item) => item.player_name || item.player_number || item.size)
+        : [];
     const hasSingleLayout = layoutLines.length === 1;
 
     return `
@@ -229,6 +244,11 @@ const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printD
             td { border-right: 1px solid #E5E7EB; padding: 0; text-align: center; font-size: 13px; font-weight: 700; color: #111827; border-top: 1px solid #E5E7EB; height: 28px; }
             .row-label { text-align: left; padding-left: 8px; font-size: 8px; color: #6B728B; font-weight: 700; background: #fff; width: 70px; }
             .total-col { background: #F9FAFB; color: #2563EB; font-weight: 800; width: 56px; }
+            .customer-list { table-layout: auto; page-break-inside: auto; }
+            .customer-list tr { page-break-inside: avoid; }
+            .customer-list td { height: 24px; padding: 4px 7px; font-size: 10px; }
+            .customer-list .item-col, .customer-list .number-col, .customer-list .size-col { text-align: center; width: 72px; }
+            .customer-list .name-col { text-align: left; }
             .layouts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
             .layout-card { border: 1px solid #E5E7EB; border-radius: 10px; padding: 10px; background: #FFFFFF; page-break-inside: avoid; }
             .layout-card-title { font-size: 11px; font-weight: 800; color: #0F172A; margin-bottom: 4px; }
@@ -269,13 +289,34 @@ const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printD
             <div class="table-container" style="margin-bottom: 0;">
                 ${line.combinedVisibleSizes.length > 0 && line.combinedVisibleSizes.length <= 10
                     ? renderCompactSizeTable(line.combinedVisibleSizes, line.sizes, line.totalPieces)
-                    : `${renderSizeTable('INFANTIL', line.visibleInfantSizes, line.sizes, line.totalInfant, 'ANOS')}${renderSizeTable('ADULTO', line.visibleAdultSizes, line.sizes, line.totalAdult)}`}
-                ${!line.visibleInfantSizes.length && !line.visibleAdultSizes.length ? `
+                    : `${renderSizeTable('INFANTIL', line.visibleInfantSizes, line.sizes, line.totalInfant)}${renderSizeTable('ADULTO', line.visibleAdultSizes, line.sizes, line.totalAdult)}${renderSizeTable('OUTROS', line.visibleOtherSizes, line.sizes, line.totalOther)}`}
+                ${!line.combinedVisibleSizes.length ? `
                 <div style="padding: 18px; border: 1px dashed #D1D5DB; border-radius: 8px; color: #6B728B; font-size: 12px; text-align: center;">
                     Nenhum tamanho informado para este item.
                 </div>` : ''}
             </div>
         </div>`).join('')}
+        ${submittedItems.length ? `
+        <div class="section-title">LISTA CONFIRMADA PELO CLIENTE</div>
+        <table class="customer-list">
+            <thead>
+                <tr>
+                    <th class="item-col">ITEM</th>
+                    <th class="name-col">NOME</th>
+                    <th class="number-col">NÚMERO</th>
+                    <th class="size-col">TAMANHO</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${submittedItems.map((item, index) => `
+                <tr>
+                    <td class="item-col">${index + 1}</td>
+                    <td class="name-col">${escapeHtml(item.player_name || '-')}</td>
+                    <td class="number-col">${escapeHtml(item.player_number || '-')}</td>
+                    <td class="size-col">${escapeHtml(item.size || '-')}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>` : ''}
         <div class="section-title">LAYOUTS DO PEDIDO</div>
         ${layoutLines.length ? `
         ${hasSingleLayout ? `
