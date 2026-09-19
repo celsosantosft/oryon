@@ -6,6 +6,17 @@ const { appConfig } = require('./appConfig');
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8080';
 const DEFAULT_INSTANCE = 'AtosVendas';
 const DEFAULT_PUBLIC_APP_URL = appConfig.publicAppUrl;
+const EVOLUTION_WEBHOOK_EVENTS = Object.freeze([
+    'APPLICATION_STARTUP',
+    'QRCODE_UPDATED',
+    'CHATS_SET',
+    'CONTACTS_SET',
+    'MESSAGES_UPSERT',
+    'SEND_MESSAGE',
+    'LABELS_EDIT',
+    'LABELS_ASSOCIATION',
+    'CONNECTION_UPDATE'
+]);
 
 const SERVER_ROOT = path.resolve(__dirname, '..');
 const PROJECT_ROOT = path.resolve(SERVER_ROOT, '..');
@@ -185,6 +196,7 @@ module.exports = {
     EVOLUTION_INSTANCE: evolutionConfig.instance,
     PUBLIC_APP_URL: evolutionConfig.publicAppUrl,
     EVOLUTION_WEBHOOK_URL: evolutionConfig.webhookUrl,
+    EVOLUTION_WEBHOOK_EVENTS,
     createEvolutionClient,
     buildEvolutionTextPayload,
     getEvolutionDiagnostics

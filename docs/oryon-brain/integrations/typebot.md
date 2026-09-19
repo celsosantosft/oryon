@@ -17,3 +17,8 @@
 
 - Never expose the Evolution API key in frontend code or memory notes.
 - Do not disconnect or recreate the WhatsApp instance merely to change Typebot behavior.
+
+## Webhook Load
+
+- Subscribe only to events consumed by Oryon. High-volume update events that produced no state changes previously saturated the shared Node/SQLite request path and delayed the ERP.
+- Keep new and sent messages, initial chat/contact sets, labels, QR code, startup and connection events enabled.

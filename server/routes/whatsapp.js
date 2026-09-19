@@ -10,6 +10,7 @@ const {
     EVOLUTION_API_KEY,
     EVOLUTION_INSTANCE,
     EVOLUTION_WEBHOOK_URL,
+    EVOLUTION_WEBHOOK_EVENTS,
     createEvolutionClient,
     buildEvolutionTextPayload,
     getEvolutionDiagnostics
@@ -33,25 +34,6 @@ try {
     console.warn('Pacote qrcode não instalado. Rode npm install no server para gerar QR Code quando a Evolution retornar apenas o código bruto.');
 }
 
-const EVOLUTION_WEBHOOK_EVENTS = [
-    'APPLICATION_STARTUP',
-    'QRCODE_UPDATED',
-    'CHATS_SET',
-    'CHATS_UPSERT',
-    'CHATS_UPDATE',
-    'CHATS_DELETE',
-    'CONTACTS_SET',
-    'CONTACTS_UPSERT',
-    'CONTACTS_UPDATE',
-    'MESSAGES_SET',
-    'MESSAGES_UPSERT',
-    'MESSAGES_UPDATE',
-    'MESSAGES_DELETE',
-    'SEND_MESSAGE',
-    'LABELS_EDIT',
-    'LABELS_ASSOCIATION',
-    'CONNECTION_UPDATE'
-];
 const EVOLUTION_LABEL_CACHE_MS = 10000;
 
 if (!EVOLUTION_API_KEY) {
