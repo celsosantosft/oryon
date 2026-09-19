@@ -81,6 +81,8 @@ function App() {
 
                 <Route path="/portal" element={<PortalHome />} />
                 <Route path="/portal/:code" element={<ClientPortal />} />
+                <Route path="/portal-preview" element={<PortalHome preview />} />
+                <Route path="/portal-preview/:code" element={<ClientPortal preview />} />
 
                 <Route path="/whatsapp" element={
                     <ProtectedRoute>
