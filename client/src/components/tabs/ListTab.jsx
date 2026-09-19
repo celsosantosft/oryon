@@ -4,12 +4,13 @@ import { styles } from '../../utils/ClientPortalStyles';
 import { PLAYER_NUMBER_MAX_LENGTH, isValidPlayerNumber, normalizePlayerNumberInput } from '../../utils/playerNumber';
 
 export const ListTab = ({
+    preview = false,
     isQuote, isLocked, items, activeItems, confirmedItems, availableSizes,
     lastAddedItem, handleRemoveItem, handleItemChange, handleConfirmItem, 
     handleSubmit, handleEditItem
 }) => {
     return (
-        <div className="animate-fade-in" style={{ width: '100%', maxWidth: '100vw', boxSizing: 'border-box', overflowX: 'hidden' }}>
+        <div className={`animate-fade-in${preview ? ' portal-tab portal-list-tab' : ''}`} style={{ width: '100%', maxWidth: '100vw', boxSizing: 'border-box', overflowX: 'hidden' }}>
             <style>{`
                 .responsive-names-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; box-sizing: border-box; }
                 @media (min-width: 768px) { .responsive-names-grid { grid-template-columns: repeat(3, 1fr); gap: 16px; } }
@@ -41,7 +42,7 @@ export const ListTab = ({
             {!isLocked && activeItems.map((item, index) => {
                 const isFilled = item.size !== '' && isValidPlayerNumber(item.player_number);
                 return (
-                    <div key={item.id} style={{ ...styles.glassCard, width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+                    <div key={item.id} className={preview ? 'portal-card portal-editor-card' : undefined} style={{ ...styles.glassCard, width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
                         <div style={{...styles.itemCardHeader, width: '100%', boxSizing: 'border-box', flexWrap: 'wrap'}}>
                             <span style={{ ...styles.itemBadge, backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#2563EB', border: '1px solid rgba(59, 130, 246, 0.2)' }}>Camisa {confirmedItems.length + index + 1} </span>
                             {items.length > 1 && <button onClick={() => handleRemoveItem(item.id)} style={styles.glassBtnRed}><Icons.Trash /></button>}
@@ -81,7 +82,7 @@ export const ListTab = ({
             })}
 
             {!isLocked && lastAddedItem && (
-                <div className="animate-fade-in" style={{ ...styles.lastAddedGlass, width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+                <div className={`animate-fade-in${preview ? ' portal-card portal-last-added' : ''}`} style={{ ...styles.lastAddedGlass, width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
                     <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.05) 100%)', backdropFilter: 'blur(8px)', border: '1px solid rgba(16, 185, 129, 0.2)', color: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icons.Check /></div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: '800', color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>Último Adicionado</span>
@@ -114,7 +115,7 @@ export const ListTab = ({
                                 </div>
                                 <div className="responsive-names-grid">
                                     {sizeItems.map((item) => (
-                                        <div key={item.id} className="animate-fade-in" style={{ ...styles.glassItemCard, width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden', padding: '12px' }}>
+                                            <div key={item.id} className={`animate-fade-in${preview ? ' portal-name-row' : ''}`} style={{ ...styles.glassItemCard, width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden', padding: '12px' }}>
                                             <div style={{ minWidth: 0, width: '100%', marginBottom: '8px' }}>
                                                 <div style={{ fontSize: '0.65rem', fontWeight: '800', color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>Nome</div>
                                                 <div style={{ fontSize: '0.90rem', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{item.player_name || 'S/ Nome'}</div>

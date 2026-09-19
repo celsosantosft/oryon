@@ -9,7 +9,7 @@ const formatMoney = (value) => new Intl.NumberFormat('pt-BR', {
 
 const getLineQuantity = (sizes) => Object.values(sizes || {}).reduce((total, qty) => total + (Number(qty) || 0), 0);
 
-export const HomeTab = ({ order, API_BASE_URL, needsArtApproval, artIsApproved, onApproveArt }) => {
+export const HomeTab = ({ preview = false, order, API_BASE_URL, needsArtApproval, artIsApproved, onApproveArt }) => {
     const productLines = useMemo(() => (
         Array.isArray(order?.product_lines) ? order.product_lines : []
     ), [order?.product_lines]);
@@ -19,8 +19,8 @@ export const HomeTab = ({ order, API_BASE_URL, needsArtApproval, artIsApproved, 
     const isQuote = String(order?.tracking_code || '').startsWith('#ORC-');
 
     return (
-        <div className="animate-fade-in" style={{ width: '100%', boxSizing: 'border-box' }}>
-            <div style={styles.cardPremium}>
+        <div className={`animate-fade-in${preview ? ' portal-tab portal-home-tab' : ''}`} style={{ width: '100%', boxSizing: 'border-box' }}>
+            <div className={preview ? 'portal-card' : undefined} style={styles.cardPremium}>
                 <h3 style={styles.cardTitle}>Sua Arte e Layout</h3>
 
                 {hasDetailedLines ? (
@@ -32,6 +32,7 @@ export const HomeTab = ({ order, API_BASE_URL, needsArtApproval, artIsApproved, 
                             return (
                                 <div
                                     key={line.id || `${line.product_type || 'produto'}-${index}`}
+                                    className={preview ? 'portal-product-row' : undefined}
                                     style={{
                                         background: 'rgba(255, 255, 255, 0.68)',
                                         border: '1px solid rgba(226, 232, 240, 0.9)',
@@ -102,6 +103,7 @@ export const HomeTab = ({ order, API_BASE_URL, needsArtApproval, artIsApproved, 
 
                 {hasGeneralNotes ? (
                     <div
+                        className={preview ? 'portal-notice portal-notice-warning' : undefined}
                         style={{
                             marginTop: '16px',
                             border: '1px solid rgba(253, 224, 71, 0.55)',
@@ -126,7 +128,7 @@ export const HomeTab = ({ order, API_BASE_URL, needsArtApproval, artIsApproved, 
                 )}
 
                 {artIsApproved && (
-                    <div style={{ marginTop: '24px', backgroundColor: '#ECFDF5', padding: '16px', borderRadius: '12px', border: '1px solid #A7F3D0' }}>
+                    <div className={preview ? 'portal-notice portal-notice-success' : undefined} style={{ marginTop: '24px', backgroundColor: '#ECFDF5', padding: '16px', borderRadius: '12px', border: '1px solid #A7F3D0' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065F46', marginBottom: '4px' }}>
                             <Icons.Check /> <span style={{ fontWeight: '800', fontSize: '0.95rem' }}>Termo de Responsabilidade Assinado (Arte)</span>
                         </div>

@@ -4,6 +4,7 @@ import { styles } from '../../utils/ClientPortalStyles';
 import { appConfig } from '../../config/appConfig';
 
 export const BulkTab = ({
+    preview = false,
     isQuote, isLocked, isUsingNominalList, hasAdminSizes, availableSizes, summaryCounts,
     bulkSizes, setBulkSizes, handleBulkSubmit
 }) => {
@@ -39,7 +40,7 @@ export const BulkTab = ({
     );
 
     return (
-        <div className="animate-fade-in" style={{ width: '100%', boxSizing: 'border-box' }}>
+        <div className={`animate-fade-in${preview ? ' portal-tab portal-bulk-tab' : ''}`} style={{ width: '100%', boxSizing: 'border-box' }}>
             
             {hasAdminSizes && !isLocked && !isUsingNominalList ? (
                 <div style={{...styles.receiptBox, backgroundColor: '#ECFDF5', borderColor: '#A7F3D0'}}>
@@ -65,7 +66,7 @@ export const BulkTab = ({
                 </div>
             )}
              
-            <div style={styles.glassCard}>
+            <div className={preview ? 'portal-card' : undefined} style={styles.glassCard}>
                 <h3 style={styles.cardTitle}>{hasAdminSizes && !isUsingNominalList ? 'Grade registrada' : isQuote ? 'Grade do Orçamento' : isLocked ? 'Sua Grade Oficial' : (isUsingNominalList ? 'Resumo da Grade Nominal' : 'Montar Grade Fechada')}</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
                     {adultSizes.length > 0 && (

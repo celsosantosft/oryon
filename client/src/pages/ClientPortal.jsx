@@ -20,6 +20,7 @@ import { TrackingTab } from '../components/tabs/TrackingTab';
 import { FinanceTab } from '../components/tabs/FinanceTab';
 import { BulkTab } from '../components/tabs/BulkTab';
 import { ListTab } from '../components/tabs/ListTab';
+import '../styles/PortalPreview.css';
 
 const API_BASE_URL = appConfig.apiBaseUrl;
 
@@ -47,7 +48,7 @@ const formatDeliveryDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
 };
 
-const ClientPortal = () => {
+const ClientPortal = ({ preview = false }) => {
     const { code } = useParams();
     const [searchParams] = useSearchParams();
     const portalToken = searchParams.get('token') || '';
@@ -240,7 +241,7 @@ const ClientPortal = () => {
 
     if (loading) {
         return (
-            <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', width: '100%', padding: '20px', boxSizing: 'border-box' }}>
+            <div className={preview ? 'portal-preview portal-state-screen' : undefined} style={{ height: preview ? '100dvh' : '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', width: '100%', padding: '20px', boxSizing: 'border-box' }}>
                 <style>{`@keyframes spin-premium { to { transform: rotate(360deg); } }`}</style>
                 <div style={{ width: '36px', height: '36px', border: '3px solid rgba(37, 99, 235, 0.15)', borderTopColor: '#2563EB', borderRadius: '50%', animation: 'spin-premium 1s linear infinite', marginBottom: '16px' }}></div>
                 <div style={{ color: '#0F172A', fontWeight: '800', fontSize: '1.1rem', letterSpacing: '0.02em', marginBottom: '6px' }}>Preparando seu portal...</div>
@@ -251,14 +252,14 @@ const ClientPortal = () => {
 
     if (!order) {
         return (
-            <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', padding: '20px', boxSizing: 'border-box' }}>
-                <div style={{ backgroundColor: '#fff', padding: '40px', borderRadius: '24px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
+            <div className={preview ? 'portal-preview portal-state-screen' : undefined} style={{ height: preview ? '100dvh' : '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', padding: '20px', boxSizing: 'border-box' }}>
+                <div className={preview ? 'portal-state-card' : undefined} style={{ backgroundColor: '#fff', padding: '40px', borderRadius: preview ? '8px' : '24px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
                     <div style={{ color: '#EF4444', marginBottom: '16px' }}>
                         <svg width="64" height="64" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ margin: '0 auto' }}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                     </div>
                     <h2 style={{ color: '#0F172A', fontSize: '1.5rem', fontWeight: '800', marginBottom: '8px' }}>Pedido não encontrado</h2>
                     <p style={{ color: '#64748B', marginBottom: '24px' }}>Verifique se o código <strong>{code}</strong> está correto e tente novamente.</p>
-                    <button onClick={() => window.location.href = '/portal'} style={{ padding: '12px 24px', backgroundColor: '#2563EB', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', width: '100%', fontSize: '1rem' }}>Fazer Nova Busca</button>
+                    <button onClick={() => window.location.href = preview ? '/portal-preview' : '/portal'} style={{ padding: '12px 24px', backgroundColor: '#2563EB', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', width: '100%', fontSize: '1rem' }}>Fazer Nova Busca</button>
                 </div>
             </div>
         );
@@ -273,7 +274,7 @@ const ClientPortal = () => {
     ];
 
     return (
-        <div style={styles.container}>
+        <div className={preview ? 'portal-preview portal-shell' : undefined} style={styles.container}>
             <style>{`
                 select {
                     appearance: none !important;
@@ -303,8 +304,8 @@ const ClientPortal = () => {
             `}</style>
 
             {editingItem && (
-                <div style={styles.modalOverlay}>
-                    <div className="animate-fade-in" style={styles.modalContent}>
+                <div className={preview ? 'portal-modal-overlay' : undefined} style={styles.modalOverlay}>
+                    <div className={`animate-fade-in${preview ? ' portal-modal-content' : ''}`} style={styles.modalContent}>
                         <div style={styles.modalHeader}>
                             <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0F172A', fontWeight: '800' }}>Editar Camisa</h3>
                             <button onClick={() => setEditingItem(null)} style={styles.modalCloseBtn}><Icons.Close /></button>
@@ -332,7 +333,7 @@ const ClientPortal = () => {
                 </div>
             )}
 
-            <div style={{ ...styles.header, padding: '24px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap' }}>
+            <div className={preview ? 'portal-header' : undefined} style={{ ...styles.header, padding: '24px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap' }}>
                 <div style={{ width: '56px', height: '56px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img 
                         src={appConfig.theme === 'monochrome' ? appConfig.logoWhiteUrl : appConfig.logoSmallUrl}
@@ -352,6 +353,9 @@ const ClientPortal = () => {
                 </div>
 
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {preview && (
+                        <span className="portal-preview-badge portal-preview-badge-header">Ambiente de teste</span>
+                    )}
                     <h1 style={{ ...styles.title, fontSize: '1.15rem', lineHeight: '1.3', whiteSpace: 'normal', wordBreak: 'break-word', margin: 0 }}>
                         Olá, {order.client_name}!
                     </h1>
@@ -368,23 +372,45 @@ const ClientPortal = () => {
                 </div>
             </div>
 
-            <div style={styles.tabBody}>
-                {activeTab === 'home' && <HomeTab order={order} API_BASE_URL={API_BASE_URL} needsArtApproval={derivedData.needsArtApproval} artIsApproved={derivedData.artIsApproved} onApproveArt={handleApproveArt} />}
-                {activeTab === 'tracking' && <TrackingTab order={order} currentStepIndex={derivedData.currentStepIndex} STATUS_STEPS_CONFIG={STATUS_STEPS_CONFIG} />}
-                {activeTab === 'finance' && <FinanceTab remainingOrder={derivedData.remainingOrder} percentPaid={derivedData.percentPaid} totalOrder={derivedData.totalOrder} paidOrder={derivedData.paidOrder} formatMoney={formatMoney} />}
-                {activeTab === 'bulk' && <BulkTab isQuote={order.tracking_code?.startsWith('#ORC-')} isLocked={derivedData.isLocked} isUsingNominalList={derivedData.isUsingNominalList} hasAdminSizes={derivedData.hasAdminSizes} availableSizes={derivedData.availableSizes} summaryCounts={derivedData.summaryCounts} totalConfirmed={derivedData.totalConfirmed} bulkSizes={bulkSizes} setBulkSizes={setBulkSizes} handleBulkSubmit={handleBulkSubmit} />}
-                {activeTab === 'list' && <ListTab isLocked={derivedData.isLocked} items={derivedData.nominalItemsForTab} activeItems={derivedData.activeItems} confirmedItems={derivedData.nominalConfirmedItems} availableSizes={derivedData.availableSizes} lastAddedItem={derivedData.lastAddedNominalItem} handleRemoveItem={handleRemoveItem} handleItemChange={updateItem} handleConfirmItem={handleConfirmItem} handleSubmit={handleSubmit} handleEditItem={setEditingItem} />}
+            <div className={preview ? 'portal-tab-body' : undefined} style={styles.tabBody}>
+                {activeTab === 'home' && <HomeTab preview={preview} order={order} API_BASE_URL={API_BASE_URL} needsArtApproval={derivedData.needsArtApproval} artIsApproved={derivedData.artIsApproved} onApproveArt={handleApproveArt} />}
+                {activeTab === 'tracking' && <TrackingTab preview={preview} order={order} currentStepIndex={derivedData.currentStepIndex} STATUS_STEPS_CONFIG={STATUS_STEPS_CONFIG} />}
+                {activeTab === 'finance' && <FinanceTab preview={preview} remainingOrder={derivedData.remainingOrder} percentPaid={derivedData.percentPaid} totalOrder={derivedData.totalOrder} paidOrder={derivedData.paidOrder} formatMoney={formatMoney} />}
+                {activeTab === 'bulk' && <BulkTab preview={preview} isQuote={order.tracking_code?.startsWith('#ORC-')} isLocked={derivedData.isLocked} isUsingNominalList={derivedData.isUsingNominalList} hasAdminSizes={derivedData.hasAdminSizes} availableSizes={derivedData.availableSizes} summaryCounts={derivedData.summaryCounts} totalConfirmed={derivedData.totalConfirmed} bulkSizes={bulkSizes} setBulkSizes={setBulkSizes} handleBulkSubmit={handleBulkSubmit} />}
+                {activeTab === 'list' && <ListTab preview={preview} isLocked={derivedData.isLocked} items={derivedData.nominalItemsForTab} activeItems={derivedData.activeItems} confirmedItems={derivedData.nominalConfirmedItems} availableSizes={derivedData.availableSizes} lastAddedItem={derivedData.lastAddedNominalItem} handleRemoveItem={handleRemoveItem} handleItemChange={updateItem} handleConfirmItem={handleConfirmItem} handleSubmit={handleSubmit} handleEditItem={setEditingItem} />}
             </div>
             
-            <div style={styles.bottomNav}>
-                <div style={{ ...styles.navPill, left: `calc(${navItems.findIndex(i => i.id === activeTab) * 20}% + 1%)`, width: '18%' }} />
+            <div className={preview ? 'portal-bottom-nav' : undefined} style={styles.bottomNav}>
+                {!preview && <div style={{ ...styles.navPill, left: `calc(${navItems.findIndex(i => i.id === activeTab) * 20}% + 1%)`, width: '18%' }} />}
                 {navItems.map((item) => {
                     const isActive = activeTab === item.id;
                     const activeColor = appConfig.theme === 'monochrome' ? '#FFFFFF' : '#60A5FA';
+                    const navContent = (
+                        <>
+                            <div className={preview ? 'portal-nav-icon' : undefined} style={{ color: isActive ? activeColor : '#9CA3AF', filter: isActive ? `drop-shadow(0 0 6px ${appConfig.theme === 'monochrome' ? 'rgba(255, 255, 255, 0.4)' : 'rgba(96, 165, 250, 0.4)'})` : 'none', transition: 'color 160ms ease' }}><item.icon /></div>
+                            <span className={preview ? 'portal-nav-label' : undefined} style={{ fontSize: '0.65rem', fontWeight: isActive ? '700' : '500', color: isActive ? activeColor : '#9CA3AF', marginTop: '4px', transition: 'color 160ms ease' }}>{item.label}</span>
+                        </>
+                    );
+
+                    if (preview) {
+                        return (
+                            <button
+                                key={item.id}
+                                type="button"
+                                className="portal-nav-item"
+                                onClick={() => setActiveTab(item.id)}
+                                aria-current={isActive ? 'page' : undefined}
+                                aria-label={item.label}
+                                disabled={item.disabled}
+                            >
+                                {navContent}
+                            </button>
+                        );
+                    }
+
                     return (
                         <div key={item.id} onClick={() => !item.disabled && setActiveTab(item.id)} style={{ ...styles.navItem, opacity: item.disabled ? 0.4 : 1, cursor: item.disabled ? 'default' : 'pointer' }}>
-                            <div style={{ color: isActive ? activeColor : '#9CA3AF', filter: isActive ? `drop-shadow(0 0 6px ${appConfig.theme === 'monochrome' ? 'rgba(255, 255, 255, 0.4)' : 'rgba(96, 165, 250, 0.4)'})` : 'none', transition: 'all 0.4s' }}><item.icon /></div>
-                            <span style={{ fontSize: '0.65rem', fontWeight: isActive ? '700' : '500', color: isActive ? activeColor : '#9CA3AF', marginTop: '4px', transition: 'all 0.4s' }}>{item.label}</span>
+                            {navContent}
                         </div>
                     );
                 })}

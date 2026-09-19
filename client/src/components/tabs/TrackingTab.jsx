@@ -1,10 +1,10 @@
 import React from 'react';
 import { styles } from '../../utils/ClientPortalStyles';
 
-export const TrackingTab = ({ order, currentStepIndex, STATUS_STEPS_CONFIG }) => {
+export const TrackingTab = ({ preview = false, order, currentStepIndex, STATUS_STEPS_CONFIG }) => {
     return (
-        <div className="animate-fade-in" style={{ width: '100%', boxSizing: 'border-box' }}>
-            <div style={styles.cardPremium}>
+        <div className={`animate-fade-in${preview ? ' portal-tab portal-tracking-tab' : ''}`} style={{ width: '100%', boxSizing: 'border-box' }}>
+            <div className={preview ? 'portal-card' : undefined} style={styles.cardPremium}>
                 <h3 style={styles.cardTitle}>Status de Produção</h3>
                 {order.status === 'Cancelado' ? (
                     <div style={{ padding: '20px', backgroundColor: '#FEF2F2', color: '#DC2626', borderRadius: '12px', fontWeight: '700', textAlign: 'center' }}>Este pedido foi cancelado.</div>
