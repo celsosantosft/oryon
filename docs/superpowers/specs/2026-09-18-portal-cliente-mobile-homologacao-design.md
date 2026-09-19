@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Melhorar a experiencia mobile do Portal do Cliente sem alterar regras de negocio, contratos da API ou dados de pedidos. A nova interface deve ser operacional, clara e rapida, com uma area local de homologacao para comparacao antes de qualquer publicacao.
+Melhorar a experiencia mobile do Portal do Cliente sem alterar regras de negocio, contratos da API ou dados de pedidos. A nova interface deve ser operacional, clara e rapida, com uma rota publica de homologacao no sistema real para comparacao antes de substituir o portal oficial.
 
 ## Escopo
 
@@ -11,7 +11,7 @@ Melhorar a experiencia mobile do Portal do Cliente sem alterar regras de negocio
 - Preservar codigos completos, codigos numericos, links com token e mensagens de erro reais.
 - Usar somente dados reais retornados pelas APIs existentes.
 - Nao adicionar dependencias de interface ou animacao.
-- Nao publicar nem substituir o portal oficial durante a homologacao.
+- Publicar apenas a rota separada de homologacao, sem substituir o portal oficial.
 
 ## Fora do Escopo
 
@@ -22,11 +22,13 @@ Melhorar a experiencia mobile do Portal do Cliente sem alterar regras de negocio
 
 ## Estrategia de Homologacao
 
-A nova apresentacao sera acessada por uma rota exclusiva do frontend em desenvolvimento, `/portal-preview`. Essa rota mostrara a entrada redesenhada e encaminhara o codigo informado para `/portal-preview/:code`, mantendo o token na URL quando existir.
+A nova apresentacao sera acessada em `https://atosfardamentos.com.br/portal-preview`. Essa rota mostrara a entrada redesenhada e encaminhara o codigo informado para `/portal-preview/:code`, mantendo o token na URL quando existir.
 
 As rotas de homologacao reutilizarao os mesmos servicos, hooks, componentes de abas e dados reais do portal atual. A diferenca ficara restrita a um modo visual de preview. As rotas oficiais `/portal` e `/portal/:code` continuarao apontando para a interface atual ate a aprovacao do usuario.
 
-O link de teste sera servido pelo Vite local em uma porta livre e exposto apenas na maquina/rede local. Nenhum commit dessa etapa sera enviado ao remoto e nenhum deploy sera executado antes da aprovacao visual.
+O preview sera publicado no mesmo servidor do Oryon para permitir testes em celulares reais. A tela exibira uma identificacao discreta de ambiente de teste. O deploy incluira somente a nova rota e seus estilos/componentes; `/portal` e `/portal/:code` permanecerao na interface atual ate a aprovacao visual.
+
+Como o preview usa a API de producao, consultas e acoes de escrita atuam sobre dados reais. Nao havera dados de demonstracao. A publicacao da rota nao alterara links ja enviados aos clientes nem redirecionara acessos do portal oficial.
 
 ## Arquitetura da Interface
 
@@ -95,7 +97,7 @@ O preview nao interceptara, duplicara nem transformara dados. Como utiliza dados
 ## Arquivos Previstos
 
 - `client/index.html`: viewport e cores do navegador.
-- `client/src/App.jsx`: rotas locais de homologacao.
+- `client/src/App.jsx`: rotas publicas e separadas de homologacao.
 - `client/src/pages/PortalHome.jsx`: suporte ao modo de preview sem duplicar regras.
 - `client/src/pages/ClientPortal.jsx`: suporte ao modo de preview e estados da interface.
 - `client/src/utils/ClientPortalStyles.js`: sistema visual e comportamento mobile do preview.
@@ -111,12 +113,12 @@ Se a separacao por modo deixar os arquivos atuais mais complexos que a duplicaca
 - Testar busca por numero, codigo completo, link com token, erro de pedido e erro de rede.
 - Testar visualmente em 390x844, 430x932 e desktop.
 - Conferir que nao ha sobreposicao com teclado, navegacao inferior, modais ou areas seguras.
-- Abrir o preview local para avaliacao do usuario antes de qualquer push ou deploy.
+- Publicar somente o preview e validar a URL real pelo celular antes de qualquer substituicao do portal oficial.
 
 ## Criterios de Aprovacao
 
 - O portal oficial permanece visual e funcionalmente inalterado durante a homologacao.
-- O link local de preview usa dados reais e nao contem mocks.
+- O link publico de preview usa dados reais e nao contem mocks.
 - Todas as funcoes atuais continuam disponiveis no preview.
 - A interface cabe no celular sem zoom, cortes, textos sobrepostos ou controles escondidos.
 - O usuario aprova explicitamente o preview antes da integracao com as rotas oficiais.
