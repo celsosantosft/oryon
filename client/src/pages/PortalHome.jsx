@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { trackingService } from '../services/trackingService';
 import { appConfig, normalizeTrackingCode } from '../config/appConfig';
+import '../styles/PortalPreview.css';
 
 const Icons = {
     Search: () => <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
@@ -39,7 +40,20 @@ const showSearchError = async () => {
     });
 };
 
-const PortalHome = () => {
+export const buildPortalTarget = ({ preview, response, safeCode, portalToken }) => {
+    const portalBasePath = preview ? '/portal-preview' : '/portal';
+    const responseCode = response?.tracking_code || safeCode;
+    let targetToken = portalToken;
+
+    if (!targetToken && response?.portal_path) {
+        const query = String(response.portal_path).split('?')[1] || '';
+        targetToken = new URLSearchParams(query).get('token') || '';
+    }
+
+    return `${portalBasePath}/${encodeURIComponent(responseCode)}${targetToken ? `?token=${encodeURIComponent(targetToken)}` : ''}`;
+};
+
+const PortalHome = ({ preview = false }) => {
     const [code, setCode] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const navigate = useNavigate();
@@ -61,8 +75,7 @@ const PortalHome = () => {
                 throw new Error("Pedido não encontrado");
             }
 
-            const encodedCode = encodeURIComponent(response.tracking_code || safeCode);
-            navigate(response.portal_path || `/portal/${encodedCode}?token=${encodeURIComponent(portalToken)}`);
+            navigate(buildPortalTarget({ preview, response, safeCode, portalToken }));
         } catch {
             await showSearchError();
         } finally {
@@ -71,7 +84,7 @@ const PortalHome = () => {
     };
 
     return (
-        <div style={styles.wrapper}>
+        <div className={preview ? 'portal-preview-entry' : undefined} style={styles.wrapper}>
             <style>{`
                 * { box-sizing: border-box; }
                 
@@ -146,7 +159,8 @@ const PortalHome = () => {
                 }
             `}</style>
 
-            <div className="login-card">
+            <div className="login-card portal-preview-card">
+                {preview && <span className="portal-preview-badge">Ambiente de teste</span>}
                 <div style={styles.logoWrapper}>
                     <img 
                         src={appConfig.logoMediumUrl}
@@ -177,6 +191,11 @@ const PortalHome = () => {
                         <input 
                             type="text" 
                             className="premium-input-login"
+                            inputMode="numeric"
+                            enterKeyHint="search"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="characters"
                             placeholder={`Ex: 7376 ou #${appConfig.orderPrefix}-7376`}
                             value={code}
                             onChange={(e) => setCode(e.target.value)}
@@ -184,13 +203,13 @@ const PortalHome = () => {
                             autoFocus
                         />
                     </div>
-                    <button type="submit" className="btn-acessar" disabled={isSearching}>
+                    <button type="submit" className="btn-acessar portal-preview-submit" disabled={isSearching}>
                         {isSearching ? 'A procurar...' : 'Acessar Pedido'}
                     </button>
                 </form>
             </div>
 
-            <div style={styles.footer}>
+            <div className="portal-preview-footer" style={styles.footer}>
                 Tecnologia <strong style={{color: '#94A3B8'}}>{appConfig.systemName}</strong>
             </div>
         </div>

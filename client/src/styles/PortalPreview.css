@@ -1,0 +1,89 @@
+.portal-preview-entry {
+  position: fixed !important;
+  inset: 0;
+  min-height: 100svh !important;
+  padding: max(20px, env(safe-area-inset-top, 0px)) 16px max(20px, env(safe-area-inset-bottom, 0px)) !important;
+  background: #0f1f38 !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.portal-preview-entry .portal-preview-card {
+  max-width: 400px;
+  padding: 28px 24px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(2, 8, 23, 0.24);
+  transform: none;
+  transition: none;
+}
+
+.portal-preview-entry .portal-preview-badge {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  margin: 0 auto 18px;
+  padding: 4px 9px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.portal-preview-entry .premium-input-login {
+  min-height: 52px;
+  padding: 14px 16px 14px 48px;
+  border-width: 1px;
+  border-radius: 8px;
+  background: #ffffff;
+  transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.portal-preview-entry .portal-preview-submit {
+  min-height: 52px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  box-shadow: none;
+  touch-action: manipulation;
+  transition: transform 120ms ease-out, background-color 140ms ease-out, opacity 140ms ease-out;
+}
+
+.portal-preview-entry .portal-preview-submit:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.portal-preview-entry .portal-preview-footer {
+  margin-top: 24px !important;
+  color: #94a3b8 !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .portal-preview-entry .portal-preview-submit:hover:not(:disabled) {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.28);
+  }
+}
+
+@media (max-width: 480px) {
+  .portal-preview-entry {
+    justify-content: center !important;
+  }
+
+  .portal-preview-entry .portal-preview-card {
+    padding: 24px 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-preview-entry *,
+  .portal-preview * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
