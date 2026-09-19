@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Icons } from '../Icons';
 import { styles } from '../../utils/ClientPortalStyles';
 
@@ -9,10 +9,8 @@ const formatMoney = (value) => new Intl.NumberFormat('pt-BR', {
 
 const getLineQuantity = (sizes) => Object.values(sizes || {}).reduce((total, qty) => total + (Number(qty) || 0), 0);
 
-export const HomeTab = ({ preview = false, order, API_BASE_URL, needsArtApproval, artIsApproved, onApproveArt }) => {
-    const productLines = useMemo(() => (
-        Array.isArray(order?.product_lines) ? order.product_lines : []
-    ), [order?.product_lines]);
+export const HomeTab = ({ preview = false, order, API_BASE_URL, needsArtApproval, artIsApproved, onApproveArt, pendingAction }) => {
+    const productLines = Array.isArray(order?.product_lines) ? order.product_lines : [];
 
     const hasDetailedLines = productLines.length > 0;
     const hasGeneralNotes = Boolean(String(order?.observacao || '').trim());
@@ -122,8 +120,8 @@ export const HomeTab = ({ preview = false, order, API_BASE_URL, needsArtApproval
                 ) : null}
                 
                 {needsArtApproval && (
-                    <button onClick={onApproveArt} className="btn-amber" style={{ marginTop: '16px' }}>
-                        <Icons.Check /> Aprovar Arte e Layout
+                    <button onClick={onApproveArt} disabled={pendingAction === 'approve-art'} className="btn-amber" style={{ marginTop: '16px' }}>
+                        <Icons.Check /> {pendingAction === 'approve-art' ? 'A aprovar...' : 'Aprovar Arte e Layout'}
                     </button>
                 )}
 

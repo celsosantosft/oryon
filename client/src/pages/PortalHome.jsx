@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { trackingService } from '../services/trackingService';
 import { appConfig, normalizeTrackingCode } from '../config/appConfig';
+import { buildPortalTarget, getPortalErrorContent } from '../utils/portalRequestState';
 import '../styles/PortalPreview.css';
 
 const Icons = {
@@ -29,28 +30,16 @@ const parsePortalInput = (value) => {
     return { code: normalizeTrackingCode(rawValue), token: '' };
 };
 
-const showSearchError = async () => {
+const showSearchError = async (error) => {
     const Swal = (await import('sweetalert2')).default;
+    const content = getPortalErrorContent(error);
     return Swal.fire({
-        title: 'Pedido não encontrado',
-        text: 'Confira o número do pedido ou cole o link completo recebido.',
+        title: content.title,
+        text: content.message,
         icon: 'error',
         confirmButtonColor: '#2563EB',
         confirmButtonText: 'Tentar Novamente'
     });
-};
-
-export const buildPortalTarget = ({ preview, response, safeCode, portalToken }) => {
-    const portalBasePath = preview ? '/portal-preview' : '/portal';
-    const responseCode = response?.tracking_code || safeCode;
-    let targetToken = portalToken;
-
-    if (!targetToken && response?.portal_path) {
-        const query = String(response.portal_path).split('?')[1] || '';
-        targetToken = new URLSearchParams(query).get('token') || '';
-    }
-
-    return `${portalBasePath}/${encodeURIComponent(responseCode)}${targetToken ? `?token=${encodeURIComponent(targetToken)}` : ''}`;
 };
 
 const PortalHome = ({ preview = false }) => {
@@ -72,12 +61,14 @@ const PortalHome = ({ preview = false }) => {
             
             // ⭐ A CORREÇÃO: Validação rigorosa para forçar o erro se o pedido não existir
             if (!response || response.error || (response.data && response.data.error)) {
-                throw new Error("Pedido não encontrado");
+                const notFoundError = new Error('Pedido não encontrado');
+                notFoundError.status = 404;
+                throw notFoundError;
             }
 
             navigate(buildPortalTarget({ preview, response, safeCode, portalToken }));
-        } catch {
-            await showSearchError();
+        } catch (error) {
+            await showSearchError(error);
         } finally {
             setIsSearching(false);
         }

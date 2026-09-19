@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 
 // Custom Hooks e Serviços
@@ -13,6 +13,7 @@ import { styles, injectGlobalStyles } from '../utils/ClientPortalStyles';
 import { formatMoney, parseNull, getAsArray, generateId } from '../utils/helpers';
 import { showToastSuccess, showToastEdit, confirmSubmitListAlert, confirmBulkSubmitAlert, confirmApproveArtAlert } from '../utils/alerts';
 import { PLAYER_NUMBER_MAX_LENGTH, isValidPlayerNumber, normalizePlayerNumberInput } from '../utils/playerNumber';
+import { getPortalErrorContent } from '../utils/portalRequestState';
 
 // Componentes / Abas
 import { HomeTab } from '../components/tabs/HomeTab';
@@ -52,12 +53,26 @@ const ClientPortal = ({ preview = false }) => {
     const { code } = useParams();
     const [searchParams] = useSearchParams();
     const portalToken = searchParams.get('token') || '';
-    const { order, loading, updateOrderStatus } = usePortalOrder(code, portalToken);
+    const { order, loading, error, updateOrderStatus } = usePortalOrder(code, portalToken, { showAlert: !preview });
     const { items, setItems, removeItem, updateItem, confirmItem, saveEditedItem } = useOrderItems([]);
     
     const [activeTab, setActiveTab] = useState('home');
     const [bulkSizes, setBulkSizes] = useState({});
     const [editingItem, setEditingItem] = useState(null);
+    const [pendingAction, setPendingAction] = useState(null);
+    const pendingActionRef = useRef(null);
+
+    const beginAction = (action) => {
+        if (pendingActionRef.current) return false;
+        pendingActionRef.current = action;
+        setPendingAction(action);
+        return true;
+    };
+
+    const endAction = () => {
+        pendingActionRef.current = null;
+        setPendingAction(null);
+    };
 
     useEffect(() => {
         injectGlobalStyles();
@@ -130,14 +145,19 @@ const ClientPortal = ({ preview = false }) => {
     const handleSubmit = async () => {
         const validItems = items.filter(i => i.confirmed || (i.player_name.trim() !== '' && i.size !== ''));
         if (validItems.length === 0) return fireAlert({ title: 'Atenção', text: 'Preencha pelo menos uma camisa.', icon: 'warning', confirmButtonColor: '#2563EB' });
-        
-        const result = await confirmSubmitListAlert(validItems.length);
-        if (result.isConfirmed) {
-            try {
+
+        if (!beginAction('submit-list')) return;
+        try {
+            const result = await confirmSubmitListAlert(validItems.length);
+            if (result.isConfirmed) {
                 const finalItemsToSubmit = validItems.map(i => ({ ...i, confirmed: true }));
                 await trackingService.submitItems(code, portalToken, finalItemsToSubmit);
                 fireAlert('Sucesso!', 'Lista enviada.', 'success').then(() => window.location.reload());
-            } catch { fireAlert('Erro', 'Erro ao enviar.', 'error'); }
+            }
+        } catch {
+            fireAlert('Erro', 'Erro ao enviar.', 'error');
+        } finally {
+            endAction();
         }
     };
 
@@ -152,23 +172,33 @@ const ClientPortal = ({ preview = false }) => {
             }
         }
 
-        const result = await confirmBulkSubmitAlert(finalItemsToSubmit.length);
-        if (result.isConfirmed) {
-            try {
+        if (!beginAction('submit-bulk')) return;
+        try {
+            const result = await confirmBulkSubmitAlert(finalItemsToSubmit.length);
+            if (result.isConfirmed) {
                 await trackingService.submitItems(code, portalToken, finalItemsToSubmit);
                 fireAlert('Sucesso!', 'Grade enviada.', 'success').then(() => window.location.reload());
-            } catch { fireAlert('Erro', 'Erro ao enviar.', 'error'); }
+            }
+        } catch {
+            fireAlert('Erro', 'Erro ao enviar.', 'error');
+        } finally {
+            endAction();
         }
     };
 
     const handleApproveArt = async () => {
-        const result = await confirmApproveArtAlert();
-        if (result.isConfirmed) {
-            try {
+        if (!beginAction('approve-art')) return;
+        try {
+            const result = await confirmApproveArtAlert();
+            if (result.isConfirmed) {
                 await trackingService.approveArt(code, portalToken);
                 fireAlert('Arte Aprovada!', 'Produção ciente.', 'success');
                 updateOrderStatus('Arte Aprovada/Liberada');
-            } catch { fireAlert('Erro', 'Não foi possível aprovar.', 'error'); }
+            }
+        } catch {
+            fireAlert('Erro', 'Não foi possível aprovar.', 'error');
+        } finally {
+            endAction();
         }
     };
 
@@ -251,14 +281,15 @@ const ClientPortal = ({ preview = false }) => {
     }
 
     if (!order) {
+        const errorContent = getPortalErrorContent(error);
         return (
             <div className={preview ? 'portal-preview portal-state-screen' : undefined} style={{ height: preview ? '100dvh' : '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', padding: '20px', boxSizing: 'border-box' }}>
                 <div className={preview ? 'portal-state-card' : undefined} style={{ backgroundColor: '#fff', padding: '40px', borderRadius: preview ? '8px' : '24px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
                     <div style={{ color: '#EF4444', marginBottom: '16px' }}>
                         <svg width="64" height="64" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ margin: '0 auto' }}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                     </div>
-                    <h2 style={{ color: '#0F172A', fontSize: '1.5rem', fontWeight: '800', marginBottom: '8px' }}>Pedido não encontrado</h2>
-                    <p style={{ color: '#64748B', marginBottom: '24px' }}>Verifique se o código <strong>{code}</strong> está correto e tente novamente.</p>
+                    <h2 style={{ color: '#0F172A', fontSize: '1.5rem', fontWeight: '800', marginBottom: '8px' }}>{errorContent.title}</h2>
+                    <p style={{ color: '#64748B', marginBottom: '24px' }}>{errorContent.message}</p>
                     <button onClick={() => window.location.href = preview ? '/portal-preview' : '/portal'} style={{ padding: '12px 24px', backgroundColor: '#2563EB', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', width: '100%', fontSize: '1rem' }}>Fazer Nova Busca</button>
                 </div>
             </div>
@@ -373,11 +404,11 @@ const ClientPortal = ({ preview = false }) => {
             </div>
 
             <div className={preview ? 'portal-tab-body' : undefined} style={styles.tabBody}>
-                {activeTab === 'home' && <HomeTab preview={preview} order={order} API_BASE_URL={API_BASE_URL} needsArtApproval={derivedData.needsArtApproval} artIsApproved={derivedData.artIsApproved} onApproveArt={handleApproveArt} />}
+                {activeTab === 'home' && <HomeTab preview={preview} order={order} API_BASE_URL={API_BASE_URL} needsArtApproval={derivedData.needsArtApproval} artIsApproved={derivedData.artIsApproved} onApproveArt={handleApproveArt} pendingAction={pendingAction} />}
                 {activeTab === 'tracking' && <TrackingTab preview={preview} order={order} currentStepIndex={derivedData.currentStepIndex} STATUS_STEPS_CONFIG={STATUS_STEPS_CONFIG} />}
                 {activeTab === 'finance' && <FinanceTab preview={preview} remainingOrder={derivedData.remainingOrder} percentPaid={derivedData.percentPaid} totalOrder={derivedData.totalOrder} paidOrder={derivedData.paidOrder} formatMoney={formatMoney} />}
-                {activeTab === 'bulk' && <BulkTab preview={preview} isQuote={order.tracking_code?.startsWith('#ORC-')} isLocked={derivedData.isLocked} isUsingNominalList={derivedData.isUsingNominalList} hasAdminSizes={derivedData.hasAdminSizes} availableSizes={derivedData.availableSizes} summaryCounts={derivedData.summaryCounts} totalConfirmed={derivedData.totalConfirmed} bulkSizes={bulkSizes} setBulkSizes={setBulkSizes} handleBulkSubmit={handleBulkSubmit} />}
-                {activeTab === 'list' && <ListTab preview={preview} isLocked={derivedData.isLocked} items={derivedData.nominalItemsForTab} activeItems={derivedData.activeItems} confirmedItems={derivedData.nominalConfirmedItems} availableSizes={derivedData.availableSizes} lastAddedItem={derivedData.lastAddedNominalItem} handleRemoveItem={handleRemoveItem} handleItemChange={updateItem} handleConfirmItem={handleConfirmItem} handleSubmit={handleSubmit} handleEditItem={setEditingItem} />}
+                {activeTab === 'bulk' && <BulkTab preview={preview} isQuote={order.tracking_code?.startsWith('#ORC-')} isLocked={derivedData.isLocked} isUsingNominalList={derivedData.isUsingNominalList} hasAdminSizes={derivedData.hasAdminSizes} availableSizes={derivedData.availableSizes} summaryCounts={derivedData.summaryCounts} totalConfirmed={derivedData.totalConfirmed} bulkSizes={bulkSizes} setBulkSizes={setBulkSizes} handleBulkSubmit={handleBulkSubmit} pendingAction={pendingAction} />}
+                {activeTab === 'list' && <ListTab preview={preview} isLocked={derivedData.isLocked} items={derivedData.nominalItemsForTab} activeItems={derivedData.activeItems} confirmedItems={derivedData.nominalConfirmedItems} availableSizes={derivedData.availableSizes} lastAddedItem={derivedData.lastAddedNominalItem} handleRemoveItem={handleRemoveItem} handleItemChange={updateItem} handleConfirmItem={handleConfirmItem} handleSubmit={handleSubmit} handleEditItem={setEditingItem} pendingAction={pendingAction} />}
             </div>
             
             <div className={preview ? 'portal-bottom-nav' : undefined} style={styles.bottomNav}>

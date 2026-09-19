@@ -7,7 +7,7 @@ export const ListTab = ({
     preview = false,
     isQuote, isLocked, items, activeItems, confirmedItems, availableSizes,
     lastAddedItem, handleRemoveItem, handleItemChange, handleConfirmItem, 
-    handleSubmit, handleEditItem
+    handleSubmit, handleEditItem, pendingAction
 }) => {
     return (
         <div className={`animate-fade-in${preview ? ' portal-tab portal-list-tab' : ''}`} style={{ width: '100%', maxWidth: '100vw', boxSizing: 'border-box', overflowX: 'hidden' }}>
@@ -72,8 +72,8 @@ export const ListTab = ({
                                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Adicionar Camisa</span>
                             </button>
                             {confirmedItems.length > 0 && (
-                                <button onClick={handleSubmit} className="btn-secondary" style={{ flex: '1 1 100%', minWidth: 0, padding: '14px 16px', gap: '8px', boxSizing: 'border-box' }}>
-                                    <Icons.SendPaperPlane /> <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Enviar Lista ({confirmedItems.length})</span>
+                                <button onClick={handleSubmit} disabled={pendingAction === 'submit-list'} className="btn-secondary" style={{ flex: '1 1 100%', minWidth: 0, padding: '14px 16px', gap: '8px', boxSizing: 'border-box' }}>
+                                    <Icons.SendPaperPlane /> <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pendingAction === 'submit-list' ? 'A enviar...' : `Enviar Lista (${confirmedItems.length})`}</span>
                                 </button>
                             )}
                         </div>

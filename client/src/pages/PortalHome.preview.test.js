@@ -30,7 +30,7 @@ test('builds preview links without losing the real portal token', async () => {
     const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom' });
 
     try {
-        const { buildPortalTarget } = await vite.ssrLoadModule('/src/pages/PortalHome.jsx');
+        const { buildPortalTarget } = await vite.ssrLoadModule('/src/utils/portalRequestState.js');
         const response = {
             tracking_code: '#ATOS-7376',
             portal_path: '/portal/%23ATOS-7376?token=token-real'
