@@ -85,7 +85,7 @@ export const BulkTab = ({
 
                 {!isReadOnlyGrade && (
                     <button onClick={handleBulkSubmit} disabled={pendingAction === 'submit-bulk'} className="btn-secondary" style={{ marginTop: '20px', width: '100%', padding: '16px', backgroundColor: '#2563EB', color: 'white', border: 'none', borderRadius: '14px', fontWeight: '800', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
-                        <Icons.SendPaperPlane /> {pendingAction === 'submit-bulk' ? 'A enviar...' : `Enviar Grade (${totalPieces} peças)`}
+                        <Icons.SendPaperPlane /> {preview && pendingAction === 'submit-bulk' ? 'A enviar...' : `Enviar Grade (${totalPieces} peças)`}
                     </button>
                 )}
             </div>

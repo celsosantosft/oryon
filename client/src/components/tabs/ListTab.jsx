@@ -73,7 +73,7 @@ export const ListTab = ({
                             </button>
                             {confirmedItems.length > 0 && (
                                 <button onClick={handleSubmit} disabled={pendingAction === 'submit-list'} className="btn-secondary" style={{ flex: '1 1 100%', minWidth: 0, padding: '14px 16px', gap: '8px', boxSizing: 'border-box' }}>
-                                    <Icons.SendPaperPlane /> <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pendingAction === 'submit-list' ? 'A enviar...' : `Enviar Lista (${confirmedItems.length})`}</span>
+                                    <Icons.SendPaperPlane /> <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{preview && pendingAction === 'submit-list' ? 'A enviar...' : `Enviar Lista (${confirmedItems.length})`}</span>
                                 </button>
                             )}
                         </div>

@@ -265,6 +265,12 @@
   }
 }
 
+@media (max-width: 359px) {
+  .portal-preview .responsive-names-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .portal-preview-entry *,
   .portal-preview * {

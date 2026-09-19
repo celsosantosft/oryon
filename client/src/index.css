@@ -16,6 +16,7 @@ html {
   min-height: 100%;
   background-color: #091A2D;
   caret-color: transparent;
+  -webkit-text-size-adjust: 100%;
 }
 
 /* Reset CSS */
@@ -43,6 +44,26 @@ input,
 textarea,
 [contenteditable="true"] {
   caret-color: auto;
+}
+
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+button,
+[role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
 }
 
 /* Estrutura Principal do Layout */

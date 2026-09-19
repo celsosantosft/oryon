@@ -121,7 +121,7 @@ export const HomeTab = ({ preview = false, order, API_BASE_URL, needsArtApproval
                 
                 {needsArtApproval && (
                     <button onClick={onApproveArt} disabled={pendingAction === 'approve-art'} className="btn-amber" style={{ marginTop: '16px' }}>
-                        <Icons.Check /> {pendingAction === 'approve-art' ? 'A aprovar...' : 'Aprovar Arte e Layout'}
+                        <Icons.Check /> {preview && pendingAction === 'approve-art' ? 'A aprovar...' : 'Aprovar Arte e Layout'}
                     </button>
                 )}
 

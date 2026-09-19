@@ -10,3 +10,11 @@ test('keeps the official portal routes and adds isolated preview routes', () => 
     assert.match(source, /path="\/portal-preview" element={<PortalHome preview \/>}/);
     assert.match(source, /path="\/portal-preview\/:code" element={<ClientPortal preview \/>}/);
 });
+
+test('uses a mobile-safe viewport without disabling zoom', () => {
+    const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+
+    assert.match(html, /viewport-fit=cover/);
+    assert.match(html, /interactive-widget=resizes-content/);
+    assert.doesNotMatch(html, /maximum-scale|user-scalable/);
+});
