@@ -420,8 +420,8 @@ const ClientPortal = ({ preview = false }) => {
                     const activeColor = appConfig.theme === 'monochrome' ? '#FFFFFF' : '#60A5FA';
                     const navContent = (
                         <>
-                            <div className={preview ? 'portal-nav-icon' : undefined} style={{ color: isActive ? activeColor : '#9CA3AF', filter: isActive ? `drop-shadow(0 0 6px ${appConfig.theme === 'monochrome' ? 'rgba(255, 255, 255, 0.4)' : 'rgba(96, 165, 250, 0.4)'})` : 'none', transition: preview ? 'color 160ms ease' : 'all 0.4s' }}><item.icon /></div>
-                            <span className={preview ? 'portal-nav-label' : undefined} style={{ fontSize: '0.65rem', fontWeight: isActive ? '700' : '500', color: isActive ? activeColor : '#9CA3AF', marginTop: '4px', transition: preview ? 'color 160ms ease' : 'all 0.4s' }}>{item.label}</span>
+                            <div className={preview ? 'portal-nav-icon' : undefined} style={{ color: isActive ? activeColor : '#9CA3AF', filter: isActive ? `drop-shadow(0 0 6px ${appConfig.theme === 'monochrome' ? 'rgba(255, 255, 255, 0.4)' : 'rgba(96, 165, 250, 0.4)'})` : 'none', transition: preview ? 'color 400ms ease, filter 400ms ease' : 'all 0.4s' }}><item.icon /></div>
+                            <span className={preview ? 'portal-nav-label' : undefined} style={{ fontSize: '0.65rem', fontWeight: isActive ? '700' : '500', color: isActive ? activeColor : '#9CA3AF', marginTop: '4px', transition: preview ? 'color 400ms ease' : 'all 0.4s' }}>{item.label}</span>
                         </>
                     );
 
