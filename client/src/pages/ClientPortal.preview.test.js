@@ -25,4 +25,5 @@ test('keeps the original glass and spring effects in the preview navigation', ()
     assert.match(previewStyles, /\.portal-preview \.portal-nav-pill \{[\s\S]*backdrop-filter: blur\(12px\);/);
     assert.match(previewStyles, /\.portal-preview \.portal-nav-pill \{[\s\S]*transition: left 400ms cubic-bezier\(0\.34, 1\.56, 0\.64, 1\);/);
     assert.match(previewStyles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.portal-preview \.portal-nav-pill \{[\s\S]*transition-duration: 400ms !important;/);
+    assert.doesNotMatch(previewStyles, /\.portal-preview \.portal-nav-item:hover/);
 });

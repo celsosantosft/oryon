@@ -268,9 +268,6 @@
     box-shadow: 0 6px 16px rgba(37, 99, 235, 0.28);
   }
 
-  .portal-preview .portal-nav-item:hover:not(:disabled) {
-    background: #1a304f;
-  }
 }
 
 @media (max-width: 480px) {
