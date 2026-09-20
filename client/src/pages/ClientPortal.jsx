@@ -413,7 +413,7 @@ const ClientPortal = ({ preview = false }) => {
             </div>
             
             <div className={preview ? 'portal-bottom-nav' : undefined} style={styles.bottomNav}>
-                {preview && <div className="portal-nav-pill" aria-hidden="true" style={{ transform: `translateX(${activeNavIndex * 100}%)` }} />}
+                {preview && <div className="portal-nav-pill" aria-hidden="true" style={{ left: `calc(${activeNavIndex * 20}% + 1%)`, width: '18%' }} />}
                 {!preview && <div style={{ ...styles.navPill, left: `calc(${activeNavIndex * 20}% + 1%)`, width: '18%' }} />}
                 {navItems.map((item) => {
                     const isActive = activeTab === item.id;

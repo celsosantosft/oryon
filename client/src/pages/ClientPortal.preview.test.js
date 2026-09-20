@@ -20,8 +20,9 @@ test('uses accessible bottom navigation controls in preview mode', () => {
 
 test('keeps the original glass and spring effects in the preview navigation', () => {
     assert.match(source, /className="portal-nav-pill"/);
-    assert.match(source, /translateX\(\$\{activeNavIndex \* 100\}%\)/);
+    assert.match(source, /left: `calc\(\$\{activeNavIndex \* 20\}% \+ 1%\)`/);
     assert.match(previewStyles, /\.portal-preview \.portal-nav-pill \{[\s\S]*background: linear-gradient\(135deg, rgba\(255, 255, 255, 0\.15\) 0%, rgba\(255, 255, 255, 0\.05\) 100%\);/);
     assert.match(previewStyles, /\.portal-preview \.portal-nav-pill \{[\s\S]*backdrop-filter: blur\(12px\);/);
-    assert.match(previewStyles, /\.portal-preview \.portal-nav-pill \{[\s\S]*transition: transform 400ms cubic-bezier\(0\.34, 1\.56, 0\.64, 1\);/);
+    assert.match(previewStyles, /\.portal-preview \.portal-nav-pill \{[\s\S]*transition: left 400ms cubic-bezier\(0\.34, 1\.56, 0\.64, 1\);/);
+    assert.match(previewStyles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.portal-preview \.portal-nav-pill \{[\s\S]*transition-duration: 400ms !important;/);
 });
