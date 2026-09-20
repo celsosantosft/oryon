@@ -303,6 +303,7 @@ const ClientPortal = ({ preview = false }) => {
         { id: 'bulk', label: 'Grade', icon: Icons.Box },
         { id: 'list', label: 'Nomes', icon: Icons.List, disabled: derivedData.isBulkOnly }
     ];
+    const activeNavIndex = navItems.findIndex(item => item.id === activeTab);
 
     return (
         <div className={preview ? 'portal-preview portal-shell' : undefined} style={styles.container}>
@@ -412,7 +413,8 @@ const ClientPortal = ({ preview = false }) => {
             </div>
             
             <div className={preview ? 'portal-bottom-nav' : undefined} style={styles.bottomNav}>
-                {!preview && <div style={{ ...styles.navPill, left: `calc(${navItems.findIndex(i => i.id === activeTab) * 20}% + 1%)`, width: '18%' }} />}
+                {preview && <div className="portal-nav-pill" aria-hidden="true" style={{ transform: `translateX(${activeNavIndex * 100}%)` }} />}
+                {!preview && <div style={{ ...styles.navPill, left: `calc(${activeNavIndex * 20}% + 1%)`, width: '18%' }} />}
                 {navItems.map((item) => {
                     const isActive = activeTab === item.id;
                     const activeColor = appConfig.theme === 'monochrome' ? '#FFFFFF' : '#60A5FA';
