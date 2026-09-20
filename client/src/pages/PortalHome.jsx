@@ -42,10 +42,11 @@ const showSearchError = async (error) => {
     });
 };
 
-const PortalHome = ({ preview = false }) => {
+const PortalHome = ({ preview = false, modern = false }) => {
     const [code, setCode] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const navigate = useNavigate();
+    const useModernPortal = preview || modern;
 
     const handleSearch = async (e) => {
         e.preventDefault();
@@ -75,7 +76,7 @@ const PortalHome = ({ preview = false }) => {
     };
 
     return (
-        <div className={preview ? 'portal-preview-entry' : undefined} style={styles.wrapper}>
+        <div className={useModernPortal ? 'portal-preview-entry' : undefined} style={styles.wrapper}>
             <style>{`
                 * { box-sizing: border-box; }
                 

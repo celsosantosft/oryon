@@ -5,11 +5,12 @@ import { readFileSync } from 'node:fs';
 const source = readFileSync(new URL('./ClientPortal.jsx', import.meta.url), 'utf8');
 const previewStyles = readFileSync(new URL('../styles/PortalPreview.css', import.meta.url), 'utf8');
 
-test('keeps the mobile preview styling isolated from the official portal', () => {
-    assert.match(source, /const ClientPortal = \(\{ preview = false \}\)/);
-    assert.match(source, /preview \? 'portal-preview portal-shell' : undefined/);
+test('supports the mobile styling on official and preview portal routes', () => {
+    assert.match(source, /const ClientPortal = \(\{ preview = false, modern = false \}\)/);
+    assert.match(source, /const useModernPortal = preview \|\| modern/);
+    assert.match(source, /useModernPortal \? 'portal-preview portal-shell' : undefined/);
     assert.match(source, /preview && \([\s\S]*Ambiente de teste/);
-    assert.match(source, /<HomeTab[\s\S]*preview=\{preview\}/);
+    assert.match(source, /<HomeTab[\s\S]*preview=\{useModernPortal\}/);
 });
 
 test('uses accessible bottom navigation controls in preview mode', () => {

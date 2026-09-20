@@ -5,20 +5,20 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { createServer } from 'vite';
 
-test('marks only the preview entry as a test environment', async () => {
+test('uses the mobile experience officially without the preview badge', async () => {
     const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom' });
 
     try {
         const { default: PortalHome } = await vite.ssrLoadModule('/src/pages/PortalHome.jsx');
         const official = renderToStaticMarkup(
-            React.createElement(MemoryRouter, null, React.createElement(PortalHome))
+            React.createElement(MemoryRouter, null, React.createElement(PortalHome, { modern: true }))
         );
         const preview = renderToStaticMarkup(
             React.createElement(MemoryRouter, null, React.createElement(PortalHome, { preview: true }))
         );
 
         assert.equal(official.includes('Ambiente de teste'), false);
-        assert.equal(official.includes('portal-preview-entry'), false);
+        assert.match(official, /portal-preview-entry/);
         assert.equal(preview.includes('Ambiente de teste'), true);
         assert.match(preview, /portal-preview-entry/);
     } finally {

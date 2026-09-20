@@ -49,11 +49,12 @@ const formatDeliveryDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
 };
 
-const ClientPortal = ({ preview = false }) => {
+const ClientPortal = ({ preview = false, modern = false }) => {
     const { code } = useParams();
     const [searchParams] = useSearchParams();
     const portalToken = searchParams.get('token') || '';
-    const { order, loading, error, updateOrderStatus } = usePortalOrder(code, portalToken, { showAlert: !preview });
+    const useModernPortal = preview || modern;
+    const { order, loading, error, updateOrderStatus } = usePortalOrder(code, portalToken, { showAlert: !useModernPortal });
     const { items, setItems, removeItem, updateItem, confirmItem, saveEditedItem } = useOrderItems([]);
     
     const [activeTab, setActiveTab] = useState('home');
@@ -271,7 +272,7 @@ const ClientPortal = ({ preview = false }) => {
 
     if (loading) {
         return (
-            <div className={preview ? 'portal-preview portal-state-screen' : undefined} style={{ height: preview ? '100dvh' : '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', width: '100%', padding: '20px', boxSizing: 'border-box' }}>
+            <div className={useModernPortal ? 'portal-preview portal-state-screen' : undefined} style={{ height: useModernPortal ? '100dvh' : '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', width: '100%', padding: '20px', boxSizing: 'border-box' }}>
                 <style>{`@keyframes spin-premium { to { transform: rotate(360deg); } }`}</style>
                 <div style={{ width: '36px', height: '36px', border: '3px solid rgba(37, 99, 235, 0.15)', borderTopColor: '#2563EB', borderRadius: '50%', animation: 'spin-premium 1s linear infinite', marginBottom: '16px' }}></div>
                 <div style={{ color: '#0F172A', fontWeight: '800', fontSize: '1.1rem', letterSpacing: '0.02em', marginBottom: '6px' }}>Preparando seu portal...</div>
@@ -283,8 +284,8 @@ const ClientPortal = ({ preview = false }) => {
     if (!order) {
         const errorContent = getPortalErrorContent(error);
         return (
-            <div className={preview ? 'portal-preview portal-state-screen' : undefined} style={{ height: preview ? '100dvh' : '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', padding: '20px', boxSizing: 'border-box' }}>
-                <div className={preview ? 'portal-state-card' : undefined} style={{ backgroundColor: '#fff', padding: '40px', borderRadius: preview ? '8px' : '24px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
+            <div className={useModernPortal ? 'portal-preview portal-state-screen' : undefined} style={{ height: useModernPortal ? '100dvh' : '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', padding: '20px', boxSizing: 'border-box' }}>
+                <div className={useModernPortal ? 'portal-state-card' : undefined} style={{ backgroundColor: '#fff', padding: '40px', borderRadius: useModernPortal ? '8px' : '24px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
                     <div style={{ color: '#EF4444', marginBottom: '16px' }}>
                         <svg width="64" height="64" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ margin: '0 auto' }}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                     </div>
@@ -306,7 +307,7 @@ const ClientPortal = ({ preview = false }) => {
     const activeNavIndex = navItems.findIndex(item => item.id === activeTab);
 
     return (
-        <div className={preview ? 'portal-preview portal-shell' : undefined} style={styles.container}>
+        <div className={useModernPortal ? 'portal-preview portal-shell' : undefined} style={styles.container}>
             <style>{`
                 select {
                     appearance: none !important;
@@ -336,8 +337,8 @@ const ClientPortal = ({ preview = false }) => {
             `}</style>
 
             {editingItem && (
-                <div className={preview ? 'portal-modal-overlay' : undefined} style={styles.modalOverlay}>
-                    <div className={`animate-fade-in${preview ? ' portal-modal-content' : ''}`} style={styles.modalContent}>
+                <div className={useModernPortal ? 'portal-modal-overlay' : undefined} style={styles.modalOverlay}>
+                    <div className={`animate-fade-in${useModernPortal ? ' portal-modal-content' : ''}`} style={styles.modalContent}>
                         <div style={styles.modalHeader}>
                             <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0F172A', fontWeight: '800' }}>Editar Camisa</h3>
                             <button onClick={() => setEditingItem(null)} style={styles.modalCloseBtn}><Icons.Close /></button>
@@ -365,7 +366,7 @@ const ClientPortal = ({ preview = false }) => {
                 </div>
             )}
 
-            <div className={preview ? 'portal-header' : undefined} style={{ ...styles.header, padding: '24px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap' }}>
+            <div className={useModernPortal ? 'portal-header' : undefined} style={{ ...styles.header, padding: '24px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap' }}>
                 <div style={{ width: '56px', height: '56px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img 
                         src={appConfig.theme === 'monochrome' ? appConfig.logoWhiteUrl : appConfig.logoSmallUrl}
@@ -404,28 +405,28 @@ const ClientPortal = ({ preview = false }) => {
                 </div>
             </div>
 
-            <div className={preview ? 'portal-tab-body' : undefined} style={styles.tabBody}>
-                {activeTab === 'home' && <HomeTab preview={preview} order={order} API_BASE_URL={API_BASE_URL} needsArtApproval={derivedData.needsArtApproval} artIsApproved={derivedData.artIsApproved} onApproveArt={handleApproveArt} pendingAction={pendingAction} />}
-                {activeTab === 'tracking' && <TrackingTab preview={preview} order={order} currentStepIndex={derivedData.currentStepIndex} STATUS_STEPS_CONFIG={STATUS_STEPS_CONFIG} />}
-                {activeTab === 'finance' && <FinanceTab preview={preview} remainingOrder={derivedData.remainingOrder} percentPaid={derivedData.percentPaid} totalOrder={derivedData.totalOrder} paidOrder={derivedData.paidOrder} formatMoney={formatMoney} />}
-                {activeTab === 'bulk' && <BulkTab preview={preview} isQuote={order.tracking_code?.startsWith('#ORC-')} isLocked={derivedData.isLocked} isUsingNominalList={derivedData.isUsingNominalList} hasAdminSizes={derivedData.hasAdminSizes} availableSizes={derivedData.availableSizes} summaryCounts={derivedData.summaryCounts} totalConfirmed={derivedData.totalConfirmed} bulkSizes={bulkSizes} setBulkSizes={setBulkSizes} handleBulkSubmit={handleBulkSubmit} pendingAction={pendingAction} />}
-                {activeTab === 'list' && <ListTab preview={preview} isLocked={derivedData.isLocked} items={derivedData.nominalItemsForTab} activeItems={derivedData.activeItems} confirmedItems={derivedData.nominalConfirmedItems} availableSizes={derivedData.availableSizes} lastAddedItem={derivedData.lastAddedNominalItem} handleRemoveItem={handleRemoveItem} handleItemChange={updateItem} handleConfirmItem={handleConfirmItem} handleSubmit={handleSubmit} handleEditItem={setEditingItem} pendingAction={pendingAction} />}
+            <div className={useModernPortal ? 'portal-tab-body' : undefined} style={styles.tabBody}>
+                {activeTab === 'home' && <HomeTab preview={useModernPortal} order={order} API_BASE_URL={API_BASE_URL} needsArtApproval={derivedData.needsArtApproval} artIsApproved={derivedData.artIsApproved} onApproveArt={handleApproveArt} pendingAction={pendingAction} />}
+                {activeTab === 'tracking' && <TrackingTab preview={useModernPortal} order={order} currentStepIndex={derivedData.currentStepIndex} STATUS_STEPS_CONFIG={STATUS_STEPS_CONFIG} />}
+                {activeTab === 'finance' && <FinanceTab preview={useModernPortal} remainingOrder={derivedData.remainingOrder} percentPaid={derivedData.percentPaid} totalOrder={derivedData.totalOrder} paidOrder={derivedData.paidOrder} formatMoney={formatMoney} />}
+                {activeTab === 'bulk' && <BulkTab preview={useModernPortal} isQuote={order.tracking_code?.startsWith('#ORC-')} isLocked={derivedData.isLocked} isUsingNominalList={derivedData.isUsingNominalList} hasAdminSizes={derivedData.hasAdminSizes} availableSizes={derivedData.availableSizes} summaryCounts={derivedData.summaryCounts} totalConfirmed={derivedData.totalConfirmed} bulkSizes={bulkSizes} setBulkSizes={setBulkSizes} handleBulkSubmit={handleBulkSubmit} pendingAction={pendingAction} />}
+                {activeTab === 'list' && <ListTab preview={useModernPortal} isLocked={derivedData.isLocked} items={derivedData.nominalItemsForTab} activeItems={derivedData.activeItems} confirmedItems={derivedData.nominalConfirmedItems} availableSizes={derivedData.availableSizes} lastAddedItem={derivedData.lastAddedNominalItem} handleRemoveItem={handleRemoveItem} handleItemChange={updateItem} handleConfirmItem={handleConfirmItem} handleSubmit={handleSubmit} handleEditItem={setEditingItem} pendingAction={pendingAction} />}
             </div>
             
-            <div className={preview ? 'portal-bottom-nav' : undefined} style={styles.bottomNav}>
-                {preview && <div className="portal-nav-pill" aria-hidden="true" style={{ left: `calc(${activeNavIndex * 20}% + 1%)`, width: '18%' }} />}
-                {!preview && <div style={{ ...styles.navPill, left: `calc(${activeNavIndex * 20}% + 1%)`, width: '18%' }} />}
+            <div className={useModernPortal ? 'portal-bottom-nav' : undefined} style={styles.bottomNav}>
+                {useModernPortal && <div className="portal-nav-pill" aria-hidden="true" style={{ left: `calc(${activeNavIndex * 20}% + 1%)`, width: '18%' }} />}
+                {!useModernPortal && <div style={{ ...styles.navPill, left: `calc(${activeNavIndex * 20}% + 1%)`, width: '18%' }} />}
                 {navItems.map((item) => {
                     const isActive = activeTab === item.id;
                     const activeColor = appConfig.theme === 'monochrome' ? '#FFFFFF' : '#60A5FA';
                     const navContent = (
                         <>
-                            <div className={preview ? 'portal-nav-icon' : undefined} style={{ color: isActive ? activeColor : '#9CA3AF', filter: isActive ? `drop-shadow(0 0 6px ${appConfig.theme === 'monochrome' ? 'rgba(255, 255, 255, 0.4)' : 'rgba(96, 165, 250, 0.4)'})` : 'none', transition: preview ? 'color 400ms ease, filter 400ms ease' : 'all 0.4s' }}><item.icon /></div>
-                            <span className={preview ? 'portal-nav-label' : undefined} style={{ fontSize: '0.65rem', fontWeight: isActive ? '700' : '500', color: isActive ? activeColor : '#9CA3AF', marginTop: '4px', transition: preview ? 'color 400ms ease' : 'all 0.4s' }}>{item.label}</span>
+                            <div className={useModernPortal ? 'portal-nav-icon' : undefined} style={{ color: isActive ? activeColor : '#9CA3AF', filter: isActive ? `drop-shadow(0 0 6px ${appConfig.theme === 'monochrome' ? 'rgba(255, 255, 255, 0.4)' : 'rgba(96, 165, 250, 0.4)'})` : 'none', transition: useModernPortal ? 'color 400ms ease, filter 400ms ease' : 'all 0.4s' }}><item.icon /></div>
+                            <span className={useModernPortal ? 'portal-nav-label' : undefined} style={{ fontSize: '0.65rem', fontWeight: isActive ? '700' : '500', color: isActive ? activeColor : '#9CA3AF', marginTop: '4px', transition: useModernPortal ? 'color 400ms ease' : 'all 0.4s' }}>{item.label}</span>
                         </>
                     );
 
-                    if (preview) {
+                    if (useModernPortal) {
                         return (
                             <button
                                 key={item.id}

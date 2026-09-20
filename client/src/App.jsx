@@ -79,8 +79,8 @@ function App() {
             <Routes>
                 <Route path="/login" element={<Login />} />
 
-                <Route path="/portal" element={<PortalHome />} />
-                <Route path="/portal/:code" element={<ClientPortal />} />
+                <Route path="/portal" element={<PortalHome modern />} />
+                <Route path="/portal/:code" element={<ClientPortal modern />} />
                 <Route path="/portal-preview" element={<PortalHome preview />} />
                 <Route path="/portal-preview/:code" element={<ClientPortal preview />} />
 
