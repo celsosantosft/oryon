@@ -55,13 +55,13 @@ const ProtectedRoute = ({ children }) => {
     return children;
 };
 
-const SmartHomeRoute = () => {
+const SmartHomeRoute = ({ preview = false }) => {
     const { user } = useAuth();
     if (!user) return <Navigate to="/login" replace />;
     if (user.role === 'designer') return <Navigate to="/design" replace />;
     if (user.role === 'gerente_producao') return <Navigate to="/production" replace />;
     if (String(user.role || '').toLowerCase() === 'corte') return <Navigate to="/corte" replace />;
-    return <Dashboard />;
+    return <Dashboard preview={preview} />;
 };
 
 const CutterRoute = ({ children }) => {
@@ -95,6 +95,7 @@ function App() {
                         <Layout>
                             <Routes>
                                 <Route path="/" element={<SmartHomeRoute />} />
+                                <Route path="/dashboard-preview" element={<SmartHomeRoute preview />} />
                                 
                                 <Route path="/users" element={<Users />} />
                                 <Route path="/orders" element={<Orders />} />

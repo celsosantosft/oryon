@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import '../styles/DashboardPreview.css';
 
 const THEME = {
     colors: {
@@ -42,11 +43,13 @@ const getRelativeLabel = (dateString) => {
     return weekDay.charAt(0).toUpperCase() + weekDay.slice(1);
 };
 
-const Dashboard = () => {
+const Dashboard = ({ preview = false }) => {
     const { token, API_BASE_URL } = useAuth();
     const navigate = useNavigate();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    const [reloadKey, setReloadKey] = useState(0);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1000);
 
     useEffect(() => {
@@ -58,17 +61,19 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
+                setLoadError(false);
                 const response = await axios.get(`${API_BASE_URL}/api/dashboard/summary`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setData(response.data);
-            } catch (error) { console.error("Erro dashboard:", error); } 
+            } catch (error) { console.error("Erro dashboard:", error); setLoadError(true); }
             finally { setLoading(false); }
         };
         fetchData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [API_BASE_URL, token, reloadKey]);
 
+    if (preview && loading) return <div className="dashboard-preview dashboard-preview-state" role="status">Carregando indicadores...</div>;
+    if (preview && loadError) return <div className="dashboard-preview dashboard-preview-state" role="alert"><strong>Não foi possível carregar o painel.</strong><span>Verifique a conexão e tente novamente.</span><button type="button" onClick={() => { setLoading(true); setReloadKey((key) => key + 1); }}>Tentar novamente</button></div>;
     if (loading || !data) return <div style={{padding:'60px', textAlign:'center', color: THEME.colors.text.secondary}}>Carregando sistema...</div>;
 
     const getCount = (statusName) => {
@@ -91,9 +96,9 @@ const Dashboard = () => {
     };
 
     return (
-        <div style={{ fontFamily: "'Inter', sans-serif", maxWidth: '1600px', margin: '0 auto', color: THEME.colors.text.primary, paddingBottom: '40px' }}>
+        <div className={preview ? 'dashboard-preview' : undefined} style={{ fontFamily: "'Inter', sans-serif", maxWidth: '1600px', margin: '0 auto', color: THEME.colors.text.primary, paddingBottom: '40px' }}>
             
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '24px' : '32px', gap: '16px', flexWrap: 'wrap' }}>
+            <header className={preview ? 'dashboard-preview-heading' : undefined} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '24px' : '32px', gap: '16px', flexWrap: 'wrap' }}>
                 <div>
                     <h1 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.5px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <span style={{ color: '#2563EB', display: 'flex', alignItems: 'center' }}>
@@ -105,35 +110,36 @@ const Dashboard = () => {
                         Visão geral das operações
                     </p>
                 </div>
+                {preview && <span className="dashboard-preview-badge">Ambiente de teste</span>}
             </header>
 
-            <div style={isMobile ? styles.topGridMobile : styles.topGrid}>
-                <KPICard title="Total dos Pedidos" value={`R$ ${(data.totals.active_value || 0).toFixed(2)}`} icon={<Icons.Money />} color="#3B82F6" />
-                <KPICard title="Falta Receber" value={`R$ ${Math.max(0, (data.totals.active_value || 0) - (data.totals.active_paid || 0)).toFixed(2)}`} icon={<Icons.Alert />} color="#EF4444" />
-                <KPICard title="Em Produção" value={data.totals.active_count || 0} icon={<Icons.Box />} color="#F59E0B" />
-                <KPICard title="Pedidos Concluídos" value={data.totals.completed_count || 0} icon={<Icons.Check />} color="#10B981" />
+            <div className={preview ? 'dashboard-preview-kpis' : undefined} style={preview ? undefined : (isMobile ? styles.topGridMobile : styles.topGrid)}>
+                <KPICard preview={preview} title="Total dos Pedidos" value={`R$ ${(data.totals.active_value || 0).toFixed(2)}`} icon={<Icons.Money />} color="#3B82F6" />
+                <KPICard preview={preview} title="Falta Receber" value={`R$ ${Math.max(0, (data.totals.active_value || 0) - (data.totals.active_paid || 0)).toFixed(2)}`} icon={<Icons.Alert />} color="#EF4444" />
+                <KPICard preview={preview} title="Em Produção" value={data.totals.active_count || 0} icon={<Icons.Box />} color="#F59E0B" />
+                <KPICard preview={preview} title="Pedidos Concluídos" value={data.totals.completed_count || 0} icon={<Icons.Check />} color="#10B981" />
             </div>
 
-            <section style={{ marginBottom: '40px' }}>
+            <section className={preview ? 'dashboard-preview-flow' : undefined} style={{ marginBottom: '40px' }}>
                 <h3 style={styles.sectionTitle}>Fluxo de Produção</h3>
-                <div style={{...styles.statusGrid, ...(isMobile ? styles.statusGridMobile : {}), justifyContent: isMobile ? 'space-between' : 'center', gap: isMobile ? '16px 10px' : '32px'}}>
-                    <ProductionCircle compact={isMobile} title="Criação de Arte" count={getCount('Criação de Arte')} color={THEME.colors.status.artCreation} onClick={() => goToStatus('Criação de Arte')} />
-                    <ProductionCircle compact={isMobile} title="Arte Aprovada" count={getCount('Arte Aprovada/Liberada')} color={THEME.colors.status.artApproved} onClick={() => goToStatus('Arte Aprovada/Liberada')} />
-                    <ProductionCircle compact={isMobile} title="Corte" count={getCount('Corte Iniciado')} color={THEME.colors.status.cutting} onClick={() => goToStatus('Corte Iniciado')} />
-                    <ProductionCircle compact={isMobile} title="Estampa / Sublim." count={getCount('Impressão/Estampa Iniciada')} color={THEME.colors.status.printing} onClick={() => goToStatus('Impressão/Estampa Iniciada')} />
-                    <ProductionCircle compact={isMobile} title="Costura" count={getCount('Costura Iniciada')} color={THEME.colors.status.sewing} onClick={() => goToStatus('Costura Iniciada')} />
-                    <ProductionCircle compact={isMobile} title="Controle Qualidade" count={getCount('Controle de Qualidade')} color={THEME.colors.status.quality} onClick={() => goToStatus('Controle de Qualidade')} />
-                    <ProductionCircle compact={isMobile} title="Pronto p/ Envio" count={getCount('Pronto para Envio')} color={THEME.colors.status.ready} onClick={() => goToStatus('Pronto para Envio')} />
+                <div className={preview ? 'dashboard-preview-statuses' : undefined} style={preview ? undefined : {...styles.statusGrid, ...(isMobile ? styles.statusGridMobile : {}), justifyContent: isMobile ? 'space-between' : 'center', gap: isMobile ? '16px 10px' : '32px'}}>
+                    <ProductionCircle preview={preview} compact={isMobile} title="Criação de Arte" count={getCount('Criação de Arte')} color={THEME.colors.status.artCreation} onClick={() => goToStatus('Criação de Arte')} />
+                    <ProductionCircle preview={preview} compact={isMobile} title="Arte Aprovada" count={getCount('Arte Aprovada/Liberada')} color={THEME.colors.status.artApproved} onClick={() => goToStatus('Arte Aprovada/Liberada')} />
+                    <ProductionCircle preview={preview} compact={isMobile} title="Corte" count={getCount('Corte Iniciado')} color={THEME.colors.status.cutting} onClick={() => goToStatus('Corte Iniciado')} />
+                    <ProductionCircle preview={preview} compact={isMobile} title="Estampa / Sublim." count={getCount('Impressão/Estampa Iniciada')} color={THEME.colors.status.printing} onClick={() => goToStatus('Impressão/Estampa Iniciada')} />
+                    <ProductionCircle preview={preview} compact={isMobile} title="Costura" count={getCount('Costura Iniciada')} color={THEME.colors.status.sewing} onClick={() => goToStatus('Costura Iniciada')} />
+                    <ProductionCircle preview={preview} compact={isMobile} title="Controle Qualidade" count={getCount('Controle de Qualidade')} color={THEME.colors.status.quality} onClick={() => goToStatus('Controle de Qualidade')} />
+                    <ProductionCircle preview={preview} compact={isMobile} title="Pronto p/ Envio" count={getCount('Pronto para Envio')} color={THEME.colors.status.ready} onClick={() => goToStatus('Pronto para Envio')} />
                 </div>
             </section>
 
-            <div style={isMobile ? styles.bottomGridMobile : styles.bottomGrid}>
-                <div style={styles.cardContainer}>
+            <div className={preview ? 'dashboard-preview-details' : undefined} style={preview ? undefined : (isMobile ? styles.bottomGridMobile : styles.bottomGrid)}>
+                <div className={preview ? 'dashboard-preview-card' : undefined} style={styles.cardContainer}>
                     <div style={styles.cardHeader}><h3 style={styles.cardTitle}>Produtos em Produção</h3></div>
                     <div style={styles.listContainer}>
-                        {data.productCounts.length === 0 ? <p style={{color: THEME.colors.text.secondary, textAlign:'center'}}></p> : 
+                        {data.productCounts.length === 0 ? <p className={preview ? 'dashboard-preview-empty' : undefined} style={{color: THEME.colors.text.secondary, textAlign:'center'}}>{preview ? 'Nenhum produto em produção no momento.' : ''}</p> :
                             data.productCounts.map((item, index) => (
-                                <div key={index} style={styles.listItem}>
+                                <div key={index} className={preview ? 'dashboard-preview-product' : undefined} style={styles.listItem}>
                                     <div style={styles.listLabel}>{item.product_type}</div>
                                     <div style={styles.listBarBg}><div style={{ width: `${Math.min(item.count * 15, 100)}%`, backgroundColor: '#2563EB', height: '100%', borderRadius: '4px' }}></div></div>
                                     <div style={styles.listValue}>{item.count}</div>
@@ -143,9 +149,9 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                <div style={{display: 'flex', flexDirection: 'column', gap: '20px'}}>
+                <div className={preview ? 'dashboard-preview-alerts' : undefined} style={{display: 'flex', flexDirection: 'column', gap: '20px'}}>
                     {data.overdueList && (
-                        <div style={{...styles.cardContainer, borderLeft: '4px solid #DC2626'}}>
+                        <div className={preview ? 'dashboard-preview-card dashboard-preview-overdue' : undefined} style={{...styles.cardContainer, borderLeft: '4px solid #DC2626'}}>
                             <div style={styles.cardHeader}>
                                 <div style={{display:'flex', alignItems:'center', gap:'8px', color:'#DC2626'}}>
                                     <Icons.Alert /> <h3 style={{...styles.cardTitle, color:'#DC2626'}}>Pedidos Atrasados</h3>
@@ -156,8 +162,9 @@ const Dashboard = () => {
                             ) : (
                                 <div>
                                     {data.overdueList.map((order, idx) => (
-                                        <div 
+                                        <button type="button"
                                             key={idx} 
+                                            className={preview ? 'dashboard-preview-order' : undefined}
                                             style={styles.overdueItem}
                                             onClick={() => navigate('/orders')} 
                                         >
@@ -166,7 +173,7 @@ const Dashboard = () => {
                                                 {formatDate(order.delivery_date)}
                                                 <span style={{display:'block', fontSize:'0.65rem', fontWeight:'400'}}>Vencido</span>
                                             </div>
-                                        </div>
+                                        </button>
                                     ))}
                                     <button onClick={() => navigate('/orders')} style={styles.viewAllButton}>Visualizar Todos</button>
                                 </div>
@@ -174,7 +181,7 @@ const Dashboard = () => {
                         </div>
                     )}
                     
-                    <div style={{...styles.cardContainer, borderLeft: '4px solid #F59E0B', display: 'flex', flexDirection: 'column'}}>
+                    <div className={preview ? 'dashboard-preview-card dashboard-preview-upcoming' : undefined} style={{...styles.cardContainer, borderLeft: '4px solid #F59E0B', display: 'flex', flexDirection: 'column'}}>
                         <div style={styles.cardHeader}>
                             <div style={{display:'flex', alignItems:'center', gap:'8px', color:'#F59E0B'}}>
                                 <Icons.Clock /> <h3 style={{...styles.cardTitle, color:'#B45309'}}>Entregas da Semana</h3>
@@ -186,6 +193,7 @@ const Dashboard = () => {
                                 {data.upcomingList.map((order, idx) => (
                                     <DeliveryCard 
                                         key={idx}
+                                        preview={preview}
                                         order={order}
                                         onClick={() => navigate('/orders')}
                                         formatDate={formatDate}
@@ -211,22 +219,23 @@ const Dashboard = () => {
     );
 };
 
-const DeliveryCard = ({ order, onClick, formatDate }) => {
+const DeliveryCard = ({ order, onClick, formatDate, preview = false }) => {
     const [hover, setHover] = useState(false);
     const relativeTime = getRelativeLabel(order.delivery_date);
 
     return (
-        <div 
+        <button type="button"
             onClick={onClick}
-            onMouseEnter={() => setHover(true)}
-            onMouseLeave={() => setHover(false)}
+            className={preview ? 'dashboard-preview-order' : undefined}
+            onMouseEnter={preview ? undefined : () => setHover(true)}
+            onMouseLeave={preview ? undefined : () => setHover(false)}
             style={{
                 ...styles.alertItem,
                 cursor: 'pointer',
-                backgroundColor: hover ? '#FFF7ED' : 'transparent',
-                transition: 'all 0.2s',
-                borderLeft: hover ? '4px solid #F59E0B' : '4px solid transparent',
-                paddingLeft: hover ? '16px' : '20px'
+                backgroundColor: hover && !preview ? '#FFF7ED' : 'transparent',
+                transition: preview ? undefined : 'all 0.2s',
+                borderLeft: hover && !preview ? '4px solid #F59E0B' : '4px solid transparent',
+                paddingLeft: hover && !preview ? '16px' : '20px'
             }}
         >
             <div>
@@ -239,23 +248,24 @@ const DeliveryCard = ({ order, onClick, formatDate }) => {
                     {relativeTime}
                 </span>
             </div>
-        </div>
+        </button>
     );
 };
 
-const KPICard = ({ title, value, icon, color }) => {
+const KPICard = ({ title, value, icon, color, preview = false }) => {
     const [hover, setHover] = useState(false);
 
     return (
-        <div 
-            onMouseEnter={() => setHover(true)}
-            onMouseLeave={() => setHover(false)}
+        <div
+            className={preview ? 'dashboard-preview-kpi' : undefined}
+            onMouseEnter={preview ? undefined : () => setHover(true)}
+            onMouseLeave={preview ? undefined : () => setHover(false)}
             style={{
                 ...styles.kpiCard,
-                border: hover ? `1px solid ${color}` : `1px solid ${THEME.colors.border}`,
-                boxShadow: hover ? `0 6px 15px -3px ${color}33` : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                transform: hover ? 'translateY(-2px)' : 'translateY(0)',
-                transition: 'all 0.3s ease-out'
+                border: hover && !preview ? `1px solid ${color}` : `1px solid ${THEME.colors.border}`,
+                boxShadow: hover && !preview ? `0 6px 15px -3px ${color}33` : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                transform: hover && !preview ? 'translateY(-2px)' : 'translateY(0)',
+                transition: preview ? undefined : 'all 0.3s ease-out'
             }}
         >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -271,44 +281,33 @@ const KPICard = ({ title, value, icon, color }) => {
     );
 };
 
-const ProductionCircle = ({ title, count, color, onClick, compact = false }) => {
+const ProductionCircle = ({ title, count, color, onClick, compact = false, preview = false }) => {
     const [hover, setHover] = useState(false);
     const isZero = count === 0;
     const finalColor = isZero ? THEME.colors.status.zero : color;
     const textColor = isZero ? THEME.colors.text.disabled : color;
 
-    return (
-        <div 
-            onClick={!isZero ? onClick : undefined}
-            onMouseEnter={() => setHover(true)} 
-            onMouseLeave={() => setHover(false)}
-            style={{ 
-                ...styles.productionCircleContainer,
-                cursor: isZero ? 'default' : 'pointer',
-                transform: hover && !isZero ? 'translateY(-4px)' : 'translateY(0)',
-                opacity: isZero ? 0.8 : 1
-            }}
-        >
-            <div style={{
+    const content = <>
+            <div className={preview ? 'dashboard-preview-count' : undefined} style={{
                 width: compact ? '68px' : '90px',
                 height: compact ? '68px' : '90px',
                 borderRadius: '50%',
                 border: `2px solid ${finalColor}`,
-                backgroundColor: hover && !isZero ? `${finalColor}1A` : 'transparent', 
+                backgroundColor: hover && !preview && !isZero ? `${finalColor}1A` : 'transparent',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 marginBottom: compact ? '8px' : '12px',
-                transition: 'all 0.2s ease-out',
-                boxShadow: hover && !isZero ? `0 4px 12px ${finalColor}33` : 'none'
+                transition: preview ? undefined : 'all 0.2s ease-out',
+                boxShadow: hover && !preview && !isZero ? `0 4px 12px ${finalColor}33` : 'none'
             }}>
                 <span style={{ fontSize: compact ? '1.5rem' : '2rem', fontWeight: '700', color: textColor, letterSpacing: '-0.02em' }}>
                     {count}
                 </span>
             </div>
-            <span style={{ 
+            <span className={preview ? 'dashboard-preview-status-label' : undefined} style={{
                 fontSize: compact ? '0.68rem' : '0.75rem',
-                fontWeight: '600', 
+                fontWeight: '600',
                 color: isZero ? THEME.colors.text.disabled : THEME.colors.text.secondary,
                 textAlign: 'center',
                 maxWidth: compact ? '76px' : '100px',
@@ -316,6 +315,23 @@ const ProductionCircle = ({ title, count, color, onClick, compact = false }) => 
             }}>
                 {title}
             </span>
+        </>;
+
+    if (preview) return <button type="button" className="dashboard-preview-status" onClick={onClick} disabled={isZero} aria-label={`${title}: ${count} pedidos`}>{content}</button>;
+
+    return (
+        <div
+            onClick={!isZero ? onClick : undefined}
+            onMouseEnter={() => setHover(true)}
+            onMouseLeave={() => setHover(false)}
+            style={{
+                ...styles.productionCircleContainer,
+                cursor: isZero ? 'default' : 'pointer',
+                transform: hover && !isZero ? 'translateY(-4px)' : 'translateY(0)',
+                opacity: isZero ? 0.8 : 1
+            }}
+        >
+            {content}
         </div>
     );
 };
@@ -358,10 +374,10 @@ const styles = {
     listValue: { fontSize: '0.875rem', fontWeight: '600', color: THEME.colors.text.primary, width: '30px', textAlign: 'right' },
     
     overdueItem: { 
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: `1px solid ${THEME.colors.border}`, cursor: 'pointer' 
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', border: 'none', borderBottom: `1px solid ${THEME.colors.border}`, cursor: 'pointer', width: '100%', textAlign: 'left', background: '#fff', font: 'inherit'
     },
     alertItem: { 
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: `1px solid ${THEME.colors.border}` 
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', border: 'none', borderBottom: `1px solid ${THEME.colors.border}`, width: '100%', textAlign: 'left', font: 'inherit'
     },
     
     viewAllButton: { 
