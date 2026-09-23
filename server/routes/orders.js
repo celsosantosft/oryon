@@ -16,6 +16,7 @@ const { appConfig, buildTrackingCode, normalizeTrackingCode } = require('../conf
 const { appPaths } = require('../config/paths');
 const { normalizePlayerNumber } = require('../utils/playerNumber');
 const { chooseEffectiveOrderItems } = require('../utils/effectiveOrderItems');
+const { syncConvertedOrdersFromQuote } = require('../utils/convertedOrderSync');
 
 db.run("ALTER TABLE orders ADD COLUMN amount_paid REAL DEFAULT 0", (err) => { /* Ignora se já existir */ });
 db.run("ALTER TABLE orders ADD COLUMN client_id INTEGER", () => {});
@@ -356,6 +357,10 @@ function sumSizes(sizes) {
     return Object.values(sizes || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
 }
 
+function roundMoney(value) {
+    return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
 function summarizeItemsBySize(items = []) {
     return (items || []).reduce((sizes, item) => {
         const size = String(item?.size || '').trim();
@@ -443,14 +448,15 @@ function normalizeProductLinesForResponse(rows = [], record = {}) {
     const recordHasSizes = sumSizes(recordSizes) > 0;
     const submittedSizes = parseSizesValue(record.submitted_sizes_json);
     const submittedHasSizes = sumSizes(submittedSizes) > 0;
-    const fallbackSizes = recordHasSizes ? recordSizes : submittedSizes;
+    const fallbackSizes = submittedHasSizes ? submittedSizes : recordSizes;
     const fallbackHasSizes = recordHasSizes || submittedHasSizes;
     const paidFallback = Math.max(Number(record.amount_paid || 0), Number(record.synced_amount_paid || 0));
     const recordTotal = Math.max(Number(record.total_price || 0), paidFallback);
 
     return (rows || []).map((row) => {
         const lineSizes = parseSizesValue(row.sizes_json);
-        const shouldUseRecordSizes = rows.length === 1 && sumSizes(lineSizes) === 0 && fallbackHasSizes;
+        const shouldUseRecordSizes = rows.length === 1 && fallbackHasSizes
+            && (submittedHasSizes || sumSizes(lineSizes) === 0);
         const sizes = shouldUseRecordSizes ? fallbackSizes : lineSizes;
         const quantity = sumSizes(sizes);
         const unitPrice = Number(row.unit_price || record.unit_price || row.product_sale_price || 0);
@@ -465,8 +471,12 @@ function normalizeProductLinesForResponse(rows = [], record = {}) {
             sizes_json: sizes,
             unit_price: effectiveUnitPrice,
             unit_cost: unitCost,
-            total_price: currentTotal > 0 ? currentTotal : (quantity > 0 && effectiveUnitPrice > 0 ? quantity * effectiveUnitPrice : recordTotal),
-            cost_price: currentCost > 0 ? currentCost : (quantity > 0 && unitCost > 0 ? quantity * unitCost : Number(record.cost_price || 0))
+            total_price: shouldUseRecordSizes && submittedHasSizes && quantity > 0 && effectiveUnitPrice > 0
+                ? roundMoney(quantity * effectiveUnitPrice)
+                : (currentTotal > 0 ? currentTotal : (quantity > 0 && effectiveUnitPrice > 0 ? quantity * effectiveUnitPrice : recordTotal)),
+            cost_price: shouldUseRecordSizes && submittedHasSizes && quantity > 0 && unitCost > 0
+                ? roundMoney(quantity * unitCost)
+                : (currentCost > 0 ? currentCost : (quantity > 0 && unitCost > 0 ? quantity * unitCost : Number(record.cost_price || 0)))
         };
     });
 }
@@ -1439,7 +1449,7 @@ router.get('/api/orders/:code/history', authenticateToken, (req, res) => {
                     if (linesErr) return res.status(500).json({ message: linesErr.message });
                     const submittedSizes = summarizeItemsBySize(items || []);
                     const storedSizes = safeParseJSON(order.sizes_json);
-                    const effectiveSizes = sumSizes(storedSizes) > 0 ? storedSizes : submittedSizes;
+                    const effectiveSizes = sumSizes(submittedSizes) > 0 ? submittedSizes : storedSizes;
 
                     res.json({ ...normalizeOrderFinancialRow(order), sizes_json: effectiveSizes, history, items: items || [], product_lines: productLines || [] });
                 });
@@ -1682,7 +1692,7 @@ router.get('/api/tracking/portal/:code', (req, res) => {
                         const submittedSizes = summarizeItemsBySize(items || []);
                         const normalizedQuote = normalizeClientLockRow(securedQuote);
                         const storedSizes = safeParseJSON(normalizedQuote.sizes_json);
-                        const effectiveSizes = sumSizes(storedSizes) > 0 ? storedSizes : submittedSizes;
+                        const effectiveSizes = sumSizes(submittedSizes) > 0 ? submittedSizes : storedSizes;
 
                         res.json({
                             ...normalizedQuote,
@@ -1930,8 +1940,22 @@ router.post('/api/tracking/portal/:code/submit', (req, res) => {
                         if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Erro ao salvar.' }); }
                         syncPrimaryProductLine((lineUpdateErr) => {
                             if (lineUpdateErr) { db.run('ROLLBACK'); return res.status(500).json({ error: lineUpdateErr.message }); }
-                            db.run(`INSERT INTO quote_history (quote_id, status_text, changed_by_user_id) VALUES (?, 'Lista Enviada pelo Cliente (Termo Assinado)', NULL)`, [record.id]);
-                            db.run('COMMIT', () => res.json({ message: 'Orçamento atualizado!' }));
+                            syncConvertedOrdersFromQuote(db, record.id, {
+                                sizesJson: sizesJsonStr,
+                                unitPrice: uPrice,
+                                unitCost: uCost,
+                                primaryLineTotal,
+                                primaryLineCost,
+                                finalTotalPrice,
+                                finalCostPrice
+                            }, (convertedOrderErr, linkedOrderIds = []) => {
+                                if (convertedOrderErr) { db.run('ROLLBACK'); return res.status(500).json({ error: convertedOrderErr.message }); }
+                                db.run(`INSERT INTO quote_history (quote_id, status_text, changed_by_user_id) VALUES (?, 'Lista Enviada pelo Cliente (Termo Assinado)', NULL)`, [record.id]);
+                                db.run('COMMIT', () => {
+                                    linkedOrderIds.forEach((orderId) => syncFinanceWithOrder(orderId));
+                                    res.json({ message: 'Orçamento atualizado!' });
+                                });
+                            });
                         });
                     });
                 } else {
@@ -2048,5 +2072,6 @@ router.get('/api/orders/:id/export-txt', authenticateToken, authorizeRole(['admi
 });
 
 router._security = { requirePortalToken, tokenMatches, getPortalCodeCandidates };
+router._test = { normalizeProductLinesForResponse };
 
 module.exports = router;
