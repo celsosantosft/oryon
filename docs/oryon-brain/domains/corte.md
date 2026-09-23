@@ -4,6 +4,7 @@
 
 - The cutting screen uses real active orders only. API failure must show a real error and never populate fake orders.
 - It is mobile-first and designed for cutters using a dedicated cutting login.
+- The interface inherits each installation theme: Atos uses the default blue theme and PD Fardamentos uses the monochrome theme. Do not hardcode one tenant color for every customer.
 - Show sections only when active orders exist. Fabric names that differ operationally, such as DryFit Liso and DryFit Furadinho, stay in separate sections.
 - Inside each fabric section, group orders by model/product. Different models such as Camisa, Raglan, Regata and Short must not mix.
 - Moving an order out of a cutting status in the production Kanban must remove it from the active cutting queue.

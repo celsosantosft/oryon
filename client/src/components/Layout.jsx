@@ -39,7 +39,10 @@ const Layout = ({ children }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     // Verifica se estamos em uma página de foco, com a sidebar principal recolhida.
-    const isFocusMode = location.pathname === '/production' || location.pathname === '/whatsapp' || location.pathname === '/corte';
+    const isFocusMode = location.pathname === '/production'
+        || location.pathname === '/whatsapp'
+        || location.pathname === '/corte'
+        || location.pathname === '/corte-preview';
 
     // Lógica para fechar o menu automaticamente ao entrar em modo foco.
     useEffect(() => {

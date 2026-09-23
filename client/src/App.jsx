@@ -110,6 +110,11 @@ function App() {
                                         <CutterDashboard />
                                     </CutterRoute>
                                 } />
+                                <Route path="/corte-preview" element={
+                                    <CutterRoute>
+                                        <CutterDashboard preview />
+                                    </CutterRoute>
+                                } />
 
                                 <Route path="/finance/dashboard" element={<FinanceDashboard />} />
                                 <Route path="/finance/transactions" element={<FinanceTransactions />} />

@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { Icons } from '../components/Icons';
+import { appConfig } from '../config/appConfig';
 import { useAuth } from '../context/AuthContext';
 import { buildCuttingFabricTabs, normalizeCuttingKey } from '../utils/cuttingGrouping';
 import { buildCuttingPlan, getEffectiveCuttingArea } from '../utils/cuttingPlanner';
 import { buildCuttingPlanPrintHtml } from '../utils/cuttingPlanPrint';
 import { chooseCuttingPlanAlert } from '../utils/alerts';
+import '../styles/CutterPreview.css';
 
 const DEFAULT_CUTTING_SETTINGS = {
     table: { width: 180, height: 280 },
@@ -89,7 +91,7 @@ function GradePills({ grade, compact = false }) {
                     }`}
                 >
                     <span>{tamanho}</span>
-                    <span className="text-blue-700">{quantidade}</span>
+                    <span className="cutter-accent-text text-blue-700">{quantidade}</span>
                 </span>
             ))}
         </div>
@@ -125,13 +127,13 @@ function OrderCard({ order, selected, onToggle, onOpen }) {
             onKeyDown={(event) => {
                 if (event.key === 'Enter') onOpen(order);
             }}
-            className={`w-full rounded-lg border bg-white p-4 text-left shadow-sm transition active:scale-[0.99] ${
+            className={`cutter-order-card w-full rounded-lg border bg-white p-4 text-left shadow-sm transition active:scale-[0.99] ${
                 urgent ? 'border-red-200 ring-1 ring-red-100' : 'border-slate-200'
             }`}
         >
             <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <p className="text-xs font-black uppercase tracking-wide text-blue-700">
+                    <p className="cutter-accent-text text-xs font-black uppercase tracking-wide text-blue-700">
                         {order.tracking_code || `#${order.id_pedido}`}
                     </p>
                     <h4 className="mt-0.5 truncate text-base font-black text-slate-950">{order.cliente || 'Cliente não informado'}</h4>
@@ -155,7 +157,7 @@ function OrderCard({ order, selected, onToggle, onOpen }) {
                             }
                         }}
                         className={`flex h-9 w-9 items-center justify-center rounded-md border text-base font-black ${
-                            selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-transparent'
+                            selected ? 'cutter-accent-button border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-transparent'
                         }`}
                     >
                         <Icons.Check />
@@ -202,7 +204,7 @@ function OrderDetails({ order, apiBaseUrl, completing, onClose, onComplete }) {
             >
                 <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4">
                     <div className="min-w-0">
-                        <p className="text-xs font-black uppercase tracking-wider text-blue-700">{order.tracking_code || `#${order.id_pedido}`}</p>
+                        <p className="cutter-accent-text text-xs font-black uppercase tracking-wider text-blue-700">{order.tracking_code || `#${order.id_pedido}`}</p>
                         <h3 className="truncate text-lg font-black text-slate-950">{order.cliente || 'Cliente não informado'}</h3>
                         <p className="text-sm font-bold text-slate-600">{order.modelingLabel || order.produto?.nome_produto || 'Produto não informado'}</p>
                     </div>
@@ -265,7 +267,7 @@ function OrderDetails({ order, apiBaseUrl, completing, onClose, onComplete }) {
                                 href={order.url_referencia}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="block rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-center text-sm font-black text-blue-700"
+                                className="cutter-accent-soft block rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-center text-sm font-black text-blue-700"
                             >
                                 Abrir referência
                             </a>
@@ -293,7 +295,7 @@ function OrderDetails({ order, apiBaseUrl, completing, onClose, onComplete }) {
     );
 }
 
-export default function CutterDashboard() {
+export default function CutterDashboard({ preview = false }) {
     const { token, API_BASE_URL } = useAuth();
     const [orders, setOrders] = useState([]);
     const [selectedFabricId, setSelectedFabricId] = useState('');
@@ -320,6 +322,9 @@ export default function CutterDashboard() {
         originalTableLength: 280
     });
     const settingsRevisionRef = useRef(0);
+    const previewTheme = appConfig.theme === 'monochrome'
+        ? 'cutter-preview--monochrome'
+        : 'cutter-preview--default';
 
     useEffect(() => {
         let isActive = true;
@@ -620,24 +625,27 @@ export default function CutterDashboard() {
     };
 
     return (
-        <main className={`min-h-screen bg-slate-50 text-slate-900 ${cuttingPlan ? 'pb-44' : ''}`}>
-            <div className="mx-auto max-w-6xl px-3 py-4 sm:px-6 lg:px-8">
-                <header className="mb-4">
-                    <p className="text-xs font-black uppercase tracking-widest text-blue-700">Corte PCP</p>
+        <main className={`${preview ? `cutter-preview ${previewTheme}` : ''} min-h-screen bg-slate-50 text-slate-900 ${cuttingPlan ? 'pb-44' : ''}`}>
+            <div className="cutter-workspace mx-auto max-w-6xl px-3 py-4 sm:px-6 lg:px-8">
+                <header className="cutter-header mb-4">
+                    <div className="cutter-header-kicker">
+                        <p className="cutter-accent-text text-xs font-black uppercase tracking-widest text-blue-700">Corte PCP</p>
+                        {preview && <span className="cutter-preview-badge">Ambiente de teste</span>}
+                    </div>
                     <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Fila real de corte</h1>
                     <p className="mt-1 text-sm font-medium text-slate-600">
                         Escolha a malha da mesa, confira a modelagem e conclua o pedido real cortado.
                     </p>
                 </header>
 
-                <section className="mb-4 grid grid-cols-3 gap-2">
+                <section className="cutter-metrics mb-4 grid grid-cols-3 gap-2">
                     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
                         <p className="text-[10px] font-black uppercase text-slate-400">Pedidos</p>
                         <p className="text-xl font-black text-slate-950">{totalOrders}</p>
                     </div>
                     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
                         <p className="text-[10px] font-black uppercase text-slate-400">Peças</p>
-                        <p className="text-xl font-black text-blue-700">{totalPieces}</p>
+                        <p className="cutter-accent-text text-xl font-black text-blue-700">{totalPieces}</p>
                     </div>
                     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
                         <p className="text-[10px] font-black uppercase text-slate-400">Atenção</p>
@@ -659,7 +667,7 @@ export default function CutterDashboard() {
                     </p>
                 )}
 
-                {loading && <p className="rounded-lg bg-blue-50 p-4 text-sm font-bold text-blue-700">Carregando pedidos reais liberados para corte...</p>}
+                {loading && <p className="cutter-accent-soft rounded-lg bg-blue-50 p-4 text-sm font-bold text-blue-700">Carregando pedidos reais liberados para corte...</p>}
 
                 {!loading && !loadError && fabricTabs.length === 0 && (
                     <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm font-bold text-slate-500">
@@ -669,7 +677,7 @@ export default function CutterDashboard() {
 
                 {fabricTabs.length > 0 && (
                     <>
-                        <nav className="-mx-3 mb-4 overflow-x-auto px-3" aria-label="Malhas com pedidos ativos no corte">
+                        <nav className="cutter-fabric-tabs -mx-3 mb-4 overflow-x-auto px-3" aria-label="Malhas com pedidos ativos no corte">
                             <div className="flex min-w-max gap-2">
                                 {fabricTabs.map((tab) => (
                                     <button
@@ -682,7 +690,7 @@ export default function CutterDashboard() {
                                         }}
                                         className={`rounded-lg border px-4 py-3 text-sm font-black transition ${
                                             activeFabric?.id === tab.id
-                                                ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                                                ? 'cutter-accent-button border-blue-600 bg-blue-600 text-white shadow-sm'
                                                 : 'border-slate-200 bg-white text-slate-700'
                                         }`}
                                     >
@@ -696,14 +704,14 @@ export default function CutterDashboard() {
                         </nav>
 
                         {activeFabric && (
-                            <section className="space-y-4">
-                                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <section className="cutter-active-fabric space-y-4">
+                                <div className="cutter-fabric-summary rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                                     <div className="mb-3 flex items-center justify-between gap-3">
                                         <div>
-                                            <p className="text-xs font-black uppercase tracking-widest text-blue-700">Malha na mesa</p>
+                                            <p className="cutter-accent-text text-xs font-black uppercase tracking-widest text-blue-700">Malha na mesa</p>
                                             <h2 className="text-2xl font-black text-slate-950">{activeFabric.label}</h2>
                                         </div>
-                                        <span className="rounded-md bg-blue-50 px-3 py-2 text-sm font-black text-blue-700">
+                                        <span className="cutter-accent-soft rounded-md bg-blue-50 px-3 py-2 text-sm font-black text-blue-700">
                                             {activeFabric.totalPieces} peças
                                         </span>
                                     </div>
@@ -739,7 +747,7 @@ export default function CutterDashboard() {
                                                     setSettingsOpen(!isEditingActiveFabric);
                                                     setSettingsError('');
                                                 }}
-                                                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                                                className="cutter-settings-trigger inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                                             >
                                                 <Icons.Edit />
                                                 Ajustar medidas
@@ -753,7 +761,7 @@ export default function CutterDashboard() {
                                         )}
 
                                         {isEditingActiveFabric && (
-                                            <form onSubmit={saveCuttingSettings} className="mt-4 border-t border-slate-200 pt-4">
+                                            <form onSubmit={saveCuttingSettings} className="cutter-settings-form mt-4 border-t border-slate-200 pt-4">
                                                 <div className="grid gap-3 sm:grid-cols-3">
                                                     <label className="block text-sm font-black text-slate-700">
                                                         Largura da malha
@@ -763,7 +771,7 @@ export default function CutterDashboard() {
                                                                 inputMode="decimal"
                                                                 value={settingsDraft.fabricWidth}
                                                                 onChange={(event) => setSettingsDraft((current) => ({ ...current, fabricWidth: event.target.value }))}
-                                                                className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 pr-12 text-base font-black text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                                className="cutter-accent-field h-12 w-full rounded-lg border border-slate-300 bg-white px-3 pr-12 text-base font-black text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                                                                 aria-label={`Largura da malha ${activeFabric.label} em centímetros`}
                                                             />
                                                             <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-bold text-slate-400">cm</span>
@@ -777,7 +785,7 @@ export default function CutterDashboard() {
                                                                 inputMode="decimal"
                                                                 value={settingsDraft.tableWidth}
                                                                 onChange={(event) => setSettingsDraft((current) => ({ ...current, tableWidth: event.target.value }))}
-                                                                className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 pr-12 text-base font-black text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                                className="cutter-accent-field h-12 w-full rounded-lg border border-slate-300 bg-white px-3 pr-12 text-base font-black text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                                                                 aria-label="Largura da mesa em centímetros"
                                                             />
                                                             <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-bold text-slate-400">cm</span>
@@ -791,7 +799,7 @@ export default function CutterDashboard() {
                                                                 inputMode="decimal"
                                                                 value={settingsDraft.tableLength}
                                                                 onChange={(event) => setSettingsDraft((current) => ({ ...current, tableLength: event.target.value }))}
-                                                                className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 pr-12 text-base font-black text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                                className="cutter-accent-field h-12 w-full rounded-lg border border-slate-300 bg-white px-3 pr-12 text-base font-black text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                                                                 aria-label="Comprimento da mesa em centímetros"
                                                             />
                                                             <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-bold text-slate-400">cm</span>
@@ -827,7 +835,7 @@ export default function CutterDashboard() {
                                                     <button
                                                         type="submit"
                                                         disabled={settingsSaving}
-                                                        className="h-11 rounded-lg bg-blue-600 px-5 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98] disabled:cursor-wait disabled:bg-slate-400"
+                                                        className="cutter-accent-button h-11 rounded-lg bg-blue-600 px-5 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98] disabled:cursor-wait disabled:bg-slate-400"
                                                     >
                                                         {settingsSaving ? 'Salvando...' : 'Salvar medidas'}
                                                     </button>
@@ -838,7 +846,7 @@ export default function CutterDashboard() {
                                 </div>
 
                                 {activeFabric.modelings.map((group) => (
-                                    <article key={group.id} className="rounded-xl border border-slate-200 bg-slate-100 p-3 shadow-sm">
+                                    <article key={group.id} className="cutter-modeling rounded-xl border border-slate-200 bg-slate-100 p-3 shadow-sm">
                                         <div className="mb-3 flex items-start justify-between gap-3">
                                             <div>
                                                 <h3 className="text-xl font-black text-slate-950">{group.label}</h3>
@@ -852,7 +860,7 @@ export default function CutterDashboard() {
                                             <GradePills grade={group.gradeTotals} compact />
                                         </div>
 
-                                        <div className="grid gap-3 lg:grid-cols-2">
+                                        <div className="cutter-order-grid grid gap-3 lg:grid-cols-2">
                                             {group.orders.map((order) => (
                                                 <OrderCard
                                                     key={`${order.id_pedido}-${order.produto?.nome_produto}-${order.produto?.tecido}`}
@@ -872,10 +880,10 @@ export default function CutterDashboard() {
             </div>
 
             {cuttingPlan && (
-                <aside className="fixed inset-x-0 bottom-0 z-[900] border-t border-slate-200 bg-white p-3 shadow-2xl">
+                <aside className="cutter-selection-bar fixed inset-x-0 bottom-0 z-[900] border-t border-slate-200 bg-white p-3 shadow-2xl">
                     <div className="mx-auto grid max-w-6xl gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
                         <div>
-                            <p className="text-xs font-black uppercase tracking-widest text-blue-700">Plano de enfesto</p>
+                            <p className="cutter-accent-text text-xs font-black uppercase tracking-widest text-blue-700">Plano de enfesto</p>
                             <p className="text-sm font-bold text-slate-700">
                                 {selectedCuttingOrders.length} pedido{selectedCuttingOrders.length === 1 ? '' : 's'} · {cuttingPlan.totalPieces} peças · {cuttingPlan.spreads.length} enfesto{cuttingPlan.spreads.length === 1 ? '' : 's'}
                             </p>
@@ -894,7 +902,7 @@ export default function CutterDashboard() {
                                 type="button"
                                 disabled={settingsSaving || hasUnsavedSettings}
                                 onClick={handlePrintCuttingPlan}
-                                className="h-11 rounded-lg bg-blue-600 px-4 text-sm font-black text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                className="cutter-accent-button h-11 rounded-lg bg-blue-600 px-4 text-sm font-black text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
                             >
                                 Gerar PDF
                             </button>
