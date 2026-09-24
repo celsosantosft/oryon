@@ -311,12 +311,12 @@ function compareEconomyCandidates(left, right) {
         || left.sizes.join('|').localeCompare(right.sizes.join('|'));
 }
 
-function buildEconomySolution(requested, table) {
+function buildEconomySolution(requested, table, layerLimit = Number.POSITIVE_INFINITY) {
     const remaining = new Map(requested);
     const spreads = [];
 
     while (Math.max(0, ...remaining.values()) >= 2) {
-        const maxLayers = Math.max(...remaining.values());
+        const maxLayers = Math.min(Math.max(...remaining.values()), layerLimit);
         let best = null;
 
         for (let layers = 2; layers <= maxLayers; layers += 1) {
@@ -328,6 +328,26 @@ function buildEconomySolution(requested, table) {
         best.appliedParts.forEach((item) => subtractQuantity(remaining, item.tamanho, item.front));
         spreads.push(best);
     }
+
+    const loose = new Map();
+    remaining.forEach((quantity, size) => {
+        if (quantity <= 0) return;
+        addParts(loose, size, { front: quantity, back: quantity, sleeve: quantity * 2 });
+    });
+    return { spreads, loose };
+}
+
+function buildManualLayerSolution(requested, layerCounts, table) {
+    const remaining = new Map(requested);
+    const spreads = [];
+
+    layerCounts.forEach((layers) => {
+        const candidate = buildEconomyCandidate(remaining, layers, table);
+        if (!candidate) return;
+
+        candidate.appliedParts.forEach((item) => subtractQuantity(remaining, item.tamanho, item.front));
+        spreads.push(candidate);
+    });
 
     const loose = new Map();
     remaining.forEach((quantity, size) => {
@@ -395,11 +415,11 @@ function compareRoundedPlans(left, right) {
         || left.fabricUsage - right.fabricUsage;
 }
 
-function buildRoundedSolution(sizes, requested, table) {
+function buildRoundedSolution(sizes, requested, table, layerLimit = Number.POSITIVE_INFINITY) {
     const spreadByMask = new Map();
     const fullMask = (1 << sizes.length) - 1;
     const maxQuantity = Math.max(...requested.values());
-    const maxLayers = maxQuantity + 10;
+    const maxLayers = Math.min(maxQuantity + 10, layerLimit);
 
     for (let mask = 1; mask <= fullMask; mask += 1) {
         const subset = sizes.filter((_, index) => (mask & (1 << index)) !== 0);
@@ -469,7 +489,7 @@ function makeSurplusParts(produced, loose, applied) {
     return surplus;
 }
 
-export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUTTING_TABLE) {
+export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUTTING_TABLE, options = {}) {
     const table = {
         width: Number(cuttingArea?.width) || CUTTING_TABLE.width,
         height: Number(cuttingArea?.height) || CUTTING_TABLE.height
@@ -487,12 +507,21 @@ export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUT
         .filter((size) => Boolean(SHIRT_MEASUREMENTS[size]));
     const unsupportedSizes = gradeTotals.filter((item) => !SHIRT_MEASUREMENTS[item.tamanho]);
     const supportedRequested = new Map(supportedSizes.map((size) => [size, requested.get(size)]));
-    const economy = buildEconomySolution(supportedRequested, table);
+    const configuredLimit = Number(options.maxLayers);
+    const layerLimit = Number.isInteger(configuredLimit) && configuredLimit > 0
+        ? configuredLimit
+        : Number.POSITIVE_INFINITY;
+    const layerCounts = (options.layerCounts || [])
+        .map(Number)
+        .filter((layers) => Number.isInteger(layers) && layers > 0 && layers <= layerLimit);
+    const economy = strategy === 'manual-layers'
+        ? buildManualLayerSolution(supportedRequested, layerCounts, table)
+        : buildEconomySolution(supportedRequested, table, layerLimit);
     const shouldBuildRounded = strategy === 'fewer-spreads'
         && supportedSizes.length > 0
         && supportedSizes.length <= MAX_EXACT_ROUNDED_SIZES;
     const rounded = shouldBuildRounded
-        ? buildRoundedSolution(supportedSizes, supportedRequested, table)
+        ? buildRoundedSolution(supportedSizes, supportedRequested, table, layerLimit)
         : { spreads: [] };
     const useRounded = strategy === 'fewer-spreads' && rounded.spreads.length < economy.spreads.length;
     const selected = useRounded ? { spreads: rounded.spreads, loose: new Map() } : economy;

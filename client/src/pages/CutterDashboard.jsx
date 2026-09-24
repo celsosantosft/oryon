@@ -6,13 +6,14 @@ import { useAuth } from '../context/AuthContext';
 import { buildCuttingFabricTabs, normalizeCuttingKey } from '../utils/cuttingGrouping';
 import { buildCuttingPlan, getEffectiveCuttingArea } from '../utils/cuttingPlanner';
 import { buildCuttingPlanPrintHtml } from '../utils/cuttingPlanPrint';
-import { chooseCuttingPlanAlert } from '../utils/alerts';
+import { chooseCuttingLayersAlert, chooseCuttingPlanAlert } from '../utils/alerts';
 import '../styles/CutterPreview.css';
 
 const DEFAULT_CUTTING_SETTINGS = {
     table: { width: 180, height: 280 },
     fabricWidths: {}
 };
+const MAX_CUTTING_LAYERS = 20;
 
 function formatCentimeters(value) {
     return Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
@@ -473,8 +474,8 @@ export default function CutterDashboard({ preview = false }) {
     ), [cuttingSettings.table, selectedFabricWidth]);
     const cuttingPlans = useMemo(() => (
         selectedCuttingOrders.length && settingsLoaded ? {
-            economy: buildCuttingPlan(selectedCuttingOrders, 'economy', effectiveCuttingArea),
-            fewerSpreads: buildCuttingPlan(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea)
+            economy: buildCuttingPlan(selectedCuttingOrders, 'economy', effectiveCuttingArea, { maxLayers: MAX_CUTTING_LAYERS }),
+            fewerSpreads: buildCuttingPlan(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea, { maxLayers: MAX_CUTTING_LAYERS })
         } : null
     ), [effectiveCuttingArea, selectedCuttingOrders, settingsLoaded]);
     const cuttingPlan = cuttingPlans?.economy || null;
@@ -633,7 +634,16 @@ export default function CutterDashboard({ preview = false }) {
         const strategy = await chooseCuttingPlanAlert(cuttingPlans);
         if (!strategy) return;
 
-        const selectedPlan = strategy === 'fewer-spreads' ? cuttingPlans.fewerSpreads : cuttingPlans.economy;
+        const automaticPlan = strategy === 'fewer-spreads' ? cuttingPlans.fewerSpreads : cuttingPlans.economy;
+        const layerCounts = await chooseCuttingLayersAlert(automaticPlan, MAX_CUTTING_LAYERS);
+        if (layerCounts === null) return;
+
+        const selectedPlan = buildCuttingPlan(
+            selectedCuttingOrders,
+            'manual-layers',
+            effectiveCuttingArea,
+            { layerCounts, maxLayers: MAX_CUTTING_LAYERS }
+        );
         if (selectedPlan.shortages.length > 0) {
             setNotice('Não foi possível gerar o PDF porque ainda existem peças sem encaixe no plano escolhido.');
             return;

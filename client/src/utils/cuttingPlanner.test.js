@@ -78,6 +78,37 @@ test('keeps a complete infant and adult grade responsive', () => {
     assert.deepEqual(plan.cutTotals, plan.gradeTotals);
 });
 
+test('caps automatic spreading at the configured machine limit', () => {
+    const plan = buildCuttingPlan(
+        [{ grade: [{ tamanho: 'M', quantidade: 50 }] }],
+        'economy',
+        cuttingPlanner.CUTTING_TABLE,
+        { maxLayers: 20 }
+    );
+
+    assert.ok(plan.spreads.length > 0);
+    assert.ok(plan.spreads.every((spread) => spread.layers <= 20));
+    assert.equal(plan.shortages.length, 0);
+    assert.deepEqual(plan.cutTotals, plan.gradeTotals);
+});
+
+test('recalculates each spread from manually selected layer counts', () => {
+    const plan = buildCuttingPlan(
+        [{ grade: [
+            { tamanho: 'P', quantidade: 18 },
+            { tamanho: 'M', quantidade: 12 }
+        ] }],
+        'manual-layers',
+        cuttingPlanner.CUTTING_TABLE,
+        { layerCounts: [10, 6], maxLayers: 20 }
+    );
+
+    assert.deepEqual(plan.spreads.map((spread) => spread.layers), [10, 6]);
+    assert.equal(plan.shortages.length, 0);
+    assert.deepEqual(plan.cutTotals, plan.gradeTotals);
+    assert.ok(plan.spreads.every((spread) => spread.layers <= 20));
+});
+
 test('economy sends singleton demand to loose cuts instead of multiplying it by the largest layer count', () => {
     const plan = buildCuttingPlan([
         {

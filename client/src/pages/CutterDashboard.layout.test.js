@@ -22,10 +22,20 @@ test('asks which calculated cutting strategy should be printed', () => {
     const source = readFileSync(new URL('./CutterDashboard.jsx', import.meta.url), 'utf8');
 
     assert.match(source, /chooseCuttingPlanAlert/);
-    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'economy', effectiveCuttingArea\)/);
-    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea\)/);
+    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'economy', effectiveCuttingArea, \{ maxLayers: MAX_CUTTING_LAYERS \}\)/);
+    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea, \{ maxLayers: MAX_CUTTING_LAYERS \}\)/);
     assert.match(source, /await chooseCuttingPlanAlert/);
     assert.match(source, /printCuttingPlan\(selectedPlan, selectedCuttingOrders\)/);
+});
+
+test('edits the layer count of every spread before printing', () => {
+    const source = readFileSync(new URL('./CutterDashboard.jsx', import.meta.url), 'utf8');
+
+    assert.match(source, /chooseCuttingLayersAlert/);
+    assert.match(source, /const MAX_CUTTING_LAYERS = 20/);
+    assert.match(source, /maxLayers:\s*MAX_CUTTING_LAYERS/);
+    assert.match(source, /buildCuttingPlan\([\s\S]*?'manual-layers'/);
+    assert.match(source, /layerCounts/);
 });
 
 test('configures table and fabric measurements inside the active fabric section', () => {
@@ -36,8 +46,8 @@ test('configures table and fabric measurements inside the active fabric section'
     assert.match(source, /Largura da mesa/);
     assert.match(source, /Comprimento da mesa/);
     assert.match(source, /getEffectiveCuttingArea/);
-    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'economy', effectiveCuttingArea\)/);
-    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea\)/);
+    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'economy', effectiveCuttingArea, \{ maxLayers: MAX_CUTTING_LAYERS \}\)/);
+    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea, \{ maxLayers: MAX_CUTTING_LAYERS \}\)/);
 });
 
 test('keeps cutting settings synchronized without saving them to another fabric', () => {

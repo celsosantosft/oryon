@@ -39,6 +39,43 @@ export const buildCuttingPlanChoiceHtml = ({ economy, fewerSpreads }) => `
     </div>
 `;
 
+export const normalizeCuttingLayerCounts = (values, maxLayers = 20) => {
+    const normalized = (values || []).map((value) => Number(value));
+    return normalized.every((value) => (
+        Number.isInteger(value) && value >= 1 && value <= maxLayers
+    )) ? normalized : null;
+};
+
+export const buildCuttingLayersEditorHtml = (plan, maxLayers = 20) => `
+    <div style="display: grid; gap: 10px; max-height: min(52dvh, 440px); margin-top: 8px; padding-right: 2px; overflow-y: auto; overscroll-behavior: contain; text-align: left;">
+        <p style="margin: 0 0 2px; color: #475569; font-size: 0.875rem; line-height: 1.45;">
+            Ajuste as folhas de cada enfesto. Sua máquina aceita no máximo ${maxLayers} folhas.
+        </p>
+        ${(plan?.spreads || []).map((spread, index) => `
+            <label style="display: grid; grid-template-columns: minmax(0, 1fr) 92px; align-items: center; gap: 12px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 11px 12px; background: #f8fafc;">
+                <span>
+                    <strong style="display: block; color: #0f172a;">Enfesto ${index + 1}</strong>
+                    <small style="display: block; margin-top: 2px; color: #64748b;">${escapeAlertHtml((spread.sizes || []).join(' · ') || 'Grade selecionada')}</small>
+                </span>
+                <span style="position: relative;">
+                    <input
+                        class="cutting-layer-input"
+                        type="number"
+                        inputmode="numeric"
+                        min="1"
+                        max="${maxLayers}"
+                        step="1"
+                        value="${spread.layers}"
+                        aria-label="Folhas do enfesto ${index + 1}"
+                        style="box-sizing: border-box; width: 100%; min-height: 44px; border: 1px solid #94a3b8; border-radius: 7px; padding: 8px 34px 8px 10px; font-size: 16px; font-weight: 800; color: #0f172a; background: white;"
+                    />
+                    <small style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #64748b; pointer-events: none;">fls.</small>
+                </span>
+            </label>
+        `).join('')}
+    </div>
+`;
+
 export const chooseCuttingPlanAlert = async (plans) => {
     const Swal = await getSwal();
     const result = await Swal.fire({
@@ -59,6 +96,35 @@ export const chooseCuttingPlanAlert = async (plans) => {
     if (result.isConfirmed) return 'economy';
     if (result.isDenied) return 'fewer-spreads';
     return null;
+};
+
+export const chooseCuttingLayersAlert = async (plan, maxLayers = 20) => {
+    if (!plan?.spreads?.length) return [];
+
+    const Swal = await getSwal();
+    const result = await Swal.fire({
+        title: 'Quantas folhas em cada enfesto?',
+        html: buildCuttingLayersEditorHtml(plan, maxLayers),
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#2563EB',
+        cancelButtonColor: '#94A3B8',
+        confirmButtonText: 'Recalcular e gerar PDF',
+        cancelButtonText: 'Cancelar',
+        focusConfirm: false,
+        preConfirm: () => {
+            const values = Array.from(Swal.getPopup().querySelectorAll('.cutting-layer-input'))
+                .map((input) => input.value);
+            const layerCounts = normalizeCuttingLayerCounts(values, maxLayers);
+            if (!layerCounts) {
+                Swal.showValidationMessage(`Informe números inteiros entre 1 e ${maxLayers} folhas.`);
+                return false;
+            }
+            return layerCounts;
+        }
+    });
+
+    return result.isConfirmed ? result.value : null;
 };
 
 // Toast Verde para "Adicionado com Sucesso"
