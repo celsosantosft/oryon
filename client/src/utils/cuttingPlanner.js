@@ -103,7 +103,7 @@ function pruneFreeRectangles(rectangles) {
     )));
 }
 
-function packMarkers(markers, table) {
+function packMarkersInFreeRectangles(markers, table) {
     const sorted = [...markers].sort((left, right) => (
         (right.width * right.height) - (left.width * left.height)
         || right.height - left.height
@@ -140,6 +140,80 @@ function packMarkers(markers, table) {
     }
 
     return packed;
+}
+
+function compareNumberLists(left, right) {
+    for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+        const difference = (left[index] || 0) - (right[index] || 0);
+        if (difference !== 0) return difference;
+    }
+    return 0;
+}
+
+function packMarkersAtEdges(markers, table, compareMarkers) {
+    const ordered = [...markers].sort((left, right) => (
+        compareMarkers(left, right) || left.id.localeCompare(right.id)
+    ));
+    const packed = [];
+    let usedLength = 0;
+    let usedWidth = 0;
+
+    for (const marker of ordered) {
+        const xCandidates = [...new Set([0, ...packed.map((item) => item.x + item.width)])]
+            .sort((left, right) => left - right);
+        const yCandidates = [...new Set([0, ...packed.map((item) => item.y + item.height)])]
+            .sort((left, right) => left - right);
+        let best = null;
+
+        for (const y of yCandidates) {
+            for (const x of xCandidates) {
+                const placed = { ...marker, x, y, rotated: false };
+                if (x + marker.width > table.width || y + marker.height > table.height) continue;
+                if (packed.some((item) => intersects(item, placed))) continue;
+
+                const score = [
+                    Math.max(usedLength, y + marker.height),
+                    y,
+                    Math.max(usedWidth, x + marker.width),
+                    x
+                ];
+                if (!best || compareNumberLists(score, best.score) < 0) best = { placed, score };
+            }
+        }
+
+        if (!best) return null;
+        packed.push(best.placed);
+        usedLength = Math.max(usedLength, best.placed.y + best.placed.height);
+        usedWidth = Math.max(usedWidth, best.placed.x + best.placed.width);
+    }
+
+    return packed;
+}
+
+function comparePackedLayouts(left, right) {
+    const bounds = (layout) => [
+        Math.max(...layout.map((marker) => marker.y + marker.height)),
+        Math.max(...layout.map((marker) => marker.x + marker.width)),
+        layout.reduce((sum, marker) => sum + marker.y, 0),
+        layout.reduce((sum, marker) => sum + marker.x, 0)
+    ];
+    return compareNumberLists(bounds(left), bounds(right));
+}
+
+function packMarkers(markers, table) {
+    const orderings = [
+        (left, right) => (right.width * right.height) - (left.width * left.height) || right.height - left.height,
+        (left, right) => right.height - left.height || right.width - left.width,
+        (left, right) => right.width - left.width || right.height - left.height,
+        (left, right) => Math.max(right.width, right.height) - Math.max(left.width, left.height)
+            || (right.width * right.height) - (left.width * left.height)
+    ];
+    const layouts = [
+        packMarkersInFreeRectangles(markers, table),
+        ...orderings.map((ordering) => packMarkersAtEdges(markers, table, ordering))
+    ].filter(Boolean);
+
+    return layouts.sort(comparePackedLayouts)[0] || null;
 }
 
 function makeMarker(size, part, id, transformation = null) {
@@ -261,6 +335,7 @@ function summarizeSpread(layers, packed, acceptedUnits) {
     });
 
     const usedLength = Math.round(Math.max(...packed.map((marker) => marker.y + marker.height)) * 10) / 10;
+    const usedWidth = Math.round(Math.max(...packed.map((marker) => marker.x + marker.width)) * 10) / 10;
     const surplus = new Map();
     produced.forEach((parts, size) => {
         const used = applied.get(size) || emptyParts();
@@ -279,6 +354,7 @@ function summarizeSpread(layers, packed, acceptedUnits) {
         partTotals: partsToArray(produced),
         appliedParts: partsToArray(applied),
         surplusParts: partsToArray(surplus),
+        usedWidth,
         usedLength,
         fabricUsage: layers * usedLength,
         appliedShirts: acceptedUnits.reduce((sum, unit) => sum + unit.quantity, 0)
@@ -415,8 +491,25 @@ function compareRoundedPlans(left, right) {
         || left.fabricUsage - right.fabricUsage;
 }
 
+function solutionFabricUsage(solution) {
+    return solution.spreads.reduce((sum, spread) => sum + spread.fabricUsage, 0);
+}
+
+function solutionSurplusPieces(solution) {
+    return solution.spreads.reduce((sum, spread) => sum + countSurplus(spread), 0);
+}
+
+function shouldUseExactGlobalSolution(greedy, global) {
+    if (!global.spreads.length || global.surplusPieces > 0) return false;
+    return solutionFabricUsage(global) < solutionFabricUsage(greedy);
+}
+
 function selectBalancedSolution(economy, rounded, requested) {
-    if (!rounded.spreads.length || rounded.spreads.length >= economy.spreads.length) return economy;
+    if (!rounded.spreads.length) return economy;
+    if (shouldUseExactGlobalSolution(economy, rounded)) {
+        return { spreads: rounded.spreads, loose: rounded.loose || new Map() };
+    }
+    if (rounded.spreads.length >= economy.spreads.length) return economy;
 
     const requestedComponents = Array.from(requested.values())
         .reduce((sum, quantity) => sum + (quantity * 4), 0);
@@ -529,16 +622,26 @@ export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUT
     const economy = strategy === 'manual-layers'
         ? buildManualLayerSolution(supportedRequested, layerCounts, table)
         : buildEconomySolution(supportedRequested, table, layerLimit);
-    const shouldBuildRounded = (strategy === 'balanced' || strategy === 'fewer-spreads')
+    const shouldBuildRounded = ['economy', 'balanced', 'fewer-spreads'].includes(strategy)
         && supportedSizes.length > 0
         && supportedSizes.length <= MAX_EXACT_ROUNDED_SIZES;
     const rounded = shouldBuildRounded
         ? buildRoundedSolution(supportedSizes, supportedRequested, table, layerLimit)
         : { spreads: [] };
-    const useRounded = strategy === 'fewer-spreads' && rounded.spreads.length < economy.spreads.length;
+    const globalSolution = { ...rounded, loose: new Map() };
+    const useRoundedForWork = strategy === 'fewer-spreads' && (
+        rounded.spreads.length < economy.spreads.length
+        || (
+            rounded.spreads.length === economy.spreads.length
+            && rounded.surplusPieces <= solutionSurplusPieces(economy)
+            && rounded.fabricUsage < solutionFabricUsage(economy)
+        )
+    );
     const selected = strategy === 'balanced'
-        ? selectBalancedSolution(economy, { ...rounded, loose: new Map() }, supportedRequested)
-        : (useRounded ? { spreads: rounded.spreads, loose: new Map() } : economy);
+        ? selectBalancedSolution(economy, globalSolution, supportedRequested)
+        : strategy === 'economy' && shouldUseExactGlobalSolution(economy, globalSolution)
+          ? globalSolution
+          : (useRoundedForWork ? globalSolution : economy);
     const spreads = [...selected.spreads]
         .sort((left, right) => right.layers - left.layers || left.sizes.join('|').localeCompare(right.sizes.join('|')))
         .map((spread, index) => ({

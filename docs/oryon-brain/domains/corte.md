@@ -26,6 +26,7 @@
 - Before printing, the cutter chooses among three calculated proposals: save fabric, balanced, or reduce work. Each proposal shows its spreads, fabric usage, loose cuts and surplus before selection.
 - The cutter can edit the layer count of each spread independently without a fixed software ceiling. The plan must be recalculated from those values rather than only changing the printed label.
 - A marker may mix sizes. It must never leave requested pieces missing; controlled surplus is preferable and must be counted.
+- The optimizer must compare the complete production plan and may redistribute sizes between spreads; the first locally valid packing is not accepted when a global combination uses less fabric without adding surplus.
 - Small remaining quantities may be assigned to an offcut or a short separate spread instead of forcing a wasteful full spread.
 - A back piece may be converted to a front when the cutter is clearly instructed how many layers to transform.
-- The printable PDF uses one A4 page per spread, with the complete drawing and production/surplus counts on that page.
+- The printable PDF uses one A4 page per spread, with labels scaled to their marker and the complete drawing, layer count, occupied dimensions and production/surplus counts on that page. Layer count and spread count must be explicitly distinguished.

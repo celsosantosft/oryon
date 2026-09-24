@@ -12,6 +12,15 @@ function countParts(items = []) {
     return items.reduce((sum, item) => sum + item.front + item.back + item.sleeve, 0);
 }
 
+function intersectsForTest(left, right) {
+    return !(
+        right.x >= left.x + left.width
+        || right.x + right.width <= left.x
+        || right.y >= left.y + left.height
+        || right.y + right.height <= left.y
+    );
+}
+
 test('uses the supplied infant shirt measurements', () => {
     assert.deepEqual(cuttingPlanner.SHIRT_MEASUREMENTS['2 ANOS'], {
         front: [33, 41.448], back: [33, 43], sleeve: [25.5, 12.5]
@@ -323,7 +332,34 @@ test('reports only the fabric length occupied by the markers', () => {
     ) * 10) / 10;
 
     assert.equal(plan.spreads[0].usedLength, lastMarkerEdge);
+    assert.equal(plan.spreads[0].usedWidth, Math.round(Math.max(
+        ...plan.spreads[0].markers.map((marker) => marker.x + marker.width)
+    ) * 10) / 10);
     assert.ok(plan.spreads[0].usedLength < plan.table.height);
+});
+
+test('compacts the reported production grade instead of accepting the first valid placement', () => {
+    const plan = buildCuttingPlan([{ grade: [
+        { tamanho: '8 ANOS', quantidade: 20 },
+        { tamanho: 'P', quantidade: 20 },
+        { tamanho: 'M', quantidade: 20 },
+        { tamanho: 'G', quantidade: 20 },
+        { tamanho: 'GG', quantidade: 20 }
+    ] }], 'economy');
+    const mixedSpread = plan.spreads.find((spread) => spread.sizes.length >= 3);
+
+    assert.ok(mixedSpread);
+    assert.ok(mixedSpread.usedLength <= 244.932);
+    assert.ok(mixedSpread.usedWidth <= 180);
+    assert.ok(mixedSpread.markers.every((marker, index, markers) => (
+        marker.x >= 0
+        && marker.y >= 0
+        && marker.x + marker.width <= 180
+        && marker.y + marker.height <= 280
+        && !markers.some((other, otherIndex) => otherIndex !== index && intersectsForTest(marker, other))
+    )));
+    assert.ok(plan.metrics.fabricMeters < 70.42);
+    assert.equal(plan.metrics.spreadCount, 2);
 });
 
 test('respects the configured cutting area when packing markers', () => {
