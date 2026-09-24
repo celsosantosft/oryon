@@ -4,7 +4,7 @@ import { Icons } from '../components/Icons';
 import { appConfig } from '../config/appConfig';
 import { useAuth } from '../context/AuthContext';
 import { buildCuttingFabricTabs, normalizeCuttingKey } from '../utils/cuttingGrouping';
-import { buildCuttingPlan, getEffectiveCuttingArea } from '../utils/cuttingPlanner';
+import { buildCuttingPlan, buildCuttingPlanProposals, getEffectiveCuttingArea } from '../utils/cuttingPlanner';
 import { buildCuttingPlanPrintHtml } from '../utils/cuttingPlanPrint';
 import { chooseCuttingLayersAlert, chooseCuttingPlanAlert } from '../utils/alerts';
 import '../styles/CutterPreview.css';
@@ -471,11 +471,9 @@ export default function CutterDashboard({ preview = false }) {
         getEffectiveCuttingArea(cuttingSettings.table, selectedFabricWidth)
     ), [cuttingSettings.table, selectedFabricWidth]);
     const cuttingPlans = useMemo(() => (
-        selectedCuttingOrders.length && settingsLoaded ? {
-            economy: buildCuttingPlan(selectedCuttingOrders, 'economy', effectiveCuttingArea),
-            balanced: buildCuttingPlan(selectedCuttingOrders, 'balanced', effectiveCuttingArea),
-            fewerSpreads: buildCuttingPlan(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea)
-        } : null
+        selectedCuttingOrders.length && settingsLoaded
+            ? buildCuttingPlanProposals(selectedCuttingOrders, effectiveCuttingArea)
+            : null
     ), [effectiveCuttingArea, selectedCuttingOrders, settingsLoaded]);
     const cuttingPlan = cuttingPlans?.economy || null;
     const activeFabricWidth = activeFabric ? (cuttingSettings.fabricWidths[activeFabric.id] || 180) : 180;

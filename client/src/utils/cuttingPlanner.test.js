@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildCuttingPlan } from './cuttingPlanner.js';
+import { buildCuttingPlan, buildCuttingPlanProposals } from './cuttingPlanner.js';
 import * as cuttingPlanner from './cuttingPlanner.js';
 
 function bySize(items = []) {
@@ -85,6 +85,21 @@ test('keeps a complete infant and adult grade responsive', () => {
     assert.equal(plan.shortages.length, 0);
     assert.equal(plan.totalPieces, 28);
     assert.deepEqual(plan.cutTotals, plan.gradeTotals);
+});
+
+test('keeps three proposals responsive for a combinatorially expensive grade', () => {
+    const sizes = ['2 ANOS', '4 ANOS', '6 ANOS', '8 ANOS', '10 ANOS', '12 ANOS', '14 ANOS', 'PP', 'P'];
+    const orders = [{
+        grade: sizes.map((tamanho, index) => ({ tamanho, quantidade: 40 - (index * 2) }))
+    }];
+    const startedAt = Date.now();
+    const plans = buildCuttingPlanProposals(orders);
+
+    assert.ok(Date.now() - startedAt < 1500);
+    assert.equal(plans.economy.shortages.length, 0);
+    assert.deepEqual(plans.economy.cutTotals, plans.economy.gradeTotals);
+    assert.strictEqual(plans.balanced, plans.economy);
+    assert.strictEqual(plans.fewerSpreads, plans.economy);
 });
 
 test('caps automatic spreading at the configured machine limit', () => {

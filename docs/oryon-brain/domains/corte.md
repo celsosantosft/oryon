@@ -28,6 +28,7 @@
 - Printing an unchanged proposal must preserve its globally optimized size distribution; editing its layers recalculates within the selected size groups instead of reverting to the greedy distribution.
 - A marker may mix sizes. It must never leave requested pieces missing; controlled surplus is preferable and must be counted.
 - The optimizer must compare the complete production plan and may redistribute sizes between spreads; the first locally valid packing is not accepted when a global combination uses less fabric without adding surplus.
+- Exact combinatorial optimization is limited to small search spaces. Complex grades use the complete-plan heuristic once and reuse it across proposals so the cutting screen stays responsive.
 - Small remaining quantities may be assigned to an offcut or a short separate spread instead of forcing a wasteful full spread.
 - A back piece may be converted to a front when the cutter is clearly instructed how many layers to transform.
 - The printable PDF uses one A4 page per spread, with labels scaled to their marker and the complete drawing, layer count, occupied dimensions and production/surplus counts on that page. Layer count and spread count must be explicitly distinguished, and occupied width/usable width must be labeled separately from used length/table length.

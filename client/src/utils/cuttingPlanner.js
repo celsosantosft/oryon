@@ -2,6 +2,7 @@ import { normalizeGradeSize, sortGradeItems } from './cuttingGrouping.js';
 
 export const CUTTING_TABLE = { width: 180, height: 280 };
 const MAX_EXACT_ROUNDED_SIZES = 9;
+const MAX_EXACT_SEARCH_SCORE = 420;
 
 export function getEffectiveCuttingArea(table = CUTTING_TABLE, fabricWidth = CUTTING_TABLE.width) {
     const tableWidth = Number(table?.width) > 0 ? Number(table.width) : CUTTING_TABLE.width;
@@ -200,7 +201,9 @@ function comparePackedLayouts(left, right) {
     return compareNumberLists(bounds(left), bounds(right));
 }
 
-function packMarkers(markers, table) {
+function packMarkers(markers, table, fast = false) {
+    if (fast) return packMarkersInFreeRectangles(markers, table);
+
     const orderings = [
         (left, right) => (right.width * right.height) - (left.width * left.height) || right.height - left.height,
         (left, right) => right.height - left.height || right.width - left.width,
@@ -361,7 +364,7 @@ function summarizeSpread(layers, packed, acceptedUnits) {
     };
 }
 
-function buildEconomyCandidate(remaining, layers, table) {
+function buildEconomyCandidate(remaining, layers, table, fastPacking = false) {
     const units = makeEconomyUnits(remaining, layers);
     if (!units.length) return null;
 
@@ -370,7 +373,7 @@ function buildEconomyCandidate(remaining, layers, table) {
     const accepted = [];
 
     units.forEach((unit) => {
-        const nextPacked = packMarkers([...markers, ...unit.markers], table);
+        const nextPacked = packMarkers([...markers, ...unit.markers], table, fastPacking);
         if (!nextPacked) return;
         markers = [...markers, ...unit.markers];
         packed = nextPacked;
@@ -387,7 +390,7 @@ function compareEconomyCandidates(left, right) {
         || left.sizes.join('|').localeCompare(right.sizes.join('|'));
 }
 
-function buildEconomySolution(requested, table, layerLimit = Number.POSITIVE_INFINITY) {
+function buildEconomySolution(requested, table, layerLimit = Number.POSITIVE_INFINITY, fastPacking = false) {
     const remaining = new Map(requested);
     const spreads = [];
 
@@ -396,7 +399,7 @@ function buildEconomySolution(requested, table, layerLimit = Number.POSITIVE_INF
         let best = null;
 
         for (let layers = 2; layers <= maxLayers; layers += 1) {
-            const candidate = buildEconomyCandidate(remaining, layers, table);
+            const candidate = buildEconomyCandidate(remaining, layers, table, fastPacking);
             if (candidate && (!best || compareEconomyCandidates(candidate, best) < 0)) best = candidate;
         }
 
@@ -610,6 +613,14 @@ function makeSurplusParts(produced, loose, applied) {
     return surplus;
 }
 
+function shouldUseExactOptimization(gradeTotals) {
+    const supported = gradeTotals.filter((item) => SHIRT_MEASUREMENTS[item.tamanho]);
+    if (!supported.length || supported.length > MAX_EXACT_ROUNDED_SIZES) return false;
+
+    const maxQuantity = Math.max(...supported.map((item) => item.quantidade));
+    return (2 ** supported.length) * (maxQuantity + 10) <= MAX_EXACT_SEARCH_SCORE;
+}
+
 export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUTTING_TABLE, options = {}) {
     const table = {
         width: Number(cuttingArea?.width) || CUTTING_TABLE.width,
@@ -637,8 +648,9 @@ export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUT
         .filter((layers) => Number.isInteger(layers) && layers > 0 && layers <= layerLimit);
     const economy = strategy === 'manual-layers'
         ? buildManualLayerSolution(supportedRequested, layerCounts, table, options.sizeGroups)
-        : buildEconomySolution(supportedRequested, table, layerLimit);
-    const shouldBuildRounded = ['economy', 'balanced', 'fewer-spreads'].includes(strategy)
+        : buildEconomySolution(supportedRequested, table, layerLimit, options.fastPacking === true);
+    const shouldBuildRounded = options.exactOptimization !== false
+        && ['economy', 'balanced', 'fewer-spreads'].includes(strategy)
         && supportedSizes.length > 0
         && supportedSizes.length <= MAX_EXACT_ROUNDED_SIZES;
     const rounded = shouldBuildRounded
@@ -706,5 +718,28 @@ export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUT
             surplusPieces: surplusArray.reduce((sum, item) => sum + item.front + item.back + item.sleeve, 0),
             fabricMeters: Number((fabricUsage / 100).toFixed(2))
         }
+    };
+}
+
+export function buildCuttingPlanProposals(orders, cuttingArea = CUTTING_TABLE) {
+    const requested = new Map();
+    (orders || []).forEach((order) => {
+        (order.grade || []).forEach(({ tamanho, quantidade }) => {
+            addTotal(requested, tamanho, Number(quantidade) || 0);
+        });
+    });
+    const useExactOptimization = shouldUseExactOptimization(makeGradeFromMap(requested));
+    const economy = buildCuttingPlan(orders, 'economy', cuttingArea, {
+        exactOptimization: useExactOptimization,
+        fastPacking: !useExactOptimization
+    });
+    if (!useExactOptimization) {
+        return { economy, balanced: economy, fewerSpreads: economy };
+    }
+
+    return {
+        economy,
+        balanced: buildCuttingPlan(orders, 'balanced', cuttingArea),
+        fewerSpreads: buildCuttingPlan(orders, 'fewer-spreads', cuttingArea)
     };
 }

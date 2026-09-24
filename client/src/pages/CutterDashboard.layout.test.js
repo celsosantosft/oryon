@@ -22,9 +22,7 @@ test('asks which calculated cutting strategy should be printed', () => {
     const source = readFileSync(new URL('./CutterDashboard.jsx', import.meta.url), 'utf8');
 
     assert.match(source, /chooseCuttingPlanAlert/);
-    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'economy', effectiveCuttingArea\)/);
-    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'balanced', effectiveCuttingArea\)/);
-    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea\)/);
+    assert.match(source, /buildCuttingPlanProposals\(selectedCuttingOrders, effectiveCuttingArea\)/);
     assert.match(source, /await chooseCuttingPlanAlert/);
     assert.match(source, /printCuttingPlan\(selectedPlan, selectedCuttingOrders\)/);
 });
@@ -48,9 +46,7 @@ test('configures table and fabric measurements inside the active fabric section'
     assert.match(source, /Largura da mesa/);
     assert.match(source, /Comprimento da mesa/);
     assert.match(source, /getEffectiveCuttingArea/);
-    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'economy', effectiveCuttingArea\)/);
-    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'balanced', effectiveCuttingArea\)/);
-    assert.match(source, /buildCuttingPlan\(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea\)/);
+    assert.match(source, /buildCuttingPlanProposals\(selectedCuttingOrders, effectiveCuttingArea\)/);
 });
 
 test('keeps cutting settings synchronized without saving them to another fabric', () => {
