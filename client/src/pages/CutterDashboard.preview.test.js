@@ -33,3 +33,12 @@ test('preview styles define tenant accents and native mobile behavior', () => {
     assert.match(previewStyles, /@media \(hover: hover\) and \(pointer: fine\)/);
     assert.match(previewStyles, /@media \(prefers-reduced-motion: reduce\)/);
 });
+
+test('contains cutting cards inside narrow mobile viewports', () => {
+    assert.match(dashboardSource, /className="cutter-order-meta/);
+    assert.match(dashboardSource, /className="cutter-order-footer/);
+    assert.match(previewStyles, /\.cutter-preview\s*\{[\s\S]*?overflow-x:\s*clip/);
+    assert.match(previewStyles, /\.cutter-preview \.cutter-order-card[\s\S]*?min-width:\s*0/);
+    assert.match(previewStyles, /\.cutter-preview \.cutter-order-meta > span[\s\S]*?overflow-wrap:\s*anywhere/);
+    assert.match(previewStyles, /@media \(max-width: 640px\)[\s\S]*?\.cutter-preview \.cutter-order-meta[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
+});

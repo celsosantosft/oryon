@@ -165,14 +165,14 @@ function OrderCard({ order, selected, onToggle, onOpen }) {
                 </div>
             </div>
 
-            <div className="mb-3 grid grid-cols-2 gap-2 text-xs font-bold text-slate-500">
+            <div className="cutter-order-meta mb-3 grid grid-cols-2 gap-2 text-xs font-bold text-slate-500">
                 <span className="rounded-md bg-slate-50 px-2 py-1">Malha: {order.produto?.tecido || order.fabricLabel || '-'}</span>
                 <span className="rounded-md bg-slate-50 px-2 py-1">Cor: {order.cor_tecido || 'Não informada'}</span>
             </div>
 
             <GradePills grade={order.grade} compact />
 
-            <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+            <div className="cutter-order-footer mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
                 <span className="text-sm font-black text-slate-900">{order.totalPieces || gradeTotal(order.grade)} peças</span>
                 <span className="text-xs font-bold text-slate-500">Prazo {formatDate(order.delivery_date)}</span>
             </div>
