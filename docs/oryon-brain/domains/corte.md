@@ -22,6 +22,7 @@
 - Table dimensions and each fabric width are configurable because tenants may use different equipment and materials.
 - Marker pieces must not rotate because of the fabric grain.
 - A basic shirt requires one front, one back and two sleeves.
+- Basic-shirt markers support the infant grades 2, 4, 6, 8, 10, 12 and 14 years using their registered front, back and sleeve measurements; numeric age labels and labels ending in `ANOS` represent the same size.
 - A marker may mix sizes. It must never leave requested pieces missing; controlled surplus is preferable and must be counted.
 - Small remaining quantities may be assigned to an offcut or a short separate spread instead of forcing a wasteful full spread.
 - A back piece may be converted to a front when the cutter is clearly instructed how many layers to transform.

@@ -3,6 +3,21 @@ import assert from 'node:assert/strict';
 
 import { buildCuttingFabricTabs } from './cuttingGrouping.js';
 
+test('sorts infant sizes by age before adult sizes', () => {
+    const tabs = buildCuttingFabricTabs([{
+        id_pedido: 1,
+        produtos: [{
+            nome_produto: 'Camisa',
+            tecido: 'Dryfit',
+            grade: { '14 ANOS': 1, M: 1, '2 ANOS': 1, '8 ANOS': 1 }
+        }]
+    }]);
+
+    assert.deepEqual(tabs[0].gradeTotals.map(({ tamanho }) => tamanho), [
+        '2 ANOS', '8 ANOS', '14 ANOS', 'M'
+    ]);
+});
+
 test('keeps different registered fabric names in separate tabs', () => {
     const tabs = buildCuttingFabricTabs([
         {

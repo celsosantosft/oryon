@@ -1,4 +1,14 @@
-export const SIZE_ORDER = ['2', '4', '6', '8', '10', '12', '14', 'PP', 'P', 'M', 'G', 'GG', 'XG', 'XXG', 'XXXG', 'ESP'];
+export const SIZE_ORDER = ['2 ANOS', '4 ANOS', '6 ANOS', '8 ANOS', '10 ANOS', '12 ANOS', '14 ANOS', 'PP', 'P', 'M', 'G', 'GG', 'XG', 'XXG', 'XXXG', 'ESP'];
+
+const INFANT_AGES = new Set(['2', '4', '6', '8', '10', '12', '14']);
+
+export function normalizeGradeSize(value) {
+    const normalized = String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const infantMatch = normalized.match(/^(\d{1,2})(?:\s*ANOS?)?$/);
+    const age = infantMatch?.[1];
+
+    return age && INFANT_AGES.has(age) ? `${age} ANOS` : normalized;
+}
 
 export function normalizeCuttingKey(value) {
     return String(value || '')
@@ -42,7 +52,7 @@ function normalizeGrade(grade) {
     if (Array.isArray(grade)) {
         return grade
             .map(({ tamanho, quantidade }) => ({
-                tamanho: String(tamanho || '').trim().toUpperCase(),
+                tamanho: normalizeGradeSize(tamanho),
                 quantidade: Number(quantidade) || 0
             }))
             .filter((item) => item.tamanho && item.quantidade > 0);
@@ -50,7 +60,7 @@ function normalizeGrade(grade) {
 
     return Object.entries(grade || {})
         .map(([tamanho, quantidade]) => ({
-            tamanho: String(tamanho || '').trim().toUpperCase(),
+            tamanho: normalizeGradeSize(tamanho),
             quantidade: Number(quantidade) || 0
         }))
         .filter((item) => item.tamanho && item.quantidade > 0);

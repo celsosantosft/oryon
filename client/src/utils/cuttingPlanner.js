@@ -1,6 +1,7 @@
-import { sortGradeItems } from './cuttingGrouping.js';
+import { normalizeGradeSize, sortGradeItems } from './cuttingGrouping.js';
 
 export const CUTTING_TABLE = { width: 180, height: 280 };
+const MAX_EXACT_ROUNDED_SIZES = 9;
 
 export function getEffectiveCuttingArea(table = CUTTING_TABLE, fabricWidth = CUTTING_TABLE.width) {
     const tableWidth = Number(table?.width) > 0 ? Number(table.width) : CUTTING_TABLE.width;
@@ -14,6 +15,13 @@ export function getEffectiveCuttingArea(table = CUTTING_TABLE, fabricWidth = CUT
 }
 
 export const SHIRT_MEASUREMENTS = {
+    '2 ANOS': { front: [33, 41.448], back: [33, 43], sleeve: [25.5, 12.5] },
+    '4 ANOS': { front: [37.2, 48.694], back: [37.2, 50], sleeve: [28.5, 14] },
+    '6 ANOS': { front: [40.5, 51.914], back: [40.5, 53.5], sleeve: [29.3, 14.8] },
+    '8 ANOS': { front: [42.2, 55.711], back: [42.2, 57.2], sleeve: [32, 16.5] },
+    '10 ANOS': { front: [45.2, 61.411], back: [45.2, 63.2], sleeve: [35.5, 19.8] },
+    '12 ANOS': { front: [47.5, 64.307], back: [47.5, 66], sleeve: [37.2, 20.5] },
+    '14 ANOS': { front: [50.941, 66.122], back: [50.941, 68.4], sleeve: [39.07, 22.3] },
     PP: { front: [50.7, 69.2], back: [50.7, 74], sleeve: [39.1, 24.3] },
     P: { front: [53.4, 70.8], back: [53.4, 74], sleeve: [41.5, 24.6] },
     M: { front: [55, 74], back: [55, 77], sleeve: [43.5, 25.7] },
@@ -30,7 +38,7 @@ const PART_LABELS = {
 };
 
 function normalizeSize(size) {
-    const normalized = String(size || '').trim().toUpperCase();
+    const normalized = normalizeGradeSize(size);
     return normalized === 'XXG' || normalized === 'XXXG' ? 'EXG' : normalized;
 }
 
@@ -480,7 +488,12 @@ export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUT
     const unsupportedSizes = gradeTotals.filter((item) => !SHIRT_MEASUREMENTS[item.tamanho]);
     const supportedRequested = new Map(supportedSizes.map((size) => [size, requested.get(size)]));
     const economy = buildEconomySolution(supportedRequested, table);
-    const rounded = supportedSizes.length ? buildRoundedSolution(supportedSizes, supportedRequested, table) : { spreads: [] };
+    const shouldBuildRounded = strategy === 'fewer-spreads'
+        && supportedSizes.length > 0
+        && supportedSizes.length <= MAX_EXACT_ROUNDED_SIZES;
+    const rounded = shouldBuildRounded
+        ? buildRoundedSolution(supportedSizes, supportedRequested, table)
+        : { spreads: [] };
     const useRounded = strategy === 'fewer-spreads' && rounded.spreads.length < economy.spreads.length;
     const selected = useRounded ? { spreads: rounded.spreads, loose: new Map() } : economy;
     const spreads = [...selected.spreads]

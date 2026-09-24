@@ -12,6 +12,72 @@ function countParts(items = []) {
     return items.reduce((sum, item) => sum + item.front + item.back + item.sleeve, 0);
 }
 
+test('uses the supplied infant shirt measurements', () => {
+    assert.deepEqual(cuttingPlanner.SHIRT_MEASUREMENTS['2 ANOS'], {
+        front: [33, 41.448], back: [33, 43], sleeve: [25.5, 12.5]
+    });
+    assert.deepEqual(cuttingPlanner.SHIRT_MEASUREMENTS['4 ANOS'], {
+        front: [37.2, 48.694], back: [37.2, 50], sleeve: [28.5, 14]
+    });
+    assert.deepEqual(cuttingPlanner.SHIRT_MEASUREMENTS['6 ANOS'], {
+        front: [40.5, 51.914], back: [40.5, 53.5], sleeve: [29.3, 14.8]
+    });
+    assert.deepEqual(cuttingPlanner.SHIRT_MEASUREMENTS['8 ANOS'], {
+        front: [42.2, 55.711], back: [42.2, 57.2], sleeve: [32, 16.5]
+    });
+    assert.deepEqual(cuttingPlanner.SHIRT_MEASUREMENTS['10 ANOS'], {
+        front: [45.2, 61.411], back: [45.2, 63.2], sleeve: [35.5, 19.8]
+    });
+    assert.deepEqual(cuttingPlanner.SHIRT_MEASUREMENTS['12 ANOS'], {
+        front: [47.5, 64.307], back: [47.5, 66], sleeve: [37.2, 20.5]
+    });
+    assert.deepEqual(cuttingPlanner.SHIRT_MEASUREMENTS['14 ANOS'], {
+        front: [50.941, 66.122], back: [50.941, 68.4], sleeve: [39.07, 22.3]
+    });
+});
+
+test('builds infant cutting plans and merges numeric age aliases', () => {
+    const plan = buildCuttingPlan([{ grade: [
+        { tamanho: '2', quantidade: 1 },
+        { tamanho: '2 ANOS', quantidade: 1 },
+        { tamanho: '4 ANOS', quantidade: 2 },
+        { tamanho: '6 ANOS', quantidade: 2 },
+        { tamanho: '8 ANOS', quantidade: 2 },
+        { tamanho: '10 ANOS', quantidade: 2 },
+        { tamanho: '12 ANOS', quantidade: 2 },
+        { tamanho: '14 ANOS', quantidade: 2 }
+    ] }], 'economy');
+
+    assert.deepEqual(plan.gradeTotals, [
+        { tamanho: '2 ANOS', quantidade: 2 },
+        { tamanho: '4 ANOS', quantidade: 2 },
+        { tamanho: '6 ANOS', quantidade: 2 },
+        { tamanho: '8 ANOS', quantidade: 2 },
+        { tamanho: '10 ANOS', quantidade: 2 },
+        { tamanho: '12 ANOS', quantidade: 2 },
+        { tamanho: '14 ANOS', quantidade: 2 }
+    ]);
+    assert.equal(plan.shortages.length, 0);
+    assert.deepEqual(plan.cutTotals, plan.gradeTotals);
+    assert.ok(plan.spreads.length > 0);
+    assert.ok(plan.spreads.every((spread) => spread.markers.every((marker) => marker.rotated === false)));
+});
+
+test('keeps a complete infant and adult grade responsive', () => {
+    const sizes = [
+        '2 ANOS', '4 ANOS', '6 ANOS', '8 ANOS', '10 ANOS', '12 ANOS', '14 ANOS',
+        'PP', 'P', 'M', 'G', 'GG', 'XG', 'EXG'
+    ];
+    const orders = [{ grade: sizes.map((tamanho) => ({ tamanho, quantidade: 2 })) }];
+    const startedAt = Date.now();
+    const plan = buildCuttingPlan(orders, 'fewer-spreads');
+
+    assert.ok(Date.now() - startedAt < 1500);
+    assert.equal(plan.shortages.length, 0);
+    assert.equal(plan.totalPieces, 28);
+    assert.deepEqual(plan.cutTotals, plan.gradeTotals);
+});
+
 test('economy sends singleton demand to loose cuts instead of multiplying it by the largest layer count', () => {
     const plan = buildCuttingPlan([
         {
