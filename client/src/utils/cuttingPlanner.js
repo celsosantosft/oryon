@@ -413,12 +413,16 @@ function buildEconomySolution(requested, table, layerLimit = Number.POSITIVE_INF
     return { spreads, loose };
 }
 
-function buildManualLayerSolution(requested, layerCounts, table) {
+function buildManualLayerSolution(requested, layerCounts, table, sizeGroups = []) {
     const remaining = new Map(requested);
     const spreads = [];
 
-    layerCounts.forEach((layers) => {
-        const candidate = buildEconomyCandidate(remaining, layers, table);
+    layerCounts.forEach((layers, index) => {
+        const preferredSizes = (sizeGroups[index] || []).filter((size) => (remaining.get(size) || 0) > 0);
+        const preferredRequested = new Map(preferredSizes.map((size) => [size, remaining.get(size)]));
+        const candidate = preferredSizes.length
+            ? buildRoundedSpread(preferredSizes, preferredRequested, layers, table)
+            : buildEconomyCandidate(remaining, layers, table);
         if (!candidate) return;
 
         candidate.appliedParts.forEach((item) => subtractQuantity(remaining, item.tamanho, item.front));
@@ -479,16 +483,21 @@ function countSurplus(spread) {
     return spread.surplusParts.reduce((sum, item) => sum + item.front + item.back + item.sleeve, 0);
 }
 
-function compareRoundedSpreads(left, right) {
-    return countSurplus(left) - countSurplus(right)
-        || left.fabricUsage - right.fabricUsage
-        || left.layers - right.layers;
+function compareRoundedSpreads(left, right, objective = 'fabric') {
+    const common = countSurplus(left) - countSurplus(right);
+    if (common !== 0) return common;
+    return objective === 'work'
+        ? left.layers - right.layers || left.fabricUsage - right.fabricUsage
+        : left.fabricUsage - right.fabricUsage || left.layers - right.layers;
 }
 
-function compareRoundedPlans(left, right) {
-    return left.spreads.length - right.spreads.length
-        || left.surplusPieces - right.surplusPieces
-        || left.fabricUsage - right.fabricUsage;
+function compareRoundedPlans(left, right, objective = 'fabric') {
+    const common = left.spreads.length - right.spreads.length
+        || left.surplusPieces - right.surplusPieces;
+    if (common !== 0) return common;
+    return objective === 'work'
+        ? left.totalLayers - right.totalLayers || left.fabricUsage - right.fabricUsage
+        : left.fabricUsage - right.fabricUsage || left.totalLayers - right.totalLayers;
 }
 
 function solutionFabricUsage(solution) {
@@ -499,28 +508,34 @@ function solutionSurplusPieces(solution) {
     return solution.spreads.reduce((sum, spread) => sum + countSurplus(spread), 0);
 }
 
+function solutionLayerCount(solution) {
+    return solution.spreads.reduce((sum, spread) => sum + spread.layers, 0);
+}
+
 function shouldUseExactGlobalSolution(greedy, global) {
     if (!global.spreads.length || global.surplusPieces > 0) return false;
     return solutionFabricUsage(global) < solutionFabricUsage(greedy);
 }
 
-function selectBalancedSolution(economy, rounded, requested) {
-    if (!rounded.spreads.length) return economy;
-    if (shouldUseExactGlobalSolution(economy, rounded)) {
-        return { spreads: rounded.spreads, loose: rounded.loose || new Map() };
-    }
-    if (rounded.spreads.length >= economy.spreads.length) return economy;
-
+function selectBalancedSolution(economy, work, requested) {
+    if (!work.spreads.length) return economy;
     const requestedComponents = Array.from(requested.values())
         .reduce((sum, quantity) => sum + (quantity * 4), 0);
     const controlledSurplusLimit = Math.max(4, Math.ceil(requestedComponents * 0.05));
+    const workSurplus = solutionSurplusPieces(work);
+    const reducesOperation = work.spreads.length < economy.spreads.length
+        || (
+            work.spreads.length === economy.spreads.length
+            && solutionLayerCount(work) < solutionLayerCount(economy)
+        );
+    const fabricWithinTolerance = solutionFabricUsage(work) <= solutionFabricUsage(economy) * 1.05;
 
-    return rounded.surplusPieces <= controlledSurplusLimit
-        ? { spreads: rounded.spreads, loose: rounded.loose || new Map() }
+    return reducesOperation && workSurplus <= controlledSurplusLimit && fabricWithinTolerance
+        ? { spreads: work.spreads, loose: work.loose || new Map() }
         : economy;
 }
 
-function buildRoundedSolution(sizes, requested, table, layerLimit = Number.POSITIVE_INFINITY) {
+function buildRoundedSolution(sizes, requested, table, layerLimit = Number.POSITIVE_INFINITY, objective = 'fabric') {
     const spreadByMask = new Map();
     const fullMask = (1 << sizes.length) - 1;
     const maxQuantity = Math.max(...requested.values());
@@ -531,12 +546,12 @@ function buildRoundedSolution(sizes, requested, table, layerLimit = Number.POSIT
         let best = null;
         for (let layers = 1; layers <= maxLayers; layers += 1) {
             const spread = buildRoundedSpread(subset, requested, layers, table);
-            if (spread && (!best || compareRoundedSpreads(spread, best) < 0)) best = spread;
+            if (spread && (!best || compareRoundedSpreads(spread, best, objective) < 0)) best = spread;
         }
         if (best) spreadByMask.set(mask, best);
     }
 
-    const memo = new Map([[0, { spreads: [], surplusPieces: 0, fabricUsage: 0 }]]);
+    const memo = new Map([[0, { spreads: [], surplusPieces: 0, fabricUsage: 0, totalLayers: 0 }]]);
     const solve = (mask) => {
         if (memo.has(mask)) return memo.get(mask);
         const firstBit = mask & -mask;
@@ -550,15 +565,16 @@ function buildRoundedSolution(sizes, requested, table, layerLimit = Number.POSIT
             const candidate = {
                 spreads: [spread, ...remainder.spreads],
                 surplusPieces: countSurplus(spread) + remainder.surplusPieces,
-                fabricUsage: spread.fabricUsage + remainder.fabricUsage
+                fabricUsage: spread.fabricUsage + remainder.fabricUsage,
+                totalLayers: spread.layers + remainder.totalLayers
             };
-            if (!best || compareRoundedPlans(candidate, best) < 0) best = candidate;
+            if (!best || compareRoundedPlans(candidate, best, objective) < 0) best = candidate;
         }
         memo.set(mask, best);
         return best;
     };
 
-    return solve(fullMask) || { spreads: [], surplusPieces: 0, fabricUsage: 0 };
+    return solve(fullMask) || { spreads: [], surplusPieces: 0, fabricUsage: 0, totalLayers: 0 };
 }
 
 function aggregateSpreadParts(spreads, field) {
@@ -620,28 +636,33 @@ export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUT
         .map(Number)
         .filter((layers) => Number.isInteger(layers) && layers > 0 && layers <= layerLimit);
     const economy = strategy === 'manual-layers'
-        ? buildManualLayerSolution(supportedRequested, layerCounts, table)
+        ? buildManualLayerSolution(supportedRequested, layerCounts, table, options.sizeGroups)
         : buildEconomySolution(supportedRequested, table, layerLimit);
     const shouldBuildRounded = ['economy', 'balanced', 'fewer-spreads'].includes(strategy)
         && supportedSizes.length > 0
         && supportedSizes.length <= MAX_EXACT_ROUNDED_SIZES;
     const rounded = shouldBuildRounded
-        ? buildRoundedSolution(supportedSizes, supportedRequested, table, layerLimit)
+        ? buildRoundedSolution(supportedSizes, supportedRequested, table, layerLimit, 'fabric')
+        : { spreads: [] };
+    const workRounded = shouldBuildRounded && ['balanced', 'fewer-spreads'].includes(strategy)
+        ? buildRoundedSolution(supportedSizes, supportedRequested, table, layerLimit, 'work')
         : { spreads: [] };
     const globalSolution = { ...rounded, loose: new Map() };
+    const workSolution = { ...workRounded, loose: new Map() };
+    const economySolution = strategy !== 'manual-layers' && shouldUseExactGlobalSolution(economy, globalSolution)
+        ? globalSolution
+        : economy;
     const useRoundedForWork = strategy === 'fewer-spreads' && (
-        rounded.spreads.length < economy.spreads.length
+        workSolution.spreads.length < economySolution.spreads.length
         || (
-            rounded.spreads.length === economy.spreads.length
-            && rounded.surplusPieces <= solutionSurplusPieces(economy)
-            && rounded.fabricUsage < solutionFabricUsage(economy)
+            workSolution.spreads.length === economySolution.spreads.length
+            && solutionSurplusPieces(workSolution) <= solutionSurplusPieces(economySolution)
+            && solutionLayerCount(workSolution) < solutionLayerCount(economySolution)
         )
     );
     const selected = strategy === 'balanced'
-        ? selectBalancedSolution(economy, globalSolution, supportedRequested)
-        : strategy === 'economy' && shouldUseExactGlobalSolution(economy, globalSolution)
-          ? globalSolution
-          : (useRoundedForWork ? globalSolution : economy);
+        ? selectBalancedSolution(economySolution, workSolution, supportedRequested)
+        : (useRoundedForWork ? workSolution : economySolution);
     const spreads = [...selected.spreads]
         .sort((left, right) => right.layers - left.layers || left.sizes.join('|').localeCompare(right.sizes.join('|')))
         .map((spread, index) => ({
@@ -680,6 +701,7 @@ export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUT
         spreads,
         metrics: {
             spreadCount: spreads.length,
+            totalLayers: spreads.reduce((sum, spread) => sum + spread.layers, 0),
             looseCutPieces: looseCuts.reduce((sum, item) => sum + item.front + item.back + item.sleeve, 0),
             surplusPieces: surplusArray.reduce((sum, item) => sum + item.front + item.back + item.sleeve, 0),
             fabricMeters: Number((fabricUsage / 100).toFixed(2))

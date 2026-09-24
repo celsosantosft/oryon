@@ -67,8 +67,8 @@ function renderLooseCuts(looseCuts, plural = true) {
 }
 
 export function buildCuttingPlanPrintHtml(plan, selectedOrders) {
-    const ordersLabel = escapeHtml(selectedOrders
-        .map((order) => order.tracking_code || `#${order.id_pedido}`)
+    const ordersLabel = escapeHtml([...new Set(selectedOrders
+        .map((order) => order.tracking_code || `#${order.id_pedido}`))]
         .join(', '));
     const requestedLabel = formatGrade(plan.gradeTotals);
     const pageCount = plan.spreads.length || 1;

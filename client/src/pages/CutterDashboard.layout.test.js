@@ -36,6 +36,8 @@ test('edits the layer count of every spread before printing', () => {
     assert.doesNotMatch(source, /MAX_CUTTING_LAYERS/);
     assert.match(source, /buildCuttingPlan\([\s\S]*?'manual-layers'/);
     assert.match(source, /layerCounts/);
+    assert.match(source, /layersUnchanged/);
+    assert.match(source, /sizeGroups: automaticPlan\.spreads/);
 });
 
 test('configures table and fabric measurements inside the active fabric section', () => {

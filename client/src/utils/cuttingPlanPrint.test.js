@@ -30,6 +30,16 @@ test('prints one A4 page per spread with back-to-front instructions', () => {
     assert.match(html, /preserveAspectRatio="xMidYMin meet"/);
 });
 
+test('prints a repeated tracking code only once', () => {
+    const plan = buildCuttingPlan([{ grade: [{ tamanho: 'GG', quantidade: 20 }] }], 'fewer-spreads');
+    const html = buildCuttingPlanPrintHtml(plan, [
+        { id_pedido: 5770, tracking_code: '#ATOS-5770' },
+        { id_pedido: 5770, tracking_code: '#ATOS-5770' }
+    ]);
+
+    assert.equal((html.match(/#ATOS-5770/g) || []).length, plan.spreads.length || 1);
+});
+
 test('lists loose cuts on the last spread without adding a page', () => {
     const plan = buildCuttingPlan([{ grade: [
         { tamanho: 'P', quantidade: 8 },

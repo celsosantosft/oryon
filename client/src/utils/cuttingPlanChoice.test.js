@@ -7,15 +7,15 @@ test('shows the calculated metrics for all three cutting strategies', async () =
 
     const html = alerts.buildCuttingPlanChoiceHtml({
         economy: {
-            metrics: { spreadCount: 2, fabricMeters: 30.21, looseCutPieces: 4, surplusPieces: 0 },
+            metrics: { spreadCount: 2, totalLayers: 28, fabricMeters: 30.21, looseCutPieces: 4, surplusPieces: 0 },
             surplusParts: []
         },
         balanced: {
-            metrics: { spreadCount: 2, fabricMeters: 31.4, looseCutPieces: 0, surplusPieces: 4 },
+            metrics: { spreadCount: 2, totalLayers: 25, fabricMeters: 31.4, looseCutPieces: 0, surplusPieces: 4 },
             surplusParts: [{ tamanho: 'P', front: 1, back: 1, sleeve: 2 }]
         },
         fewerSpreads: {
-            metrics: { spreadCount: 1, fabricMeters: 35.5, looseCutPieces: 0, surplusPieces: 12 },
+            metrics: { spreadCount: 1, totalLayers: 20, fabricMeters: 35.5, looseCutPieces: 0, surplusPieces: 12 },
             surplusParts: [{ tamanho: 'M', front: 3, back: 3, sleeve: 6 }]
         }
     });
@@ -23,6 +23,7 @@ test('shows the calculated metrics for all three cutting strategies', async () =
     assert.match(html, /Economizar malha/);
     assert.match(html, /2 enfestos/);
     assert.match(html, /30,21 m/);
+    assert.match(html, /28 folhas somadas/);
     assert.match(html, /4 componentes em retalho/);
     assert.match(html, /Equilibrado/);
     assert.match(html, /31,40 m/);

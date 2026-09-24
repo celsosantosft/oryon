@@ -8,12 +8,13 @@ import {
 } from './alerts.js';
 
 test('shows the three cutting proposals with their selectable strategies', () => {
-    const plan = { metrics: { spreadCount: 1, fabricMeters: 2.8, looseCutPieces: 0, surplusPieces: 0 } };
+    const plan = { metrics: { spreadCount: 1, totalLayers: 8, fabricMeters: 2.8, looseCutPieces: 0, surplusPieces: 0 } };
     const html = buildCuttingPlanChoiceHtml({ economy: plan, balanced: plan, fewerSpreads: plan });
 
     assert.match(html, /Economizar malha/);
     assert.match(html, /Equilibrado/);
     assert.match(html, /Reduzir trabalho/);
+    assert.match(html, /8 folhas somadas/);
     assert.match(html, /value="economy"/);
     assert.match(html, /value="balanced"/);
     assert.match(html, /value="fewer-spreads"/);

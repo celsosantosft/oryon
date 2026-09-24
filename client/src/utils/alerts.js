@@ -26,6 +26,7 @@ const formatPlanCard = (strategy, title, description, plan, recommended = false)
                 <small style="display: block; color: #64748b; margin-bottom: 7px; line-height: 1.4;">${escapeAlertHtml(description)}</small>
                 <span style="display: block; color: #334155; line-height: 1.55;">
                     ${pluralize(metrics.spreadCount || 0, 'enfesto', 'enfestos')} ·
+                    ${pluralize(metrics.totalLayers || 0, 'folha somada', 'folhas somadas')} ·
                     ${Number(metrics.fabricMeters || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m ·
                     ${pluralize(metrics.looseCutPieces || 0, 'componente em retalho', 'componentes em retalho')} ·
                     ${pluralize(metrics.surplusPieces || 0, 'componente excedente', 'componentes excedentes')}
@@ -39,8 +40,8 @@ const formatPlanCard = (strategy, title, description, plan, recommended = false)
 export const buildCuttingPlanChoiceHtml = ({ economy, balanced, fewerSpreads }) => `
     <div style="display: grid; gap: 10px; max-height: min(62dvh, 560px); margin-top: 8px; padding-right: 2px; overflow-y: auto; overscroll-behavior: contain;">
         ${formatPlanCard('economy', 'Economizar malha', 'Prioriza menor sobra e usa retalhos para quantidades pequenas.', economy)}
-        ${formatPlanCard('balanced', 'Equilibrado', 'Reduz trabalho quando a sobra adicional permanece controlada.', balanced, true)}
-        ${formatPlanCard('fewer-spreads', 'Reduzir trabalho', 'Prioriza menos enfestos, mostrando toda sobra antes da escolha.', fewerSpreads)}
+        ${formatPlanCard('balanced', 'Equilibrado', 'Reduz enfestos e folhas quando o impacto de malha e a sobra permanecem controlados.', balanced, true)}
+        ${formatPlanCard('fewer-spreads', 'Reduzir trabalho', 'Prioriza menos enfestos e menos folhas, usando mais repetições de moldes quando couber.', fewerSpreads)}
     </div>
 `;
 

@@ -637,12 +637,19 @@ export default function CutterDashboard({ preview = false }) {
         const layerCounts = await chooseCuttingLayersAlert(automaticPlan);
         if (layerCounts === null) return;
 
-        const selectedPlan = buildCuttingPlan(
-            selectedCuttingOrders,
-            'manual-layers',
-            effectiveCuttingArea,
-            { layerCounts }
-        );
+        const layersUnchanged = layerCounts.length === automaticPlan.spreads.length
+            && layerCounts.every((layers, index) => layers === automaticPlan.spreads[index].layers);
+        const selectedPlan = layersUnchanged
+            ? automaticPlan
+            : buildCuttingPlan(
+                selectedCuttingOrders,
+                'manual-layers',
+                effectiveCuttingArea,
+                {
+                    layerCounts,
+                    sizeGroups: automaticPlan.spreads.map((spread) => spread.sizes)
+                }
+            );
         if (selectedPlan.shortages.length > 0) {
             setNotice('Não foi possível gerar o PDF porque ainda existem peças sem encaixe no plano escolhido.');
             return;

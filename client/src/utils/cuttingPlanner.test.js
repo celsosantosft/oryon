@@ -362,6 +362,35 @@ test('compacts the reported production grade instead of accepting the first vali
     assert.equal(plan.metrics.spreadCount, 2);
 });
 
+test('reduces total plies by filling the table with more pattern repetitions', () => {
+    const orders = [{ grade: [
+        { tamanho: '8 ANOS', quantidade: 20 },
+        { tamanho: 'P', quantidade: 20 },
+        { tamanho: 'M', quantidade: 20 },
+        { tamanho: 'G', quantidade: 20 },
+        { tamanho: 'GG', quantidade: 20 }
+    ] }];
+    const economy = buildCuttingPlan(orders, 'economy');
+    const fewerWork = buildCuttingPlan(orders, 'fewer-spreads');
+    const fullLengthSpread = fewerWork.spreads.find((spread) => spread.layers === 20);
+
+    assert.equal(fewerWork.metrics.spreadCount, economy.metrics.spreadCount);
+    assert.ok(fewerWork.metrics.totalLayers < economy.metrics.totalLayers);
+    assert.equal(fewerWork.metrics.totalLayers, 24);
+    assert.equal(fewerWork.metrics.surplusPieces, 0);
+    assert.ok(fullLengthSpread.sizes.includes('GG'));
+    assert.ok(fullLengthSpread.usedLength > 270);
+    assert.ok(fewerWork.spreads.every((spread) => spread.usedLength <= 280));
+
+    const preserved = buildCuttingPlan(orders, 'manual-layers', cuttingPlanner.CUTTING_TABLE, {
+        layerCounts: fewerWork.spreads.map((spread) => spread.layers),
+        sizeGroups: fewerWork.spreads.map((spread) => spread.sizes)
+    });
+    assert.deepEqual(preserved.spreads.map((spread) => spread.sizes), fewerWork.spreads.map((spread) => spread.sizes));
+    assert.equal(preserved.metrics.totalLayers, fewerWork.metrics.totalLayers);
+    assert.equal(preserved.metrics.surplusPieces, 0);
+});
+
 test('respects the configured cutting area when packing markers', () => {
     const cuttingArea = { width: 120, height: 240 };
     const plan = buildCuttingPlan([
