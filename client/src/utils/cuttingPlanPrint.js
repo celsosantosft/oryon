@@ -92,7 +92,7 @@ export function buildCuttingPlanPrintHtml(plan, selectedOrders) {
                 </div>
                 <header class="spread-header">
                     <strong>Enfesto ${spread.index}</strong>
-                    <span>1 enfesto com ${spread.layers} camada${spread.layers === 1 ? '' : 's'} · área ocupada ${formatMeasurement(spread.usedWidth)} × ${formatMeasurement(spread.usedLength)} cm · malha útil ${formatMeasurement(plan.table.width)} cm</span>
+                    <span>1 enfesto com ${spread.layers} camada${spread.layers === 1 ? '' : 's'} · largura ocupada ${formatMeasurement(spread.usedWidth)}/${formatMeasurement(plan.table.width)} cm · comprimento ${formatMeasurement(spread.usedLength)}/${formatMeasurement(plan.table.height)} cm</span>
                 </header>
                 <div class="marker">
                     <svg viewBox="0 0 ${spread.usedWidth || plan.table.width} ${spread.usedLength}" preserveAspectRatio="xMidYMin meet">

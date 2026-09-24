@@ -22,8 +22,8 @@ test('prints one A4 page per spread with back-to-front instructions', () => {
     assert.match(html, /MANTER 5 COSTAS/);
     assert.match(html, /TRANSFORMAR 5 EM FRENTE/);
     assert.match(html, /1 enfesto com \d+ camadas/);
-    assert.match(html, /área ocupada/);
-    assert.match(html, /malha útil/);
+    assert.match(html, /largura ocupada [\d.,]+\/180 cm/);
+    assert.match(html, /comprimento [\d.,]+\/280 cm/);
     assert.match(html, /dominant-baseline="middle"/);
     assert.match(html, /class="instruction" textLength="[\d.]+" lengthAdjust="spacingAndGlyphs"/);
     assert.match(html, /@page \{ size: A4 portrait; margin: 8mm; \}/);
