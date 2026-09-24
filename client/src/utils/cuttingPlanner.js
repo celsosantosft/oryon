@@ -415,6 +415,18 @@ function compareRoundedPlans(left, right) {
         || left.fabricUsage - right.fabricUsage;
 }
 
+function selectBalancedSolution(economy, rounded, requested) {
+    if (!rounded.spreads.length || rounded.spreads.length >= economy.spreads.length) return economy;
+
+    const requestedComponents = Array.from(requested.values())
+        .reduce((sum, quantity) => sum + (quantity * 4), 0);
+    const controlledSurplusLimit = Math.max(4, Math.ceil(requestedComponents * 0.05));
+
+    return rounded.surplusPieces <= controlledSurplusLimit
+        ? { spreads: rounded.spreads, loose: rounded.loose || new Map() }
+        : economy;
+}
+
 function buildRoundedSolution(sizes, requested, table, layerLimit = Number.POSITIVE_INFINITY) {
     const spreadByMask = new Map();
     const fullMask = (1 << sizes.length) - 1;
@@ -517,14 +529,16 @@ export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUT
     const economy = strategy === 'manual-layers'
         ? buildManualLayerSolution(supportedRequested, layerCounts, table)
         : buildEconomySolution(supportedRequested, table, layerLimit);
-    const shouldBuildRounded = strategy === 'fewer-spreads'
+    const shouldBuildRounded = (strategy === 'balanced' || strategy === 'fewer-spreads')
         && supportedSizes.length > 0
         && supportedSizes.length <= MAX_EXACT_ROUNDED_SIZES;
     const rounded = shouldBuildRounded
         ? buildRoundedSolution(supportedSizes, supportedRequested, table, layerLimit)
         : { spreads: [] };
     const useRounded = strategy === 'fewer-spreads' && rounded.spreads.length < economy.spreads.length;
-    const selected = useRounded ? { spreads: rounded.spreads, loose: new Map() } : economy;
+    const selected = strategy === 'balanced'
+        ? selectBalancedSolution(economy, { ...rounded, loose: new Map() }, supportedRequested)
+        : (useRounded ? { spreads: rounded.spreads, loose: new Map() } : economy);
     const spreads = [...selected.spreads]
         .sort((left, right) => right.layers - left.layers || left.sizes.join('|').localeCompare(right.sizes.join('|')))
         .map((spread, index) => ({

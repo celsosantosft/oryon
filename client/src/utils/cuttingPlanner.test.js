@@ -92,6 +92,34 @@ test('caps automatic spreading at the configured machine limit', () => {
     assert.deepEqual(plan.cutTotals, plan.gradeTotals);
 });
 
+test('offers a balanced proposal with complete component accounting', () => {
+    const grade = [
+        { tamanho: 'P', quantidade: 8 },
+        { tamanho: 'M', quantidade: 15 },
+        { tamanho: 'G', quantidade: 10 },
+        { tamanho: 'GG', quantidade: 7 }
+    ];
+    const plan = buildCuttingPlan([{ grade }], 'balanced');
+
+    assert.equal(plan.strategy, 'balanced');
+    assert.equal(plan.shortages.length, 0);
+    assert.deepEqual(plan.cutTotals, plan.gradeTotals);
+    assert.ok(plan.spreads.length > 0);
+});
+
+test('accepts manually selected layer counts above the former limit', () => {
+    const plan = buildCuttingPlan(
+        [{ grade: [{ tamanho: 'M', quantidade: 30 }] }],
+        'manual-layers',
+        cuttingPlanner.CUTTING_TABLE,
+        { layerCounts: [30] }
+    );
+
+    assert.deepEqual(plan.spreads.map((spread) => spread.layers), [30]);
+    assert.equal(plan.shortages.length, 0);
+    assert.deepEqual(plan.cutTotals, plan.gradeTotals);
+});
+
 test('recalculates each spread from manually selected layer counts', () => {
     const plan = buildCuttingPlan(
         [{ grade: [

@@ -13,8 +13,6 @@ const DEFAULT_CUTTING_SETTINGS = {
     table: { width: 180, height: 280 },
     fabricWidths: {}
 };
-const MAX_CUTTING_LAYERS = 20;
-
 function formatCentimeters(value) {
     return Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 }
@@ -474,8 +472,9 @@ export default function CutterDashboard({ preview = false }) {
     ), [cuttingSettings.table, selectedFabricWidth]);
     const cuttingPlans = useMemo(() => (
         selectedCuttingOrders.length && settingsLoaded ? {
-            economy: buildCuttingPlan(selectedCuttingOrders, 'economy', effectiveCuttingArea, { maxLayers: MAX_CUTTING_LAYERS }),
-            fewerSpreads: buildCuttingPlan(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea, { maxLayers: MAX_CUTTING_LAYERS })
+            economy: buildCuttingPlan(selectedCuttingOrders, 'economy', effectiveCuttingArea),
+            balanced: buildCuttingPlan(selectedCuttingOrders, 'balanced', effectiveCuttingArea),
+            fewerSpreads: buildCuttingPlan(selectedCuttingOrders, 'fewer-spreads', effectiveCuttingArea)
         } : null
     ), [effectiveCuttingArea, selectedCuttingOrders, settingsLoaded]);
     const cuttingPlan = cuttingPlans?.economy || null;
@@ -634,15 +633,15 @@ export default function CutterDashboard({ preview = false }) {
         const strategy = await chooseCuttingPlanAlert(cuttingPlans);
         if (!strategy) return;
 
-        const automaticPlan = strategy === 'fewer-spreads' ? cuttingPlans.fewerSpreads : cuttingPlans.economy;
-        const layerCounts = await chooseCuttingLayersAlert(automaticPlan, MAX_CUTTING_LAYERS);
+        const automaticPlan = cuttingPlans[strategy];
+        const layerCounts = await chooseCuttingLayersAlert(automaticPlan);
         if (layerCounts === null) return;
 
         const selectedPlan = buildCuttingPlan(
             selectedCuttingOrders,
             'manual-layers',
             effectiveCuttingArea,
-            { layerCounts, maxLayers: MAX_CUTTING_LAYERS }
+            { layerCounts }
         );
         if (selectedPlan.shortages.length > 0) {
             setNotice('Não foi possível gerar o PDF porque ainda existem peças sem encaixe no plano escolhido.');

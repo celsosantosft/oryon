@@ -15,41 +15,46 @@ const formatSurplus = (parts = []) => parts.map((item) => (
     + `${item.sleeve} manga${item.sleeve === 1 ? '' : 's'}`
 )).join(' · ');
 
-const formatPlanCard = (title, plan, recommended = false) => {
+const formatPlanCard = (strategy, title, description, plan, recommended = false) => {
     const metrics = plan?.metrics || {};
     const surplus = formatSurplus(plan?.surplusParts);
     return `
-        <div style="border: 1px solid ${recommended ? '#93c5fd' : '#cbd5e1'}; background: ${recommended ? '#eff6ff' : '#f8fafc'}; padding: 14px; border-radius: 8px; text-align: left;">
-            <strong style="display: block; color: #0f172a; margin-bottom: 7px;">${escapeAlertHtml(title)}${recommended ? ' · Recomendado' : ''}</strong>
-            <span style="display: block; color: #334155; line-height: 1.55;">
-                ${pluralize(metrics.spreadCount || 0, 'enfesto', 'enfestos')} ·
-                ${Number(metrics.fabricMeters || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m ·
-                ${pluralize(metrics.looseCutPieces || 0, 'componente em retalho', 'componentes em retalho')} ·
-                ${pluralize(metrics.surplusPieces || 0, 'componente excedente', 'componentes excedentes')}
+        <label style="display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 11px; align-items: start; border: 1px solid ${recommended ? '#93c5fd' : '#cbd5e1'}; background: ${recommended ? '#eff6ff' : '#f8fafc'}; padding: 14px; border-radius: 8px; text-align: left; cursor: pointer;">
+            <input type="radio" name="cutting-plan" value="${strategy}" ${recommended ? 'checked' : ''} style="width: 18px; height: 18px; margin-top: 2px; accent-color: #2563eb;" />
+            <span>
+                <strong style="display: block; color: #0f172a; margin-bottom: 3px;">${escapeAlertHtml(title)}${recommended ? ' · Recomendado' : ''}</strong>
+                <small style="display: block; color: #64748b; margin-bottom: 7px; line-height: 1.4;">${escapeAlertHtml(description)}</small>
+                <span style="display: block; color: #334155; line-height: 1.55;">
+                    ${pluralize(metrics.spreadCount || 0, 'enfesto', 'enfestos')} ·
+                    ${Number(metrics.fabricMeters || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m ·
+                    ${pluralize(metrics.looseCutPieces || 0, 'componente em retalho', 'componentes em retalho')} ·
+                    ${pluralize(metrics.surplusPieces || 0, 'componente excedente', 'componentes excedentes')}
+                </span>
+                ${surplus ? `<small style="display: block; color: #92400e; margin-top: 7px; line-height: 1.45;">Sobras: ${surplus}</small>` : ''}
             </span>
-            ${surplus ? `<small style="display: block; color: #92400e; margin-top: 7px; line-height: 1.45;">Sobras: ${surplus}</small>` : ''}
-        </div>
+        </label>
     `;
 };
 
-export const buildCuttingPlanChoiceHtml = ({ economy, fewerSpreads }) => `
-    <div style="display: grid; gap: 10px; margin-top: 8px;">
-        ${formatPlanCard('Economizar malha', economy, true)}
-        ${formatPlanCard('Reduzir enfestos', fewerSpreads)}
+export const buildCuttingPlanChoiceHtml = ({ economy, balanced, fewerSpreads }) => `
+    <div style="display: grid; gap: 10px; max-height: min(62dvh, 560px); margin-top: 8px; padding-right: 2px; overflow-y: auto; overscroll-behavior: contain;">
+        ${formatPlanCard('economy', 'Economizar malha', 'Prioriza menor sobra e usa retalhos para quantidades pequenas.', economy)}
+        ${formatPlanCard('balanced', 'Equilibrado', 'Reduz trabalho quando a sobra adicional permanece controlada.', balanced, true)}
+        ${formatPlanCard('fewer-spreads', 'Reduzir trabalho', 'Prioriza menos enfestos, mostrando toda sobra antes da escolha.', fewerSpreads)}
     </div>
 `;
 
-export const normalizeCuttingLayerCounts = (values, maxLayers = 20) => {
+export const normalizeCuttingLayerCounts = (values) => {
     const normalized = (values || []).map((value) => Number(value));
     return normalized.every((value) => (
-        Number.isInteger(value) && value >= 1 && value <= maxLayers
+        Number.isSafeInteger(value) && value >= 1
     )) ? normalized : null;
 };
 
-export const buildCuttingLayersEditorHtml = (plan, maxLayers = 20) => `
+export const buildCuttingLayersEditorHtml = (plan) => `
     <div style="display: grid; gap: 10px; max-height: min(52dvh, 440px); margin-top: 8px; padding-right: 2px; overflow-y: auto; overscroll-behavior: contain; text-align: left;">
         <p style="margin: 0 0 2px; color: #475569; font-size: 0.875rem; line-height: 1.45;">
-            Ajuste as folhas de cada enfesto. Sua máquina aceita no máximo ${maxLayers} folhas.
+            Ajuste livremente as folhas de cada enfesto. Informe qualquer número inteiro positivo compatível com sua operação.
         </p>
         ${(plan?.spreads || []).map((spread, index) => `
             <label style="display: grid; grid-template-columns: minmax(0, 1fr) 92px; align-items: center; gap: 12px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 11px 12px; background: #f8fafc;">
@@ -63,7 +68,6 @@ export const buildCuttingLayersEditorHtml = (plan, maxLayers = 20) => `
                         type="number"
                         inputmode="numeric"
                         min="1"
-                        max="${maxLayers}"
                         step="1"
                         value="${spread.layers}"
                         aria-label="Folhas do enfesto ${index + 1}"
@@ -82,29 +86,32 @@ export const chooseCuttingPlanAlert = async (plans) => {
         title: 'Como deseja preparar o corte?',
         html: buildCuttingPlanChoiceHtml(plans),
         icon: 'question',
-        showDenyButton: true,
         showCancelButton: true,
         confirmButtonColor: '#2563EB',
-        denyButtonColor: '#D97706',
         cancelButtonColor: '#94A3B8',
-        confirmButtonText: 'Economizar malha',
-        denyButtonText: 'Reduzir enfestos',
+        confirmButtonText: 'Usar proposta selecionada',
         cancelButtonText: 'Cancelar',
-        focusConfirm: true
+        focusConfirm: true,
+        preConfirm: () => {
+            const selected = Swal.getPopup().querySelector('input[name="cutting-plan"]:checked');
+            if (!selected) {
+                Swal.showValidationMessage('Selecione uma das três propostas.');
+                return false;
+            }
+            return selected.value;
+        }
     });
 
-    if (result.isConfirmed) return 'economy';
-    if (result.isDenied) return 'fewer-spreads';
-    return null;
+    return result.isConfirmed ? result.value : null;
 };
 
-export const chooseCuttingLayersAlert = async (plan, maxLayers = 20) => {
+export const chooseCuttingLayersAlert = async (plan) => {
     if (!plan?.spreads?.length) return [];
 
     const Swal = await getSwal();
     const result = await Swal.fire({
         title: 'Quantas folhas em cada enfesto?',
-        html: buildCuttingLayersEditorHtml(plan, maxLayers),
+        html: buildCuttingLayersEditorHtml(plan),
         icon: 'question',
         showCancelButton: true,
         confirmButtonColor: '#2563EB',
@@ -115,9 +122,9 @@ export const chooseCuttingLayersAlert = async (plan, maxLayers = 20) => {
         preConfirm: () => {
             const values = Array.from(Swal.getPopup().querySelectorAll('.cutting-layer-input'))
                 .map((input) => input.value);
-            const layerCounts = normalizeCuttingLayerCounts(values, maxLayers);
+            const layerCounts = normalizeCuttingLayerCounts(values);
             if (!layerCounts) {
-                Swal.showValidationMessage(`Informe números inteiros entre 1 e ${maxLayers} folhas.`);
+                Swal.showValidationMessage('Informe números inteiros a partir de 1 folha.');
                 return false;
             }
             return layerCounts;
