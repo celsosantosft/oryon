@@ -7,6 +7,7 @@
 - The interface inherits each installation theme: Atos uses the default blue theme and PD Fardamentos uses the monochrome theme. Do not hardcode one tenant color for every customer.
 - Show sections only when active orders exist. Fabric names that differ operationally, such as DryFit Liso and DryFit Furadinho, stay in separate sections.
 - Inside each fabric section, group orders by model/product. Different models such as Camisa, Raglan, Regata and Short must not mix.
+- In the mobile fabric selector, tapping a tab centers it smoothly in the horizontal strip; reduced-motion users receive an immediate position change.
 - Moving an order out of a cutting status in the production Kanban must remove it from the active cutting queue.
 - Completing one order advances only that order, updates Kanban and customer portal, and records who completed it and when.
 

@@ -42,3 +42,13 @@ test('contains cutting cards inside narrow mobile viewports', () => {
     assert.match(previewStyles, /\.cutter-preview \.cutter-order-meta > span[\s\S]*?overflow-wrap:\s*anywhere/);
     assert.match(previewStyles, /@media \(max-width: 640px\)[\s\S]*?\.cutter-preview \.cutter-order-meta[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
 });
+
+test('centers a selected fabric tab with accessible native scrolling', () => {
+    assert.match(dashboardSource, /const fabricTabsRef = useRef\(null\)/);
+    assert.match(dashboardSource, /if \(!preview \|\| !fabricTabsRef\.current \|\| !button\) return/);
+    assert.match(dashboardSource, /window\.matchMedia\('\(prefers-reduced-motion: reduce\)'\)\.matches/);
+    assert.match(dashboardSource, /fabricTabsRef\.current\.scrollTo\(\{[\s\S]*?left,[\s\S]*?behavior: reduceMotion \? 'auto' : 'smooth'/);
+    assert.match(dashboardSource, /ref=\{fabricTabsRef\}/);
+    assert.match(dashboardSource, /onClick=\{\(event\) => \{[\s\S]*?centerFabricTab\(event\.currentTarget\)/);
+    assert.match(previewStyles, /\.cutter-preview \.cutter-fabric-tabs button\s*\{[\s\S]*?scroll-snap-align:\s*center/);
+});

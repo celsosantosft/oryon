@@ -322,9 +322,28 @@ export default function CutterDashboard({ preview = false }) {
         originalTableLength: 280
     });
     const settingsRevisionRef = useRef(0);
+    const fabricTabsRef = useRef(null);
     const previewTheme = appConfig.theme === 'monochrome'
         ? 'cutter-preview--monochrome'
         : 'cutter-preview--default';
+
+    const centerFabricTab = (button) => {
+        if (!preview || !fabricTabsRef.current || !button) return;
+
+        const containerRect = fabricTabsRef.current.getBoundingClientRect();
+        const buttonRect = button.getBoundingClientRect();
+        const left = Math.max(0, fabricTabsRef.current.scrollLeft
+            + buttonRect.left
+            - containerRect.left
+            - ((fabricTabsRef.current.clientWidth - buttonRect.width) / 2));
+        const reduceMotion = typeof window.matchMedia === 'function'
+            && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        fabricTabsRef.current.scrollTo({
+            left,
+            behavior: reduceMotion ? 'auto' : 'smooth'
+        });
+    };
 
     useEffect(() => {
         let isActive = true;
@@ -677,16 +696,17 @@ export default function CutterDashboard({ preview = false }) {
 
                 {fabricTabs.length > 0 && (
                     <>
-                        <nav className="cutter-fabric-tabs -mx-3 mb-4 overflow-x-auto px-3" aria-label="Malhas com pedidos ativos no corte">
+                        <nav ref={fabricTabsRef} className="cutter-fabric-tabs -mx-3 mb-4 overflow-x-auto px-3" aria-label="Malhas com pedidos ativos no corte">
                             <div className="flex min-w-max gap-2">
                                 {fabricTabs.map((tab) => (
                                     <button
                                         key={tab.id}
                                         type="button"
-                                        onClick={() => {
+                                        onClick={(event) => {
                                             setSelectedFabricId(tab.id);
                                             setSettingsOpen(false);
                                             setSettingsError('');
+                                            centerFabricTab(event.currentTarget);
                                         }}
                                         className={`rounded-lg border px-4 py-3 text-sm font-black transition ${
                                             activeFabric?.id === tab.id
