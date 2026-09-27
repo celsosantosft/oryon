@@ -29,11 +29,12 @@ Selecting the button opens an integration panel with:
 - five editable reminder offsets, expressed as days before delivery;
 - synchronization health, last successful synchronization, and any actionable error;
 - a retry action for pending or failed order synchronizations;
+- a one-time action to synchronize active future orders after the first connection;
 - an `Open calendar` action after connection.
 
 Only administrators can connect, configure, retry, or disconnect the integration. Google remains responsible for access to the dedicated calendar, which the company shares only with authorized people.
 
-The default reminder editor displays `7, 5, 3, 1, 0`. It accepts zero or positive whole days, removes duplicates, and allows no more than five values. Saving settings affects newly synchronized events and schedules existing active events for resynchronization so the configuration remains consistent.
+The default reminder editor displays `7, 5, 3, 1, 0`. It accepts whole days from 0 through 28, removes duplicates, and allows one to five values, matching Google Calendar's reminder limits. Saving settings affects newly synchronized events and schedules existing active events for resynchronization so the configuration remains consistent.
 
 Order screens do not gain ordinary calendar controls in the first version. Order details show a small calendar status only while synchronization is pending or failed, keeping the normal workflow quiet.
 
