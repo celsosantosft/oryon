@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-test('shows the calculated metrics for all three cutting strategies', async () => {
+test('shows the calculated metrics for all cutting strategies', async () => {
     const alerts = await import('./alerts.js');
     assert.equal(typeof alerts.buildCuttingPlanChoiceHtml, 'function');
 
@@ -17,6 +17,10 @@ test('shows the calculated metrics for all three cutting strategies', async () =
         fewerSpreads: {
             metrics: { spreadCount: 1, totalLayers: 20, fabricMeters: 35.5, looseCutPieces: 0, surplusPieces: 12 },
             surplusParts: [{ tamanho: 'M', front: 3, back: 3, sleeve: 6 }]
+        },
+        noTransform: {
+            metrics: { spreadCount: 2, totalLayers: 24, fabricMeters: 34.2, looseCutPieces: 0, surplusPieces: 4 },
+            surplusParts: [{ tamanho: 'G', front: 1, back: 1, sleeve: 2 }]
         }
     });
 
@@ -31,4 +35,6 @@ test('shows the calculated metrics for all three cutting strategies', async () =
     assert.match(html, /1 enfesto/);
     assert.match(html, /12 componentes excedentes/);
     assert.match(html, /M: 3 frentes, 3 costas, 6 mangas/);
+    assert.match(html, /Enfesto sem transformação/);
+    assert.match(html, /34,20 m/);
 });

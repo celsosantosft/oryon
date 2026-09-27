@@ -40,6 +40,19 @@ test('prints a repeated tracking code only once', () => {
     assert.equal((html.match(/#ATOS-5770/g) || []).length, plan.spreads.length || 1);
 });
 
+test('prints that transformations are forbidden in the selected proposal', () => {
+    const plan = buildCuttingPlan(
+        [{ grade: [{ tamanho: 'P', quantidade: 10 }] }],
+        'economy',
+        undefined,
+        { allowTransformations: false }
+    );
+    const html = buildCuttingPlanPrintHtml(plan, [{ tracking_code: '#ATOS-3' }]);
+
+    assert.match(html, /Transformação de peças:<\/b> não permitida/);
+    assert.doesNotMatch(html, /TRANSFORMAR \d+ EM FRENTE/);
+});
+
 test('lists loose cuts on the last spread without adding a page', () => {
     const plan = buildCuttingPlan([{ grade: [
         { tamanho: 'P', quantidade: 8 },

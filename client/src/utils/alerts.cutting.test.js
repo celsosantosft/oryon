@@ -7,18 +7,20 @@ import {
     normalizeCuttingLayerCounts
 } from './alerts.js';
 
-test('shows the three cutting proposals with their selectable strategies', () => {
+test('shows the default proposals and the no-transformation option', () => {
     const plan = { metrics: { spreadCount: 1, totalLayers: 8, fabricMeters: 2.8, looseCutPieces: 0, surplusPieces: 0 } };
-    const html = buildCuttingPlanChoiceHtml({ economy: plan, balanced: plan, fewerSpreads: plan });
+    const html = buildCuttingPlanChoiceHtml({ economy: plan, balanced: plan, fewerSpreads: plan, noTransform: plan });
 
     assert.match(html, /Economizar malha/);
     assert.match(html, /Equilibrado/);
     assert.match(html, /Reduzir trabalho/);
+    assert.match(html, /Enfesto sem transformação/);
     assert.match(html, /8 folhas somadas/);
     assert.match(html, /value="economy"/);
     assert.match(html, /value="balanced"/);
     assert.match(html, /value="fewer-spreads"/);
-    assert.equal((html.match(/name="cutting-plan"/g) || []).length, 3);
+    assert.match(html, /value="noTransform"/);
+    assert.equal((html.match(/name="cutting-plan"/g) || []).length, 4);
 });
 
 test('builds one editable layer field per spread without imposing a maximum', () => {

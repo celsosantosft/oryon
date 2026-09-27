@@ -37,11 +37,12 @@ const formatPlanCard = (strategy, title, description, plan, recommended = false)
     `;
 };
 
-export const buildCuttingPlanChoiceHtml = ({ economy, balanced, fewerSpreads }) => `
+export const buildCuttingPlanChoiceHtml = ({ economy, balanced, fewerSpreads, noTransform }) => `
     <div style="display: grid; gap: 10px; max-height: min(62dvh, 560px); margin-top: 8px; padding-right: 2px; overflow-y: auto; overscroll-behavior: contain;">
         ${formatPlanCard('economy', 'Economizar malha', 'Prioriza menor sobra e usa retalhos para quantidades pequenas.', economy)}
         ${formatPlanCard('balanced', 'Equilibrado', 'Reduz enfestos e folhas quando o impacto de malha e a sobra permanecem controlados.', balanced, true)}
         ${formatPlanCard('fewer-spreads', 'Reduzir trabalho', 'Prioriza menos enfestos e menos folhas, usando mais repetições de moldes quando couber.', fewerSpreads)}
+        ${formatPlanCard('noTransform', 'Enfesto sem transformação', 'Mantém frentes e costas separadas, sem converter nenhuma peça.', noTransform)}
     </div>
 `;
 
@@ -96,7 +97,7 @@ export const chooseCuttingPlanAlert = async (plans) => {
         preConfirm: () => {
             const selected = Swal.getPopup().querySelector('input[name="cutting-plan"]:checked');
             if (!selected) {
-                Swal.showValidationMessage('Selecione uma das três propostas.');
+                Swal.showValidationMessage('Selecione uma das quatro propostas.');
                 return false;
             }
             return selected.value;

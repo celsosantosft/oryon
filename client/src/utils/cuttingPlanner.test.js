@@ -87,7 +87,7 @@ test('keeps a complete infant and adult grade responsive', () => {
     assert.deepEqual(plan.cutTotals, plan.gradeTotals);
 });
 
-test('keeps three proposals responsive for a combinatorially expensive grade', () => {
+test('keeps all four proposals responsive for a combinatorially expensive grade', () => {
     const sizes = ['2 ANOS', '4 ANOS', '6 ANOS', '8 ANOS', '10 ANOS', '12 ANOS', '14 ANOS', 'PP', 'P'];
     const orders = [{
         grade: sizes.map((tamanho, index) => ({ tamanho, quantidade: 40 - (index * 2) }))
@@ -100,6 +100,8 @@ test('keeps three proposals responsive for a combinatorially expensive grade', (
     assert.deepEqual(plans.economy.cutTotals, plans.economy.gradeTotals);
     assert.strictEqual(plans.balanced, plans.economy);
     assert.strictEqual(plans.fewerSpreads, plans.economy);
+    assert.equal(plans.noTransform.allowTransformations, false);
+    assert.ok(plans.noTransform.spreads.every((spread) => spread.transformations.length === 0));
 });
 
 test('caps automatic spreading at the configured machine limit', () => {
@@ -129,6 +131,36 @@ test('offers a balanced proposal with complete component accounting', () => {
     assert.equal(plan.shortages.length, 0);
     assert.deepEqual(plan.cutTotals, plan.gradeTotals);
     assert.ok(plan.spreads.length > 0);
+});
+
+test('offers a complete proposal without transforming backs into fronts', () => {
+    const grade = [
+        { tamanho: 'P', quantidade: 20 },
+        { tamanho: 'M', quantidade: 10 },
+        { tamanho: 'G', quantidade: 5 },
+        { tamanho: 'GG', quantidade: 5 }
+    ];
+    const plans = buildCuttingPlanProposals([{ grade }]);
+
+    assert.equal(plans.noTransform.allowTransformations, false);
+    assert.equal(plans.noTransform.shortages.length, 0);
+    assert.deepEqual(plans.noTransform.cutTotals, plans.noTransform.gradeTotals);
+    assert.ok(plans.noTransform.spreads.length > 0);
+    assert.ok(plans.noTransform.spreads.every((spread) => spread.transformations.length === 0));
+    assert.ok(plans.noTransform.spreads.every((spread) => (
+        spread.markers.every((marker) => marker.transformation === null)
+    )));
+
+    const edited = buildCuttingPlan([{ grade }], 'manual-layers', undefined, {
+        layerCounts: plans.noTransform.spreads.map((spread) => spread.layers),
+        sizeGroups: plans.noTransform.spreads.map((spread) => spread.sizes),
+        allowTransformations: plans.noTransform.allowTransformations
+    });
+    assert.equal(edited.allowTransformations, false);
+    assert.ok(edited.spreads.every((spread) => spread.transformations.length === 0));
+    assert.ok(edited.spreads.every((spread) => (
+        spread.markers.every((marker) => marker.transformation === null)
+    )));
 });
 
 test('accepts manually selected layer counts above the former limit', () => {

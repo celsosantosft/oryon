@@ -291,7 +291,7 @@ function makeHalfUnit(size, layers) {
     };
 }
 
-function makeEconomyUnits(remaining, layers) {
+function makeEconomyUnits(remaining, layers, allowTransformations = true) {
     const units = [];
 
     remaining.forEach((quantity, size) => {
@@ -301,7 +301,7 @@ function makeEconomyUnits(remaining, layers) {
         }
 
         const remainder = quantity % layers;
-        if (layers % 2 === 0 && remainder >= layers / 2) {
+        if (allowTransformations && layers % 2 === 0 && remainder >= layers / 2) {
             units.push(makeHalfUnit(size, layers));
         }
     });
@@ -364,8 +364,8 @@ function summarizeSpread(layers, packed, acceptedUnits) {
     };
 }
 
-function buildEconomyCandidate(remaining, layers, table, fastPacking = false) {
-    const units = makeEconomyUnits(remaining, layers);
+function buildEconomyCandidate(remaining, layers, table, fastPacking = false, allowTransformations = true) {
+    const units = makeEconomyUnits(remaining, layers, allowTransformations);
     if (!units.length) return null;
 
     let markers = [];
@@ -390,7 +390,13 @@ function compareEconomyCandidates(left, right) {
         || left.sizes.join('|').localeCompare(right.sizes.join('|'));
 }
 
-function buildEconomySolution(requested, table, layerLimit = Number.POSITIVE_INFINITY, fastPacking = false) {
+function buildEconomySolution(
+    requested,
+    table,
+    layerLimit = Number.POSITIVE_INFINITY,
+    fastPacking = false,
+    allowTransformations = true
+) {
     const remaining = new Map(requested);
     const spreads = [];
 
@@ -399,7 +405,7 @@ function buildEconomySolution(requested, table, layerLimit = Number.POSITIVE_INF
         let best = null;
 
         for (let layers = 2; layers <= maxLayers; layers += 1) {
-            const candidate = buildEconomyCandidate(remaining, layers, table, fastPacking);
+            const candidate = buildEconomyCandidate(remaining, layers, table, fastPacking, allowTransformations);
             if (candidate && (!best || compareEconomyCandidates(candidate, best) < 0)) best = candidate;
         }
 
@@ -416,7 +422,7 @@ function buildEconomySolution(requested, table, layerLimit = Number.POSITIVE_INF
     return { spreads, loose };
 }
 
-function buildManualLayerSolution(requested, layerCounts, table, sizeGroups = []) {
+function buildManualLayerSolution(requested, layerCounts, table, sizeGroups = [], allowTransformations = true) {
     const remaining = new Map(requested);
     const spreads = [];
 
@@ -424,8 +430,8 @@ function buildManualLayerSolution(requested, layerCounts, table, sizeGroups = []
         const preferredSizes = (sizeGroups[index] || []).filter((size) => (remaining.get(size) || 0) > 0);
         const preferredRequested = new Map(preferredSizes.map((size) => [size, remaining.get(size)]));
         const candidate = preferredSizes.length
-            ? buildRoundedSpread(preferredSizes, preferredRequested, layers, table)
-            : buildEconomyCandidate(remaining, layers, table);
+            ? buildRoundedSpread(preferredSizes, preferredRequested, layers, table, allowTransformations)
+            : buildEconomyCandidate(remaining, layers, table, false, allowTransformations);
         if (!candidate) return;
 
         candidate.appliedParts.forEach((item) => subtractQuantity(remaining, item.tamanho, item.front));
@@ -440,7 +446,7 @@ function buildManualLayerSolution(requested, layerCounts, table, sizeGroups = []
     return { spreads, loose };
 }
 
-function makeRoundedSizeUnit(size, quantity, layers) {
+function makeRoundedSizeUnit(size, quantity, layers, allowTransformations = true) {
     if (layers > quantity * 2) return null;
 
     const markers = [];
@@ -452,7 +458,7 @@ function makeRoundedSizeUnit(size, quantity, layers) {
     }
 
     const remainder = quantity % layers;
-    if (remainder > 0 && remainder * 2 <= layers) {
+    if (allowTransformations && remainder > 0 && remainder * 2 <= layers) {
         const transformation = {
             tamanho: size,
             bodies: layers,
@@ -474,8 +480,10 @@ function makeRoundedSizeUnit(size, quantity, layers) {
     return { size, quantity, markers, transformations };
 }
 
-function buildRoundedSpread(sizes, requested, layers, table) {
-    const units = sizes.map((size) => makeRoundedSizeUnit(size, requested.get(size), layers));
+function buildRoundedSpread(sizes, requested, layers, table, allowTransformations = true) {
+    const units = sizes.map((size) => (
+        makeRoundedSizeUnit(size, requested.get(size), layers, allowTransformations)
+    ));
     if (units.some((unit) => !unit)) return null;
     const markers = units.flatMap((unit) => unit.markers);
     const packed = packMarkers(markers, table);
@@ -538,7 +546,14 @@ function selectBalancedSolution(economy, work, requested) {
         : economy;
 }
 
-function buildRoundedSolution(sizes, requested, table, layerLimit = Number.POSITIVE_INFINITY, objective = 'fabric') {
+function buildRoundedSolution(
+    sizes,
+    requested,
+    table,
+    layerLimit = Number.POSITIVE_INFINITY,
+    objective = 'fabric',
+    allowTransformations = true
+) {
     const spreadByMask = new Map();
     const fullMask = (1 << sizes.length) - 1;
     const maxQuantity = Math.max(...requested.values());
@@ -548,7 +563,7 @@ function buildRoundedSolution(sizes, requested, table, layerLimit = Number.POSIT
         const subset = sizes.filter((_, index) => (mask & (1 << index)) !== 0);
         let best = null;
         for (let layers = 1; layers <= maxLayers; layers += 1) {
-            const spread = buildRoundedSpread(subset, requested, layers, table);
+            const spread = buildRoundedSpread(subset, requested, layers, table, allowTransformations);
             if (spread && (!best || compareRoundedSpreads(spread, best, objective) < 0)) best = spread;
         }
         if (best) spreadByMask.set(mask, best);
@@ -639,6 +654,7 @@ export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUT
         .filter((size) => Boolean(SHIRT_MEASUREMENTS[size]));
     const unsupportedSizes = gradeTotals.filter((item) => !SHIRT_MEASUREMENTS[item.tamanho]);
     const supportedRequested = new Map(supportedSizes.map((size) => [size, requested.get(size)]));
+    const allowTransformations = options.allowTransformations !== false;
     const configuredLimit = Number(options.maxLayers);
     const layerLimit = Number.isInteger(configuredLimit) && configuredLimit > 0
         ? configuredLimit
@@ -647,17 +663,43 @@ export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUT
         .map(Number)
         .filter((layers) => Number.isInteger(layers) && layers > 0 && layers <= layerLimit);
     const economy = strategy === 'manual-layers'
-        ? buildManualLayerSolution(supportedRequested, layerCounts, table, options.sizeGroups)
-        : buildEconomySolution(supportedRequested, table, layerLimit, options.fastPacking === true);
+        ? buildManualLayerSolution(
+            supportedRequested,
+            layerCounts,
+            table,
+            options.sizeGroups,
+            allowTransformations
+        )
+        : buildEconomySolution(
+            supportedRequested,
+            table,
+            layerLimit,
+            options.fastPacking === true,
+            allowTransformations
+        );
     const shouldBuildRounded = options.exactOptimization !== false
         && ['economy', 'balanced', 'fewer-spreads'].includes(strategy)
         && supportedSizes.length > 0
         && supportedSizes.length <= MAX_EXACT_ROUNDED_SIZES;
     const rounded = shouldBuildRounded
-        ? buildRoundedSolution(supportedSizes, supportedRequested, table, layerLimit, 'fabric')
+        ? buildRoundedSolution(
+            supportedSizes,
+            supportedRequested,
+            table,
+            layerLimit,
+            'fabric',
+            allowTransformations
+        )
         : { spreads: [] };
     const workRounded = shouldBuildRounded && ['balanced', 'fewer-spreads'].includes(strategy)
-        ? buildRoundedSolution(supportedSizes, supportedRequested, table, layerLimit, 'work')
+        ? buildRoundedSolution(
+            supportedSizes,
+            supportedRequested,
+            table,
+            layerLimit,
+            'work',
+            allowTransformations
+        )
         : { spreads: [] };
     const globalSolution = { ...rounded, loose: new Map() };
     const workSolution = { ...workRounded, loose: new Map() };
@@ -700,6 +742,7 @@ export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUT
 
     return {
         strategy,
+        allowTransformations,
         table,
         orders: orders || [],
         totalPieces: Array.from(requested.values()).reduce((sum, quantity) => sum + quantity, 0),
@@ -733,13 +776,19 @@ export function buildCuttingPlanProposals(orders, cuttingArea = CUTTING_TABLE) {
         exactOptimization: useExactOptimization,
         fastPacking: !useExactOptimization
     });
+    const noTransform = buildCuttingPlan(orders, 'economy', cuttingArea, {
+        exactOptimization: useExactOptimization,
+        fastPacking: !useExactOptimization,
+        allowTransformations: false
+    });
     if (!useExactOptimization) {
-        return { economy, balanced: economy, fewerSpreads: economy };
+        return { economy, balanced: economy, fewerSpreads: economy, noTransform };
     }
 
     return {
         economy,
         balanced: buildCuttingPlan(orders, 'balanced', cuttingArea),
-        fewerSpreads: buildCuttingPlan(orders, 'fewer-spreads', cuttingArea)
+        fewerSpreads: buildCuttingPlan(orders, 'fewer-spreads', cuttingArea),
+        noTransform
     };
 }

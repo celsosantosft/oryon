@@ -645,7 +645,8 @@ export default function CutterDashboard({ preview = false }) {
                 effectiveCuttingArea,
                 {
                     layerCounts,
-                    sizeGroups: automaticPlan.spreads.map((spread) => spread.sizes)
+                    sizeGroups: automaticPlan.spreads.map((spread) => spread.sizes),
+                    allowTransformations: automaticPlan.allowTransformations
                 }
             );
         if (selectedPlan.shortages.length > 0) {

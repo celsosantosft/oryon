@@ -71,6 +71,9 @@ export function buildCuttingPlanPrintHtml(plan, selectedOrders) {
         .map((order) => order.tracking_code || `#${order.id_pedido}`))]
         .join(', '));
     const requestedLabel = formatGrade(plan.gradeTotals);
+    const transformationRule = plan.allowTransformations === false
+        ? 'não permitida'
+        : 'permitida quando indicada no molde';
     const pageCount = plan.spreads.length || 1;
     const pages = plan.spreads.map((spread, pageIndex) => {
         const surplus = spread.surplusParts || [];
@@ -88,7 +91,8 @@ export function buildCuttingPlanPrintHtml(plan, selectedOrders) {
                 </div>
                 <div class="summary">
                     <b>Total solicitado:</b> ${requestedLabel}<br>
-                    <b>Regra:</b> 1 frente, 1 costas e 2 mangas por camisa; moldes sem rotação.
+                    <b>Regra:</b> 1 frente, 1 costas e 2 mangas por camisa; moldes sem rotação.<br>
+                    <b>Transformação de peças:</b> ${transformationRule}.
                 </div>
                 <header class="spread-header">
                     <strong>Enfesto ${spread.index}</strong>
@@ -119,7 +123,8 @@ export function buildCuttingPlanPrintHtml(plan, selectedOrders) {
             </div>
             <div class="summary">
                 <b>Total solicitado:</b> ${requestedLabel}<br>
-                <b>Regra:</b> corte avulso sem girar os moldes.
+                <b>Regra:</b> corte avulso sem girar os moldes.<br>
+                <b>Transformação de peças:</b> ${transformationRule}.
             </div>
             <div class="loose-only">
                 <h2>Corte avulso em retalho</h2>

@@ -36,6 +36,7 @@ test('edits the layer count of every spread before printing', () => {
     assert.match(source, /layerCounts/);
     assert.match(source, /layersUnchanged/);
     assert.match(source, /sizeGroups: automaticPlan\.spreads/);
+    assert.match(source, /allowTransformations: automaticPlan\.allowTransformations/);
 });
 
 test('configures table and fabric measurements inside the active fabric section', () => {
