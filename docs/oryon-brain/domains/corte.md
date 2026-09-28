@@ -29,6 +29,7 @@
 - A marker may mix sizes. It must never leave requested pieces missing; controlled surplus is preferable and must be counted.
 - The optimizer must compare the complete production plan and may redistribute sizes between spreads; the first locally valid packing is not accepted when a global combination uses less fabric without adding surplus.
 - Exact combinatorial optimization is limited to small search spaces. Complex grades use the complete-plan heuristic once and reuse it across proposals so the cutting screen stays responsive.
+- After a plan is selected, each final spread receives a bounded deterministic compaction pass. The original valid layout remains the fallback, and compaction may only change marker positions and occupied dimensions, never quantities, layers, transformations or grain direction.
 - Small remaining quantities may be assigned to an offcut or a short separate spread instead of forcing a wasteful full spread.
 - A back piece may be converted to a front when the cutter is clearly instructed how many layers to transform.
 - The spread-without-transformations proposal keeps fronts and backs separate. This choice must survive manual layer edits and be stated explicitly in the PDF.

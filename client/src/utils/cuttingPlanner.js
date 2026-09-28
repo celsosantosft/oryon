@@ -3,6 +3,7 @@ import { normalizeGradeSize, sortGradeItems } from './cuttingGrouping.js';
 export const CUTTING_TABLE = { width: 180, height: 280 };
 const MAX_EXACT_ROUNDED_SIZES = 9;
 const MAX_EXACT_SEARCH_SCORE = 420;
+const FINAL_PACKING_ATTEMPTS = 128;
 
 export function getEffectiveCuttingArea(table = CUTTING_TABLE, fabricWidth = CUTTING_TABLE.width) {
     const tableWidth = Number(table?.width) > 0 ? Number(table.width) : CUTTING_TABLE.width;
@@ -217,6 +218,59 @@ function packMarkers(markers, table, fast = false) {
     ].filter(Boolean);
 
     return layouts.sort(comparePackedLayouts)[0] || null;
+}
+
+function createSeededRandom(seed) {
+    let state = seed >>> 0;
+    return () => {
+        state = ((state * 1664525) + 1013904223) >>> 0;
+        return state / 4294967296;
+    };
+}
+
+function shuffleMarkers(markers, random) {
+    const shuffled = [...markers];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(random() * (index + 1));
+        [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+    }
+    return shuffled;
+}
+
+function packMarkersInOrder(markers, table, orderedMarkers) {
+    const ranks = new Map(orderedMarkers.map((marker, index) => [marker.id, index]));
+    return packMarkersAtEdges(markers, table, (left, right) => ranks.get(left.id) - ranks.get(right.id));
+}
+
+function getFinalPackingAttempts(markerCount) {
+    if (markerCount <= 24) return FINAL_PACKING_ATTEMPTS;
+    if (markerCount <= 40) return 64;
+    return 24;
+}
+
+function compactFinalSpread(spread, table, spreadIndex) {
+    if (!spread.markers.length) return spread;
+
+    let best = spread.markers;
+    const deterministic = packMarkers(spread.markers, table);
+    if (deterministic && comparePackedLayouts(deterministic, best) < 0) best = deterministic;
+
+    const random = createSeededRandom(((17 + spreadIndex) * 2654435761) >>> 0);
+    const attempts = getFinalPackingAttempts(spread.markers.length);
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+        const candidate = packMarkersInOrder(spread.markers, table, shuffleMarkers(spread.markers, random));
+        if (candidate && comparePackedLayouts(candidate, best) < 0) best = candidate;
+    }
+
+    const usedLength = Math.round(Math.max(...best.map((marker) => marker.y + marker.height)) * 10) / 10;
+    const usedWidth = Math.round(Math.max(...best.map((marker) => marker.x + marker.width)) * 10) / 10;
+    return {
+        ...spread,
+        markers: best,
+        usedLength,
+        usedWidth,
+        fabricUsage: spread.layers * usedLength
+    };
 }
 
 function makeMarker(size, part, id, transformation = null) {
@@ -719,15 +773,18 @@ export function buildCuttingPlan(orders, strategy = 'economy', cuttingArea = CUT
         : (useRoundedForWork ? workSolution : economySolution);
     const spreads = [...selected.spreads]
         .sort((left, right) => right.layers - left.layers || left.sizes.join('|').localeCompare(right.sizes.join('|')))
-        .map((spread, index) => ({
-            ...spread,
-            index: index + 1,
-            cutTotals: sortGradeItems(spread.appliedParts.map(({ tamanho, front, back, sleeve }) => ({
-                tamanho,
-                quantidade: Math.min(front, back, Math.floor(sleeve / 2))
-            }))),
-            table
-        }));
+        .map((spread, index) => {
+            const compacted = compactFinalSpread(spread, table, index);
+            return {
+                ...compacted,
+                index: index + 1,
+                cutTotals: sortGradeItems(compacted.appliedParts.map(({ tamanho, front, back, sleeve }) => ({
+                    tamanho,
+                    quantidade: Math.min(front, back, Math.floor(sleeve / 2))
+                }))),
+                table
+            };
+        });
     const loose = selected.loose || new Map();
     const producedParts = aggregateSpreadParts(spreads, 'partTotals');
     const appliedParts = makeRequestedParts(supportedRequested);

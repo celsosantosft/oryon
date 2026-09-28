@@ -409,6 +409,30 @@ test('compacts the reported production grade instead of accepting the first vali
     assert.equal(plan.metrics.spreadCount, 2);
 });
 
+test('reuses the large free spaces in the reported mixed adult grade', () => {
+    const plan = buildCuttingPlanProposals([{ grade: [
+        { tamanho: 'PP', quantidade: 11 },
+        { tamanho: 'P', quantidade: 32 },
+        { tamanho: 'M', quantidade: 34 },
+        { tamanho: 'G', quantidade: 13 },
+        { tamanho: 'GG', quantidade: 9 },
+        { tamanho: 'EXG', quantidade: 1 }
+    ] }]).balanced;
+
+    assert.equal(plan.shortages.length, 0);
+    assert.equal(plan.metrics.surplusPieces, 0);
+    assert.ok(plan.metrics.fabricMeters <= 66);
+    assert.ok(plan.spreads[0].usedLength <= 256.2);
+    assert.ok(plan.spreads.every((spread) => spread.markers.every((marker, index, markers) => (
+        marker.rotated === false
+        && marker.x >= 0
+        && marker.y >= 0
+        && marker.x + marker.width <= plan.table.width
+        && marker.y + marker.height <= plan.table.height
+        && !markers.some((other, otherIndex) => otherIndex !== index && intersectsForTest(marker, other))
+    ))));
+});
+
 test('reduces total plies by filling the table with more pattern repetitions', () => {
     const orders = [{ grade: [
         { tamanho: '8 ANOS', quantidade: 20 },
