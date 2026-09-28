@@ -305,19 +305,26 @@ const ProductionShelf = ({ stage, orders, onDragOver, onDropOnShelf, onDropOnCar
     );
 };
 
-const OrderDetailsModal = ({ order, onClose, onDeliver, onMoveStage }) => {
+const OrderDetailsModal = ({ order, apiBaseUrl, onClose, onDeliver, onMoveStage }) => {
     if (!order) return null;
     const isReadyToShip = order.status === 'ready';
 
     return (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999 }} onClick={onClose}>
-            <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', width: '500px', maxWidth: '90%', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', width: '500px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }} onClick={e => e.stopPropagation()}>
                 <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '20px', borderBottom: `1px solid ${THEME.colors.border}`, paddingBottom: '12px'}}>
                     <div><span style={{fontSize:'0.8rem', color: THEME.colors.text.disabled, fontWeight:'700'}}>ORDEM #{order.id}</span><h2 style={{margin: '4px 0 0 0', fontSize: '1.5rem', color: THEME.colors.text.primary}}>{order.client}</h2></div>
                     <button onClick={onClose} style={{background:'none', border:'none', fontSize:'24px', color: THEME.colors.text.secondary, cursor:'pointer'}}>&times;</button>
                 </div>
                 <div style={{display:'grid', gap:'16px'}}>
                     <div><strong style={{display:'block', fontSize:'0.85rem', color: THEME.colors.text.secondary}}>ITENS</strong><span style={{fontSize:'1.1rem', color: THEME.colors.text.primary}}>{order.items}</span></div>
+                    {order.layout_path && (
+                        <div style={{border:`1px solid ${THEME.colors.border}`, borderRadius:'8px', padding:'10px', backgroundColor:'#F8FAFC'}}>
+                            <strong style={{display:'block', fontSize:'0.85rem', color: THEME.colors.text.secondary, marginBottom:'8px'}}>LAYOUT DO PEDIDO</strong>
+                            <img src={`${apiBaseUrl}/uploads/${order.layout_path}`} alt={`Layout do pedido ${order.tracking_code}`} style={{display:'block', width:'100%', maxHeight:'320px', objectFit:'contain', borderRadius:'6px', backgroundColor:'white'}} />
+                            <a href={`${apiBaseUrl}/uploads/${order.layout_path}`} target="_blank" rel="noreferrer" style={{display:'inline-block', marginTop:'8px', color:THEME.colors.brand.primary, fontSize:'0.8rem', fontWeight:'600'}}>Ver imagem original</a>
+                        </div>
+                    )}
                     <div><strong style={{display:'block', fontSize:'0.85rem', color: THEME.colors.text.secondary}}>STATUS ATUAL</strong><span style={{fontSize:'1rem', fontWeight:'600', color: THEME.colors.brand.primary}}>{STATUS_CONFIG.find(s=>s.id === order.status)?.label}</span></div>
                     {order.sizes_json && (
                         <div>
@@ -367,6 +374,7 @@ const ProductionDashboard = () => {
                     rawDate: order.delivery_date, 
                     status: mappedStatus,
                     sizes_json: order.sizes_json || {},
+                    layout_path: order.layout_path || null,
                     notes: 'Sem observações.',
                     priority: order.priority || 'normal'
                 };
@@ -584,7 +592,7 @@ const ProductionDashboard = () => {
                 </div>
             </section>
 
-            {selectedOrder && <OrderDetailsModal order={selectedOrder} onClose={() => setSelectedOrder(null)} onDeliver={handleDeliver} onMoveStage={handleMoveStage} />}
+            {selectedOrder && <OrderDetailsModal order={selectedOrder} apiBaseUrl={API_BASE_URL} onClose={() => setSelectedOrder(null)} onDeliver={handleDeliver} onMoveStage={handleMoveStage} />}
         </div>
     );
 };
