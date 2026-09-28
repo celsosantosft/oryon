@@ -641,6 +641,9 @@ function createTables() {
         calendar_id TEXT,
         calendar_name TEXT,
         calendar_url TEXT,
+        google_client_id TEXT,
+        encrypted_client_secret TEXT,
+        oauth_redirect_uri TEXT,
         encrypted_refresh_token TEXT,
         reminder_days TEXT NOT NULL DEFAULT '[7,5,3,1,0]',
         enabled INTEGER NOT NULL DEFAULT 0,
@@ -650,6 +653,10 @@ function createTables() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
+
+    db.run(`ALTER TABLE calendar_integrations ADD COLUMN google_client_id TEXT`, () => {});
+    db.run(`ALTER TABLE calendar_integrations ADD COLUMN encrypted_client_secret TEXT`, () => {});
+    db.run(`ALTER TABLE calendar_integrations ADD COLUMN oauth_redirect_uri TEXT`, () => {});
 
     db.run(`CREATE TABLE IF NOT EXISTS calendar_oauth_sessions (
         state_hash TEXT PRIMARY KEY,

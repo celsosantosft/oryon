@@ -20,3 +20,11 @@ test('administrador pode usar de um a cinco lembretes', () => {
     assert.match(source, /Adicionar lembrete/);
     assert.match(source, /Remover lembrete/);
 });
+
+test('administrador configura as credenciais Google dentro do painel', () => {
+    const source = fs.readFileSync(new URL('../components/GoogleCalendarIntegrationPanel.jsx', import.meta.url), 'utf8');
+    assert.match(source, /Client ID/);
+    assert.match(source, /Client Secret/);
+    assert.match(source, /Copiar URI/);
+    assert.match(source, /calendar\/configuration/);
+});

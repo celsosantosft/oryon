@@ -3,6 +3,7 @@ const db = require('../database');
 const { appConfig } = require('../config/appConfig');
 const { normalizeReminderDays, DEFAULT_REMINDER_DAYS } = require('../utils/calendarSettings');
 const { createGoogleCalendarClient, decryptCredential } = require('./googleCalendarClient');
+const { resolveCalendarEncryptionKey, buildGoogleConfig } = require('./calendarCredentials');
 
 const FINAL_STATUSES = new Set(['entregue/concluido', 'concluido', 'cancelado', 'pedido revertido para orcamento']);
 
@@ -102,7 +103,6 @@ async function enqueueForCurrentState(orderId, tenantKey = appConfig.tenantKey) 
     return enqueueUpsert(orderId, tenantKey);
 }
 
-const calendarClient = createGoogleCalendarClient();
 let processing = false;
 let wakeTimer = null;
 let interval = null;
@@ -113,7 +113,9 @@ async function processDue(limit = 20, tenantKey = appConfig.tenantKey) {
     try {
         const integration = await dbGet('SELECT * FROM calendar_integrations WHERE tenant_key=? AND enabled=1', [tenantKey]);
         if (!integration?.encrypted_refresh_token) return 0;
-        const refreshToken = decryptCredential(integration.encrypted_refresh_token, process.env.CALENDAR_TOKEN_ENCRYPTION_KEY);
+        const encryptionKey = resolveCalendarEncryptionKey();
+        const calendarClient = createGoogleCalendarClient({ config: buildGoogleConfig(integration, encryptionKey) });
+        const refreshToken = decryptCredential(integration.encrypted_refresh_token, encryptionKey);
         const accessToken = await calendarClient.refreshAccessToken(refreshToken);
         const reminderDays = (() => { try { return normalizeReminderDays(JSON.parse(integration.reminder_days)); } catch { return [...DEFAULT_REMINDER_DAYS]; } })();
         const jobs = await dbAll(`SELECT * FROM order_calendar_events WHERE tenant_key=? AND

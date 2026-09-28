@@ -21,6 +21,8 @@ Connect each tenant's company Google Calendar to Oryon so generated orders appea
 
 The integration lives inside the existing `Entregas da Semana` page. Its header contains a Google Calendar button with a calendar icon. The button shows a green connected state, a neutral disconnected state, or a red warning when synchronization requires attention.
 
+Before connecting the company account, an administrator may register the Google OAuth Client ID and Client Secret in this same panel. The authorized redirect URI is shown ready to copy into Google Cloud. This removes the need to edit server environment variables for each installation while keeping the Client Secret server-side and encrypted.
+
 Selecting the button opens an integration panel with:
 
 - connection state and connected company email;
@@ -42,7 +44,7 @@ Order screens do not gain ordinary calendar controls in the first version. Order
 
 The integration uses Google OAuth 2.0. Administrators authorize the company account through Google's consent screen; Oryon never asks for or stores the Google password.
 
-Use the narrowest practical Calendar scopes. On first connection, Oryon creates a dedicated calendar named `Entregas Oryon` in the company account instead of using the primary calendar. The company shares only this dedicated calendar with authorized people. Tokens are stored server-side only, encrypted at rest with an application encryption key that is separate from the database. Refresh tokens, client secrets, and access tokens must never be returned to the browser, written to logs, or stored in repository files.
+Use the narrowest practical Calendar scopes. On first connection, Oryon creates a dedicated calendar named `Entregas Oryon` in the company account instead of using the primary calendar. The company shares only this dedicated calendar with authorized people. Tokens and OAuth client secrets are stored server-side only, encrypted at rest with an application encryption key that is separate from the database. When no managed key is supplied, Oryon generates a protected persistent key inside the installation data directory. Refresh tokens, client secrets, and access tokens must never be returned to the browser, written to logs, or stored in repository files.
 
 State and PKCE protections bind the OAuth callback to the initiating authenticated administrator. The callback validates the state, stores the encrypted credential, and redirects to the settings page with a non-sensitive result. Disconnecting revokes the Google grant when possible and deletes the local encrypted credential.
 

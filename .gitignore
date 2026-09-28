@@ -3,6 +3,8 @@
 .env.*
 !.env.example
 server/.dev-jwt-secret
+server/.calendar-encryption-key
+**/.calendar-encryption-key
 
 # Dependencies
 node_modules/

@@ -77,25 +77,28 @@ VITE_APP_ORDER_PREFIX=CLI
 
 ### Google Agenda das entregas
 
-A configuração aparece para administradores em `Entregas da Semana > Google Agenda`. O botão fica visível mesmo antes da configuração do servidor e informa claramente quando as credenciais ainda estão ausentes.
+A configuração aparece para administradores em `Entregas da Semana > Google Agenda`. O administrador cadastra o Client ID e o Client Secret diretamente nesse painel; não é necessário editar o servidor. O Client Secret é criptografado e nunca é devolvido ao navegador.
 
 1. No Google Cloud, crie ou selecione um projeto e ative a **Google Calendar API**.
 2. Configure a tela de consentimento OAuth e inclua o e-mail da empresa como usuário de teste enquanto o aplicativo não estiver publicado.
 3. Crie uma credencial OAuth do tipo **Aplicativo da Web**.
-4. Cadastre exatamente a URI de redirecionamento `https://SEU-DOMINIO/api/calendar/oauth/callback`.
-5. Adicione ao `.env` da instalação:
+4. Copie do painel do Oryon a `URI de redirecionamento autorizada` e cadastre-a exatamente igual no Google Cloud.
+5. Cole o Client ID e o Client Secret no painel e selecione `Salvar configuração`.
+6. Selecione `Conectar e-mail Google` e autorize a conta da empresa.
+
+As variáveis abaixo continuam disponíveis apenas como configuração opcional para instalações gerenciadas:
 
 ```env
 APP_TENANT_KEY=atos
 GOOGLE_CALENDAR_CLIENT_ID=seu-client-id
 GOOGLE_CALENDAR_CLIENT_SECRET=seu-client-secret
 GOOGLE_CALENDAR_REDIRECT_URI=https://SEU-DOMINIO/api/calendar/oauth/callback
-CALENDAR_TOKEN_ENCRYPTION_KEY=uma-chave-aleatoria-longa
+CALENDAR_TOKEN_ENCRYPTION_KEY=uma-chave-aleatoria-longa-opcional
 ```
 
-No Linux, a chave pode ser criada com `openssl rand -base64 32`. Ela deve permanecer estável e secreta: trocá-la invalida a credencial Google armazenada.
+Quando `CALENDAR_TOKEN_ENCRYPTION_KEY` não é informada, o Oryon gera uma chave persistente e protegida dentro de `APP_DATA_DIR`. Essa pasta deve fazer parte do backup da instalação.
 
-Depois do deploy e reinício do backend, abra `Entregas da Semana`, selecione `Google Agenda` e autorize o e-mail da empresa. O Oryon cria o calendário separado `Entregas Oryon`; compartilhe somente esse calendário com as pessoas autorizadas. No iPhone, use o aplicativo Google Agenda ou adicione a mesma conta Google ao Calendário do iOS e habilite `Entregas Oryon`.
+Depois da autorização, o Oryon cria o calendário separado `Entregas Oryon`; compartilhe somente esse calendário com as pessoas autorizadas. No iPhone, use o aplicativo Google Agenda ou adicione a mesma conta Google ao Calendário do iOS e habilite `Entregas Oryon`.
 
 Pedidos futuros podem ser importados pelo botão `Sincronizar pedidos ativos`. Falhas do Google não bloqueiam pedidos: ficam registradas no painel para nova tentativa. Desconectar remove a credencial local; pedidos e datas do ERP permanecem intactos.
 

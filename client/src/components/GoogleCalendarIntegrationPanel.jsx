@@ -12,6 +12,9 @@ const CalendarIcon = ({ size = 18 }) => (
 const initialIntegration = {
     configured: false,
     server_ready: false,
+    credentials_configured: false,
+    client_id: '',
+    redirect_uri: '',
     reminder_days: [7, 5, 3, 1, 0],
     health: 'disconnected',
     pending_count: 0,
@@ -25,6 +28,9 @@ export default function GoogleCalendarIntegrationPanel({ token, apiBaseUrl, labe
     const [busy, setBusy] = useState(false);
     const [loading, setLoading] = useState(true);
     const [message, setMessage] = useState('');
+    const [showCredentialForm, setShowCredentialForm] = useState(false);
+    const [clientId, setClientId] = useState('');
+    const [clientSecret, setClientSecret] = useState('');
 
     const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
     const endpoint = `${apiBaseUrl}/calendar/integration`;
@@ -34,6 +40,8 @@ export default function GoogleCalendarIntegrationPanel({ token, apiBaseUrl, labe
             const { data } = await axios.get(endpoint, { headers });
             setIntegration(data);
             setReminders((data.reminder_days || initialIntegration.reminder_days).map(String));
+            setClientId(data.client_id || '');
+            if (!data.credentials_configured) setShowCredentialForm(true);
         } catch (error) {
             setMessage(error.response?.data?.message || 'Não foi possível consultar o Google Agenda.');
         } finally {
@@ -80,6 +88,24 @@ export default function GoogleCalendarIntegrationPanel({ token, apiBaseUrl, labe
         const { data } = await axios.post(`${apiBaseUrl}/calendar/oauth/start`, {}, { headers });
         window.location.assign(data.authorization_url);
     }, 'Abrindo o Google...');
+
+    const saveConfiguration = () => run(async () => {
+        await axios.put(`${apiBaseUrl}/calendar/configuration`, {
+            client_id: clientId,
+            client_secret: clientSecret
+        }, { headers });
+        setClientSecret('');
+        setShowCredentialForm(false);
+    }, 'Configuração salva. Agora conecte o e-mail da empresa.');
+
+    const copyRedirectUri = async () => {
+        try {
+            await navigator.clipboard.writeText(integration.redirect_uri);
+            setMessage('URI de redirecionamento copiada.');
+        } catch {
+            setMessage('Selecione e copie a URI de redirecionamento.');
+        }
+    };
 
     const save = () => run(async () => {
         const reminder_days = normalizeCalendarReminderInputs(reminders);
@@ -136,12 +162,49 @@ export default function GoogleCalendarIntegrationPanel({ token, apiBaseUrl, labe
 
                     {!integration.configured ? (
                         <div className="calendar-empty">
-                            {!integration.server_ready && (
-                                <p className="calendar-warning">A integração ainda precisa das credenciais do Google configuradas no servidor.</p>
+                            {(showCredentialForm || !integration.credentials_configured) ? (
+                                <section className="calendar-credentials">
+                                    <div className="calendar-credentials__heading">
+                                        <div>
+                                            <strong>Configuração do Google</strong>
+                                            <p>Crie uma credencial “Aplicativo da Web” no Google Cloud e informe os dados abaixo.</p>
+                                        </div>
+                                        <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Abrir Google Cloud</a>
+                                    </div>
+
+                                    <label className="calendar-field">
+                                        <span>Client ID</span>
+                                        <input type="text" value={clientId} onChange={event => setClientId(event.target.value)} placeholder="000000000000-xxxx.apps.googleusercontent.com" autoComplete="off" />
+                                    </label>
+                                    <label className="calendar-field">
+                                        <span>Client Secret</span>
+                                        <input type="password" value={clientSecret} onChange={event => setClientSecret(event.target.value)} placeholder={integration.credentials_configured ? 'Deixe vazio para manter o atual' : 'Cole o Client Secret'} autoComplete="new-password" />
+                                    </label>
+                                    <label className="calendar-field">
+                                        <span>URI de redirecionamento autorizada</span>
+                                        <div className="calendar-copy-field">
+                                            <input type="text" value={integration.redirect_uri || ''} readOnly />
+                                            <button type="button" onClick={copyRedirectUri}>Copiar URI</button>
+                                        </div>
+                                        <small>Cadastre esta URI exatamente igual no Google Cloud.</small>
+                                    </label>
+
+                                    <div className="calendar-credential-actions">
+                                        {integration.credentials_configured && <button type="button" onClick={() => setShowCredentialForm(false)}>Cancelar</button>}
+                                        <button type="button" className="calendar-primary" onClick={saveConfiguration} disabled={busy || !clientId.trim() || (!clientSecret && !integration.credentials_configured)}>Salvar configuração</button>
+                                    </div>
+                                </section>
+                            ) : (
+                                <>
+                                    <div className="calendar-ready"><strong>Configuração pronta</strong><span>Agora escolha o e-mail Google da empresa.</span></div>
+                                    <div className="calendar-connect-actions">
+                                        <button type="button" className="calendar-primary" onClick={connect} disabled={busy || !integration.server_ready}>
+                                            <CalendarIcon /> Conectar e-mail Google
+                                        </button>
+                                        <button type="button" onClick={() => setShowCredentialForm(true)}>Alterar configuração</button>
+                                    </div>
+                                </>
                             )}
-                            <button type="button" className="calendar-primary" onClick={connect} disabled={busy || !integration.server_ready}>
-                                <CalendarIcon /> Conectar e-mail Google
-                            </button>
                         </div>
                     ) : (
                         <>
@@ -205,6 +268,21 @@ const panelCss = `
     .calendar-message, .calendar-warning { margin:0; padding:12px 14px; border-radius:8px; background:#f8fafc; border:1px solid #e2e8f0; color:#475569; font-size:.84rem; }
     .calendar-warning { color:#92400e; background:#fffbeb; border-color:#fde68a; }
     .calendar-empty { display:grid; gap:14px; justify-items:start; }
+    .calendar-credentials { width:100%; display:grid; gap:14px; }
+    .calendar-credentials__heading { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+    .calendar-credentials__heading strong { color:#0f172a; font-size:.95rem; }
+    .calendar-credentials__heading p { margin:4px 0 0; color:#64748b; font-size:.82rem; }
+    .calendar-credentials__heading a { flex:0 0 auto; color:#1d4ed8; font-size:.78rem; font-weight:700; text-decoration:none; }
+    .calendar-field { display:grid; gap:6px; color:#334155; font-size:.78rem; font-weight:700; }
+    .calendar-field input { width:100%; min-height:44px; box-sizing:border-box; padding:0 12px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#0f172a; font-size:16px; }
+    .calendar-field input:focus { outline:2px solid #bbf7d0; border-color:#16a34a; }
+    .calendar-field small { color:#64748b; font-size:.72rem; font-weight:500; }
+    .calendar-copy-field { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:8px; }
+    .calendar-copy-field button, .calendar-credential-actions > button, .calendar-connect-actions > button { min-height:44px; padding:0 14px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#334155; font-weight:700; cursor:pointer; }
+    .calendar-credential-actions, .calendar-connect-actions { display:flex; flex-wrap:wrap; gap:8px; }
+    .calendar-ready { width:100%; box-sizing:border-box; display:flex; flex-direction:column; gap:4px; padding:12px 14px; border:1px solid #a7f3d0; border-radius:8px; background:#ecfdf5; }
+    .calendar-ready strong { color:#065f46; font-size:.86rem; }
+    .calendar-ready span { color:#047857; font-size:.78rem; }
     .calendar-section { display:grid; gap:14px; padding-top:2px; }
     .calendar-reminders { display:grid; grid-template-columns:repeat(5, minmax(64px, 1fr)); gap:8px; }
     .calendar-reminders label { display:grid; gap:5px; color:#64748b; font-size:.7rem; font-weight:700; }
@@ -225,5 +303,5 @@ const panelCss = `
     .calendar-actions { display:flex; flex-wrap:wrap; gap:8px; padding-top:2px; }
     .calendar-actions .calendar-danger { color:#b91c1c; border-color:#fecaca; margin-left:auto; }
     @media (hover:hover) and (pointer:fine) { .calendar-trigger:hover, .calendar-actions button:hover, .calendar-actions a:hover { background:#f8fafc; } .calendar-primary:hover { background:#14532d; } }
-    @media (max-width:640px) { .calendar-trigger span { display:none; } .calendar-trigger { width:44px; padding:0; justify-content:center; } .calendar-reminders { grid-template-columns:repeat(5, minmax(50px, 1fr)); } .calendar-health { grid-template-columns:1fr 1fr; } .calendar-health div:last-child { grid-column:1 / -1; } .calendar-actions { display:grid; grid-template-columns:1fr; } .calendar-actions .calendar-danger { margin-left:0; } .calendar-primary { width:100%; } }
+    @media (max-width:640px) { .calendar-trigger span { display:none; } .calendar-trigger { width:44px; padding:0; justify-content:center; } .calendar-reminders { grid-template-columns:repeat(5, minmax(50px, 1fr)); } .calendar-health { grid-template-columns:1fr 1fr; } .calendar-health div:last-child { grid-column:1 / -1; } .calendar-actions { display:grid; grid-template-columns:1fr; } .calendar-actions .calendar-danger { margin-left:0; } .calendar-primary { width:100%; } .calendar-credentials__heading { display:grid; } .calendar-copy-field { grid-template-columns:1fr; } .calendar-copy-field button { width:100%; } .calendar-credential-actions, .calendar-connect-actions { display:grid; grid-template-columns:1fr; width:100%; } }
 `;

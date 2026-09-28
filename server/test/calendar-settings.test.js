@@ -19,6 +19,9 @@ test('banco possui persistencia segura e idempotente do calendario', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'database.js'), 'utf8');
     assert.match(source, /CREATE TABLE IF NOT EXISTS calendar_integrations/);
     assert.match(source, /encrypted_refresh_token/);
+    assert.match(source, /google_client_id/);
+    assert.match(source, /encrypted_client_secret/);
+    assert.match(source, /oauth_redirect_uri/);
     assert.match(source, /CREATE TABLE IF NOT EXISTS calendar_oauth_sessions/);
     assert.match(source, /expires_at/);
     assert.match(source, /CREATE TABLE IF NOT EXISTS order_calendar_events/);

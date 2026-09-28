@@ -5,10 +5,15 @@ const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 const { appConfig } = require('../config/appConfig');
 const { DEFAULT_REMINDER_DAYS, normalizeReminderDays } = require('../utils/calendarSettings');
 const { createGoogleCalendarClient, encryptCredential, decryptCredential } = require('../services/googleCalendarClient');
+const {
+    resolveCalendarEncryptionKey,
+    defaultRedirectUri,
+    buildGoogleConfig,
+    hasGoogleConfiguration
+} = require('../services/calendarCredentials');
 
 const router = express.Router();
 const adminOnly = [authenticateToken, authorizeRole(['admin'])];
-const google = createGoogleCalendarClient();
 
 function get(sql, params = []) {
     return new Promise((resolve, reject) => db.get(sql, params, (error, row) => error ? reject(error) : resolve(row)));
@@ -25,7 +30,10 @@ function safeIntegration(row, counts = {}) {
     const reminderDays = (() => { try { return normalizeReminderDays(JSON.parse(row?.reminder_days || '[]')); } catch { return [...DEFAULT_REMINDER_DAYS]; } })();
     return {
         configured: Boolean(row?.enabled),
-        server_ready: google.isConfigured(),
+        server_ready: hasGoogleConfiguration(row),
+        credentials_configured: hasGoogleConfiguration(row),
+        client_id: row?.google_client_id || process.env.GOOGLE_CALENDAR_CLIENT_ID || null,
+        redirect_uri: row?.oauth_redirect_uri || process.env.GOOGLE_CALENDAR_REDIRECT_URI || defaultRedirectUri(),
         account_email: row?.account_email || null,
         calendar_name: row?.calendar_name || 'Entregas Oryon',
         calendar_url: row?.calendar_url || null,
@@ -53,9 +61,47 @@ router.get('/calendar/integration', ...adminOnly, async (req, res) => {
     }
 });
 
+router.put('/calendar/configuration', ...adminOnly, async (req, res) => {
+    try {
+        const clientId = String(req.body?.client_id || '').trim();
+        const clientSecret = String(req.body?.client_secret || '').trim();
+        if (!clientId || clientId.length > 500) return res.status(400).json({ message: 'Informe um Client ID válido.' });
+
+        const existing = await get('SELECT google_client_id, encrypted_client_secret FROM calendar_integrations WHERE tenant_key=?', [appConfig.tenantKey]);
+        if (!clientSecret && !existing?.encrypted_client_secret) {
+            return res.status(400).json({ message: 'Informe o Client Secret do Google.' });
+        }
+        if (!clientSecret && existing?.google_client_id && existing.google_client_id !== clientId) {
+            return res.status(400).json({ message: 'Informe o Client Secret correspondente ao novo Client ID.' });
+        }
+        if (clientSecret && (clientSecret.length < 6 || clientSecret.length > 1000)) {
+            return res.status(400).json({ message: 'Informe um Client Secret válido.' });
+        }
+
+        const encryptedSecret = clientSecret
+            ? encryptCredential(clientSecret, resolveCalendarEncryptionKey())
+            : existing.encrypted_client_secret;
+        const redirectUri = defaultRedirectUri();
+        await run(`INSERT INTO calendar_integrations
+            (tenant_key, provider, google_client_id, encrypted_client_secret, oauth_redirect_uri, reminder_days, enabled, health, updated_at)
+            VALUES (?, 'google', ?, ?, ?, ?, 0, 'disconnected', CURRENT_TIMESTAMP)
+            ON CONFLICT(tenant_key) DO UPDATE SET google_client_id=excluded.google_client_id,
+            encrypted_client_secret=excluded.encrypted_client_secret, oauth_redirect_uri=excluded.oauth_redirect_uri,
+            encrypted_refresh_token=NULL, enabled=0, health='disconnected', account_email=NULL,
+            calendar_id=NULL, calendar_url=NULL, last_error=NULL, updated_at=CURRENT_TIMESTAMP`,
+        [appConfig.tenantKey, clientId, encryptedSecret, redirectUri, JSON.stringify(DEFAULT_REMINDER_DAYS)]);
+        res.json({ credentials_configured: true, client_id: clientId, redirect_uri: redirectUri });
+    } catch (error) {
+        console.error('Falha ao salvar configuração do Google Agenda:', error.message);
+        res.status(500).json({ message: 'Não foi possível salvar a configuração do Google Agenda.' });
+    }
+});
+
 router.post('/calendar/oauth/start', ...adminOnly, async (req, res) => {
     try {
-        if (!google.isConfigured()) return res.status(503).json({ message: 'Google Agenda ainda não foi configurado no servidor.' });
+        const integration = await get('SELECT * FROM calendar_integrations WHERE tenant_key=?', [appConfig.tenantKey]);
+        if (!hasGoogleConfiguration(integration)) return res.status(503).json({ message: 'Configure o Client ID e o Client Secret nesta tela.' });
+        const google = createGoogleCalendarClient({ config: buildGoogleConfig(integration) });
         const state = crypto.randomBytes(32).toString('base64url');
         const verifier = crypto.randomBytes(48).toString('base64url');
         const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
@@ -78,13 +124,16 @@ router.get('/calendar/oauth/callback', async (req, res) => {
             WHERE state_hash = ? AND expires_at > CURRENT_TIMESTAMP`, [stateHash]);
         if (!session) return redirect('error');
         await run('DELETE FROM calendar_oauth_sessions WHERE state_hash = ?', [stateHash]);
+        const integration = await get('SELECT * FROM calendar_integrations WHERE tenant_key=?', [session.tenant_key]);
+        if (!hasGoogleConfiguration(integration)) return redirect('error');
+        const google = createGoogleCalendarClient({ config: buildGoogleConfig(integration) });
         const tokens = await google.exchangeCode(String(req.query.code), session.code_verifier);
         if (!tokens.refresh_token) throw new Error('O Google não forneceu autorização permanente. Tente conectar novamente.');
         const [email, calendar] = await Promise.all([
             google.getAccountEmail(tokens.access_token),
             google.ensureDeliveryCalendar(tokens.access_token)
         ]);
-        const encrypted = encryptCredential(tokens.refresh_token, process.env.CALENDAR_TOKEN_ENCRYPTION_KEY);
+        const encrypted = encryptCredential(tokens.refresh_token, resolveCalendarEncryptionKey());
         await run(`INSERT INTO calendar_integrations
             (tenant_key, provider, account_email, calendar_id, calendar_name, calendar_url, encrypted_refresh_token, reminder_days, enabled, health, last_error, updated_at)
             VALUES (?, 'google', ?, ?, ?, ?, ?, ?, 1, 'connected', NULL, CURRENT_TIMESTAMP)
@@ -137,10 +186,11 @@ router.post('/calendar/integration/sync-active', ...adminOnly, async (req, res) 
 
 router.delete('/calendar/integration', ...adminOnly, async (req, res) => {
     try {
-        const integration = await get('SELECT encrypted_refresh_token FROM calendar_integrations WHERE tenant_key=?', [appConfig.tenantKey]);
+        const integration = await get('SELECT * FROM calendar_integrations WHERE tenant_key=?', [appConfig.tenantKey]);
         if (integration?.encrypted_refresh_token) {
             try {
-                const token = decryptCredential(integration.encrypted_refresh_token, process.env.CALENDAR_TOKEN_ENCRYPTION_KEY);
+                const google = createGoogleCalendarClient({ config: buildGoogleConfig(integration) });
+                const token = decryptCredential(integration.encrypted_refresh_token, resolveCalendarEncryptionKey());
                 await google.revokeToken(token);
             } catch { /* A remoção local não depende da revogação remota. */ }
         }

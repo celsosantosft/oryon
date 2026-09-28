@@ -56,7 +56,7 @@ function createGoogleCalendarClient({ http = axios, config = {} } = {}) {
     }
 
     return {
-        isConfigured: () => Boolean(resolved.clientId && resolved.clientSecret && resolved.redirectUri && process.env.CALENDAR_TOKEN_ENCRYPTION_KEY),
+        isConfigured: () => Boolean(resolved.clientId && resolved.clientSecret && resolved.redirectUri),
         buildAuthorizationUrl({ state, codeChallenge }) {
             requireConfig();
             const params = new URLSearchParams({
