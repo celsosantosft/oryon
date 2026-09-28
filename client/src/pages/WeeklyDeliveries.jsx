@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import Swal from 'sweetalert2';
 import { formatMoney } from '../utils/helpers';
 import { buildWeeklyDeliveryView, getDeliveryFinancialSummary } from '../utils/weeklyDeliveries';
+import GoogleCalendarIntegrationPanel from '../components/GoogleCalendarIntegrationPanel';
+import { isCalendarAdministrator } from '../utils/calendarIntegration';
 
 // ============================================================================
 // --- ÍCONES ---
@@ -146,7 +148,8 @@ const DeliveryRow = React.memo(({ order, onMarkDelivered, onViewDetails }) => {
 // --- MAIN COMPONENT ---
 // ============================================================================
 const WeeklyDeliveries = () => {
-    const { token, API_BASE_URL } = useAuth(); 
+    const { user, token, API_BASE_URL } = useAuth();
+    const isCalendarAdmin = isCalendarAdministrator(user?.role);
     
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -303,6 +306,7 @@ const WeeklyDeliveries = () => {
                         </p>
                     </div>
                 </div>
+                {isCalendarAdmin && <GoogleCalendarIntegrationPanel token={token} apiBaseUrl={API_BASE_URL} label="Google Agenda" />}
             </header>
 
             <div style={styles.tableContainer}>

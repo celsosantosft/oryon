@@ -17,6 +17,11 @@ const { appPaths } = require('../config/paths');
 const { normalizePlayerNumber } = require('../utils/playerNumber');
 const { chooseEffectiveOrderItems } = require('../utils/effectiveOrderItems');
 const { syncConvertedOrdersFromQuote } = require('../utils/convertedOrderSync');
+const {
+    enqueueUpsert: enqueueCalendarUpsert,
+    enqueueDelete: enqueueCalendarDelete,
+    enqueueForCurrentState: enqueueCalendarState
+} = require('../services/orderCalendarSync');
 
 db.run("ALTER TABLE orders ADD COLUMN amount_paid REAL DEFAULT 0", (err) => { /* Ignora se já existir */ });
 db.run("ALTER TABLE orders ADD COLUMN client_id INTEGER", () => {});
@@ -1242,6 +1247,7 @@ router.post('/api/orders', authenticateToken, authorizeRole(['admin', 'gerente',
                 saveOrderProductLines(orderId, productLines, (linesErr) => {
                     if (linesErr) return res.status(500).json({ error: linesErr.message });
                     db.run(`INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`, [orderId, status || 'Criação de Arte', req.user.id]);
+                    enqueueCalendarUpsert(orderId).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
                     res.json({ message: "Pedido criado!", tracking_code: trackingCode, portal_path: buildPortalPath({ tracking_code: trackingCode, portal_token: portalToken }) });
                     syncFinanceAfterResponse(orderId);
                 });
@@ -1344,6 +1350,7 @@ router.put('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerent
             if (this.changes === 0) return res.status(404).json({ error: 'Pedido não encontrado.' });
             saveOrderProductLines(req.params.id, productLines, (linesErr) => {
                 if (linesErr) return res.status(500).json({ error: linesErr.message });
+                enqueueCalendarUpsert(req.params.id).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
                 res.json({ message: "Pedido atualizado." });
                 syncFinanceAfterResponse(req.params.id);
             });
@@ -1370,10 +1377,12 @@ router.get('/api/orders', authenticateToken, (req, res) => {
 });
 
 router.delete('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
-    db.run('DELETE FROM order_history WHERE order_id=?', [req.params.id], () => {
-        db.run('DELETE FROM transactions WHERE order_id=?', [req.params.id], () => { 
-            db.run('DELETE FROM order_items WHERE order_id=?', [req.params.id], () => { 
-                db.run('DELETE FROM orders WHERE id=?', [req.params.id], () => res.json({ message: 'Pedido excluído.' }));
+    enqueueCalendarDelete(req.params.id).catch(error => console.error('Falha ao enfileirar remoção do Google Agenda:', error.message)).finally(() => {
+        db.run('DELETE FROM order_history WHERE order_id=?', [req.params.id], () => {
+            db.run('DELETE FROM transactions WHERE order_id=?', [req.params.id], () => {
+                db.run('DELETE FROM order_items WHERE order_id=?', [req.params.id], () => {
+                    db.run('DELETE FROM orders WHERE id=?', [req.params.id], () => res.json({ message: 'Pedido excluído.' }));
+                });
             });
         });
     });
@@ -1469,6 +1478,7 @@ router.post('/api/orders/:code/status', authenticateToken, authorizeRole(['admin
         if (!order) return res.status(404).json({ message: "Não encontrado." });
         db.run(`UPDATE orders SET status=?, board_order=999999 WHERE id=?`, [new_status, order.id], err2 => {
             if (err2) return res.status(500).json({ error: err2.message });
+            enqueueCalendarState(order.id).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
             db.run(`INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`, [order.id, new_status, req.user.id]);
             syncFinanceWithOrder(order.id, (syncErr) => {
                 if (syncErr) return res.status(500).json({ error: syncErr.message });
@@ -1495,6 +1505,7 @@ router.post('/api/orders/:code/reset', authenticateToken, authorizeRole(['admin'
 
         db.run(`DELETE FROM order_history WHERE order_id=?`, [order.id], () => {
             db.run(`UPDATE orders SET status='Criação de Arte', board_order=999999 WHERE id=?`, [order.id], () => {
+                enqueueCalendarUpsert(order.id).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
                 db.run(`INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, 'Produção Reiniciada', ?)`, [order.id, req.user.id]);
                 syncFinanceWithOrder(order.id, (syncErr) => {
                     if (syncErr) return res.status(500).json({ error: syncErr.message });

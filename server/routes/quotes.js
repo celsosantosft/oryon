@@ -6,6 +6,7 @@ const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 const { appConfig, buildTrackingCode } = require('../config/appConfig');
 const { createLayoutUpload } = require('../utils/layoutUpload');
 const { buildOrderCodeFromQuoteCode } = require('../utils/quoteOrderTracking');
+const { enqueueUpsert: enqueueCalendarUpsert } = require('../services/orderCalendarSync');
 db.run("ALTER TABLE quotes ADD COLUMN portal_token TEXT", () => {});
 db.run("ALTER TABLE orders ADD COLUMN portal_token TEXT", () => {});
 
@@ -719,6 +720,7 @@ router.post('/api/quotes/:id/convert', authenticateToken, authorizeRole(['admin'
 
                             db.run('COMMIT', (commitErr) => {
                                 if (commitErr) return res.status(500).json({ error: 'Erro ao finalizar sincronização do pedido.' });
+                                enqueueCalendarUpsert(order.id).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
                                 syncFinanceWithOrder(order.id);
                                 return res.json({
                                     message: 'Pedido existente sincronizado!',
@@ -817,6 +819,7 @@ router.post('/api/quotes/:id/convert', authenticateToken, authorizeRole(['admin'
                             db.run(`INSERT INTO notifications (target_role, title, message) VALUES (?, ?, ?)`, ['designer', 'Novo Pedido para Arte', `O orçamento aprovado de ${quote.client_name} entrou na fila.`]);
                             db.run('COMMIT', (commitErr) => {
                                 if (commitErr) return res.status(500).json({ error: 'Erro ao finalizar conversão.' });
+                                enqueueCalendarUpsert(orderId).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
                                 syncFinanceWithOrder(orderId);
                                 res.json({ message: 'Orçamento convertido em pedido!', tracking_code: newOrderCode, copied_items: copiedCount || 0 });
                             });

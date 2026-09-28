@@ -75,6 +75,30 @@ VITE_APP_ORDER_PREFIX=CLI
 
 ## Deploy automatico pelo GitHub
 
+### Google Agenda das entregas
+
+A configuração aparece para administradores em `Entregas da Semana > Google Agenda`. O botão fica visível mesmo antes da configuração do servidor e informa claramente quando as credenciais ainda estão ausentes.
+
+1. No Google Cloud, crie ou selecione um projeto e ative a **Google Calendar API**.
+2. Configure a tela de consentimento OAuth e inclua o e-mail da empresa como usuário de teste enquanto o aplicativo não estiver publicado.
+3. Crie uma credencial OAuth do tipo **Aplicativo da Web**.
+4. Cadastre exatamente a URI de redirecionamento `https://SEU-DOMINIO/api/calendar/oauth/callback`.
+5. Adicione ao `.env` da instalação:
+
+```env
+APP_TENANT_KEY=atos
+GOOGLE_CALENDAR_CLIENT_ID=seu-client-id
+GOOGLE_CALENDAR_CLIENT_SECRET=seu-client-secret
+GOOGLE_CALENDAR_REDIRECT_URI=https://SEU-DOMINIO/api/calendar/oauth/callback
+CALENDAR_TOKEN_ENCRYPTION_KEY=uma-chave-aleatoria-longa
+```
+
+No Linux, a chave pode ser criada com `openssl rand -base64 32`. Ela deve permanecer estável e secreta: trocá-la invalida a credencial Google armazenada.
+
+Depois do deploy e reinício do backend, abra `Entregas da Semana`, selecione `Google Agenda` e autorize o e-mail da empresa. O Oryon cria o calendário separado `Entregas Oryon`; compartilhe somente esse calendário com as pessoas autorizadas. No iPhone, use o aplicativo Google Agenda ou adicione a mesma conta Google ao Calendário do iOS e habilite `Entregas Oryon`.
+
+Pedidos futuros podem ser importados pelo botão `Sincronizar pedidos ativos`. Falhas do Google não bloqueiam pedidos: ficam registradas no painel para nova tentativa. Desconectar remove a credencial local; pedidos e datas do ERP permanecem intactos.
+
 O repositorio tem um workflow em `.github/workflows/deploy-production.yml`.
 Sempre que houver `push` na branch `main`, o GitHub Actions:
 

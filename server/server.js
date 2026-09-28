@@ -39,6 +39,7 @@ const ordersRoutes = require('./routes/orders');
 const { router: reverterPedidoParaOrcamentoRoutes } = require('./routes/reverterPedidoParaOrcamento');
 const financeRoutes = require('./routes/finance'); // ?? C�rebro Financeiro importado
 const corteRoutes = require('./routes/corte');
+const calendarRoutes = require('./routes/calendar');
 let whatsappRoutes = null;
 
 try {
@@ -56,9 +57,12 @@ app.use('/api', ordersRoutes);
 app.use('/api', reverterPedidoParaOrcamentoRoutes);
 app.use('/api', financeRoutes); // ?? M�dulo Financeiro ativado no motor!
 app.use('/api', corteRoutes);
+app.use('/api', calendarRoutes);
 if (whatsappRoutes) {
     app.use('/api', whatsappRoutes);
 }
+
+require('./services/orderCalendarSync').start();
 
 // --- START SERVER ---
 app.listen(PORT, '0.0.0.0', () => {

@@ -8,3 +8,6 @@
 - Operational views must use real database records and show explicit errors when loading fails.
 - A ficha de produção deve usar a grade e a lista nominal atuais do pedido. Na impressão, o layout vem primeiro e os nomes/números ficam compactos abaixo, agrupados por tamanho, priorizando uma única folha A4.
 - As rotas oficiais `/portal` usam a experiência mobile aprovada; `/portal-preview` permanece disponível para comparação e é a única que exibe o selo de teste.
+- O Google Agenda é opcional e configurado por instalação em `Entregas da Semana`. Somente pedidos gerados criam eventos; orçamentos não criam.
+- Cada pedido ativo possui no máximo um evento de dia inteiro na data de entrega. Alterações atualizam esse evento, enquanto entrega, cancelamento, exclusão ou reversão para orçamento o removem.
+- Os lembretes do calendário aceitam de um a cinco dias únicos entre 0 e 28, com padrão `7, 5, 3, 1, 0`. Falhas do Google nunca devem bloquear a operação do pedido.

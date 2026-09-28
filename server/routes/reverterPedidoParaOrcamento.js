@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
+const { enqueueDelete: enqueueCalendarDelete } = require('../services/orderCalendarSync');
 
 const router = express.Router();
 
@@ -155,6 +156,7 @@ async function reverterPedidoParaOrcamento({ orderId, userId }) {
 
         await dbRun('COMMIT');
         transactionStarted = false;
+        enqueueCalendarDelete(order.id).catch(error => console.error('Falha ao remover evento do Google Agenda:', error.message));
 
         return {
             message: 'Pedido revertido para orcamento com sucesso.',

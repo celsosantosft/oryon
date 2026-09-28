@@ -37,7 +37,8 @@ const appConfig = Object.freeze({
     quotePrefix: normalizePrefix(readConfig(['APP_QUOTE_PREFIX', 'QUOTE_PREFIX'], 'ORC'), 'ORC'),
     supportEmail: readConfig(['APP_SUPPORT_EMAIL', 'SUPPORT_EMAIL'], 'atosfardamentos@gmail.com'),
     metaLeadSource: readConfig(['APP_META_LEAD_SOURCE', 'META_LEAD_SOURCE'], 'Oryon CRM'),
-    publicAppUrl: normalizeUrl(readConfig(['PUBLIC_APP_URL', 'APP_PUBLIC_URL'], 'https://atosfardamentos.com.br'))
+    publicAppUrl: normalizeUrl(readConfig(['PUBLIC_APP_URL', 'APP_PUBLIC_URL'], 'https://atosfardamentos.com.br')),
+    tenantKey: readConfig(['APP_TENANT_KEY'], normalizePrefix(readConfig(['APP_ORDER_PREFIX', 'ORDER_PREFIX'], 'ATOS')).toLowerCase())
 });
 
 function buildTrackingCode(prefix = appConfig.orderPrefix) {

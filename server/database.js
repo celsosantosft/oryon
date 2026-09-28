@@ -634,6 +634,53 @@ function createTables() {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 
+    db.run(`CREATE TABLE IF NOT EXISTS calendar_integrations (
+        tenant_key TEXT PRIMARY KEY,
+        provider TEXT NOT NULL DEFAULT 'google',
+        account_email TEXT,
+        calendar_id TEXT,
+        calendar_name TEXT,
+        calendar_url TEXT,
+        encrypted_refresh_token TEXT,
+        reminder_days TEXT NOT NULL DEFAULT '[7,5,3,1,0]',
+        enabled INTEGER NOT NULL DEFAULT 0,
+        health TEXT NOT NULL DEFAULT 'disconnected',
+        last_error TEXT,
+        last_synced_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS calendar_oauth_sessions (
+        state_hash TEXT PRIMARY KEY,
+        tenant_key TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        code_verifier TEXT NOT NULL,
+        expires_at DATETIME NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS order_calendar_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_key TEXT NOT NULL,
+        order_id INTEGER NOT NULL,
+        event_id TEXT,
+        desired_operation TEXT NOT NULL DEFAULT 'upsert',
+        sync_state TEXT NOT NULL DEFAULT 'pending',
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        next_retry_at DATETIME,
+        last_error TEXT,
+        content_fingerprint TEXT,
+        order_snapshot_json TEXT,
+        last_synced_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (tenant_key, order_id)
+    )`);
+
+    db.run(`CREATE INDEX IF NOT EXISTS idx_order_calendar_events_due
+        ON order_calendar_events(sync_state, next_retry_at)`);
+
     db.run(`CREATE TABLE IF NOT EXISTS finance_objectives (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         template_key TEXT DEFAULT 'custom',
