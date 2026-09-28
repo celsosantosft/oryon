@@ -11,7 +11,7 @@ test('protege credencial com AES-GCM e rejeita adulteracao', () => {
     assert.throws(() => decryptCredential(`${encrypted}x`, key));
 });
 
-test('monta autorizacao Google com PKCE e escopo de calendario', () => {
+test('monta autorizacao Google com PKCE e acesso somente ao calendario criado pelo app', () => {
     const { createGoogleCalendarClient } = require('../services/googleCalendarClient');
     const client = createGoogleCalendarClient({
         config: { clientId: 'client', clientSecret: 'secret', redirectUri: 'https://app.test/callback' }
@@ -19,8 +19,28 @@ test('monta autorizacao Google com PKCE e escopo de calendario', () => {
     const url = new URL(client.buildAuthorizationUrl({ state: 'state', codeChallenge: 'challenge' }));
     assert.equal(url.searchParams.get('state'), 'state');
     assert.equal(url.searchParams.get('code_challenge'), 'challenge');
-    assert.match(url.searchParams.get('scope'), /calendar/);
+    const scopes = url.searchParams.get('scope').split(' ');
+    assert.ok(scopes.includes('https://www.googleapis.com/auth/calendar.app.created'));
+    assert.ok(!scopes.includes('https://www.googleapis.com/auth/calendar'));
     assert.equal(url.searchParams.get('access_type'), 'offline');
+});
+
+test('cria a agenda de entregas sem consultar todas as agendas da conta', async () => {
+    const requests = [];
+    const http = {
+        get: async (url) => { requests.push(['get', url]); throw new Error('nao deveria listar agendas'); },
+        post: async (url) => {
+            requests.push(['post', url]);
+            return { data: { id: 'oryon-calendar', summary: 'Entregas Oryon' } };
+        }
+    };
+    const { createGoogleCalendarClient } = require('../services/googleCalendarClient');
+    const client = createGoogleCalendarClient({ http, config: {} });
+
+    const calendar = await client.ensureDeliveryCalendar('token');
+
+    assert.equal(calendar.id, 'oryon-calendar');
+    assert.deepEqual(requests, [['post', 'https://www.googleapis.com/calendar/v3/calendars']]);
 });
 
 test('exclui evento inexistente como sucesso', async () => {

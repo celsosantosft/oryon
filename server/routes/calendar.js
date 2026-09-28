@@ -131,7 +131,7 @@ router.get('/calendar/oauth/callback', async (req, res) => {
         if (!tokens.refresh_token) throw new Error('O Google não forneceu autorização permanente. Tente conectar novamente.');
         const [email, calendar] = await Promise.all([
             google.getAccountEmail(tokens.access_token),
-            google.ensureDeliveryCalendar(tokens.access_token)
+            google.ensureDeliveryCalendar(tokens.access_token, integration.calendar_id)
         ]);
         const encrypted = encryptCredential(tokens.refresh_token, resolveCalendarEncryptionKey());
         await run(`INSERT INTO calendar_integrations

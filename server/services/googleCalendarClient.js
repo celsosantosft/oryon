@@ -63,7 +63,7 @@ function createGoogleCalendarClient({ http = axios, config = {} } = {}) {
                 client_id: resolved.clientId,
                 redirect_uri: resolved.redirectUri,
                 response_type: 'code',
-                scope: 'openid email https://www.googleapis.com/auth/calendar',
+                scope: 'openid email https://www.googleapis.com/auth/calendar.app.created',
                 access_type: 'offline',
                 prompt: 'consent',
                 state,
@@ -90,11 +90,12 @@ function createGoogleCalendarClient({ http = axios, config = {} } = {}) {
             try { return (await http.get('https://www.googleapis.com/oauth2/v2/userinfo', bearer(accessToken))).data.email; }
             catch (error) { throw sanitizeGoogleError(error); }
         },
-        async ensureDeliveryCalendar(accessToken) {
+        async ensureDeliveryCalendar(accessToken, existingCalendarId = null) {
             try {
-                const calendars = (await http.get(`${CALENDAR_API}/users/me/calendarList`, bearer(accessToken))).data.items || [];
-                const found = calendars.find(item => item.summary === 'Entregas Oryon');
-                if (found) return { id: found.id, name: found.summary, url: `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(found.id)}` };
+                if (existingCalendarId) {
+                    const existing = (await http.get(`${CALENDAR_API}/calendars/${encodeURIComponent(existingCalendarId)}`, bearer(accessToken))).data;
+                    return { id: existing.id, name: existing.summary, url: `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(existing.id)}` };
+                }
                 const created = (await http.post(`${CALENDAR_API}/calendars`, { summary: 'Entregas Oryon', timeZone: 'America/Sao_Paulo' }, bearer(accessToken))).data;
                 return { id: created.id, name: created.summary, url: `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(created.id)}` };
             } catch (error) { throw sanitizeGoogleError(error); }

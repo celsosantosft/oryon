@@ -100,6 +100,8 @@ Quando `CALENDAR_TOKEN_ENCRYPTION_KEY` não é informada, o Oryon gera uma chave
 
 Depois da autorização, o Oryon cria o calendário separado `Entregas Oryon`; compartilhe somente esse calendário com as pessoas autorizadas. No iPhone, use o aplicativo Google Agenda ou adicione a mesma conta Google ao Calendário do iOS e habilite `Entregas Oryon`.
 
+O acesso solicitado ao Google é limitado ao escopo `calendar.app.created`: o Oryon administra somente a agenda secundária criada por ele e não lê as outras agendas da conta.
+
 Pedidos futuros podem ser importados pelo botão `Sincronizar pedidos ativos`. Falhas do Google não bloqueiam pedidos: ficam registradas no painel para nova tentativa. Desconectar remove a credencial local; pedidos e datas do ERP permanecem intactos.
 
 O repositorio tem um workflow em `.github/workflows/deploy-production.yml`.
