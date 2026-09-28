@@ -11,5 +11,5 @@
 - O Google Agenda é opcional e configurado por instalação em `Entregas da Semana`. Somente pedidos gerados criam eventos; orçamentos não criam.
 - Administradores podem cadastrar as credenciais OAuth do Google no próprio painel; o Client Secret fica criptografado no servidor e nunca volta ao navegador.
 - O OAuth usa somente `calendar.app.created`: o Oryon cria e administra a agenda secundária `Entregas Oryon`, sem acesso às demais agendas da conta.
-- Cada pedido ativo possui no máximo um evento de dia inteiro na data de entrega. Alterações atualizam esse evento, enquanto entrega, cancelamento, exclusão ou reversão para orçamento o removem.
+- Cada pedido ativo possui no máximo um evento entre 07:00 e 08:00 na data de entrega, com o cliente antes do número no título e link direto para seu portal. Alterações atualizam esse evento, enquanto entrega, cancelamento, exclusão ou reversão para orçamento o removem.
 - Os lembretes do calendário aceitam de um a cinco dias únicos entre 0 e 28, com padrão `7, 5, 3, 1, 0`. Falhas do Google nunca devem bloquear a operação do pedido.

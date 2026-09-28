@@ -3,22 +3,24 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-test('formata evento de dia inteiro com lembretes e identificadores privados', () => {
+test('formata evento as 07h com cliente primeiro e link direto para o portal', () => {
     const { buildOrderCalendarEvent } = require('../services/orderCalendarSync');
     const event = buildOrderCalendarEvent({
         id: 42,
         tracking_code: '#ATOS-4242',
         client_name: 'Cliente Teste',
         delivery_date: '2026-10-20',
+        portal_token: 'token-seguro',
         sizes_json: '{"P":2,"M":3}',
         status: 'Costura Iniciada'
     }, [7, 1, 0], { tenantKey: 'atos', publicAppUrl: 'https://app.test' });
-    assert.equal(event.summary, '#ATOS-4242 - Cliente Teste');
-    assert.deepEqual(event.start, { date: '2026-10-20' });
-    assert.deepEqual(event.end, { date: '2026-10-21' });
+    assert.equal(event.summary, 'Cliente Teste - #ATOS-4242');
+    assert.deepEqual(event.start, { dateTime: '2026-10-20T07:00:00', timeZone: 'America/Sao_Paulo' });
+    assert.deepEqual(event.end, { dateTime: '2026-10-20T08:00:00', timeZone: 'America/Sao_Paulo' });
     assert.deepEqual(event.reminders.overrides.map(item => item.minutes), [10080, 1440, 0]);
     assert.equal(event.extendedProperties.private.oryonOrderId, '42');
-    assert.doesNotMatch(event.description, /token/i);
+    assert.match(event.description, /Abrir no sistema: https:\/\/app\.test\/portal\/%23ATOS-4242\?token=token-seguro/);
+    assert.doesNotMatch(event.description, /Abrir no Oryon|\/orders/);
 });
 
 test('nao cria evento para data invalida', () => {

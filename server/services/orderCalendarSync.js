@@ -32,21 +32,24 @@ function totalPieces(sizesJson) {
 }
 
 function buildOrderCalendarEvent(order, reminderDays, context = {}) {
-    const end = nextDate(order?.delivery_date);
-    if (!end) return null;
+    if (!nextDate(order?.delivery_date)) return null;
     const tenantKey = String(context.tenantKey || appConfig.tenantKey);
     const appUrl = String(context.publicAppUrl || appConfig.publicAppUrl).replace(/\/$/, '');
+    const trackingCode = order.tracking_code || `Pedido ${order.id}`;
+    const portalUrl = order.portal_token
+        ? `${appUrl}/portal/${encodeURIComponent(trackingCode)}?token=${encodeURIComponent(order.portal_token)}`
+        : `${appUrl}/orders`;
     return {
-        summary: `${order.tracking_code || `Pedido ${order.id}`} - ${order.client_name || 'Cliente'}`,
+        summary: `${order.client_name || 'Cliente'} - ${trackingCode}`,
         description: [
-            `Pedido: ${order.tracking_code || order.id}`,
+            `Pedido: ${trackingCode}`,
             `Cliente: ${order.client_name || 'Não informado'}`,
             `Peças: ${totalPieces(order.sizes_json)}`,
             `Status: ${order.status || 'Não informado'}`,
-            `Abrir no Oryon: ${appUrl}/orders`
+            `Abrir no sistema: ${portalUrl}`
         ].join('\n'),
-        start: { date: order.delivery_date },
-        end: { date: end },
+        start: { dateTime: `${order.delivery_date}T07:00:00`, timeZone: 'America/Sao_Paulo' },
+        end: { dateTime: `${order.delivery_date}T08:00:00`, timeZone: 'America/Sao_Paulo' },
         reminders: {
             useDefault: false,
             overrides: normalizeReminderDays(reminderDays).map(day => ({ method: 'popup', minutes: day * 1440 }))
