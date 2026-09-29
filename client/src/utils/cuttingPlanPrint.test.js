@@ -30,6 +30,25 @@ test('prints one A4 page per spread with back-to-front instructions', () => {
     assert.match(html, /preserveAspectRatio="xMidYMin meet"/);
 });
 
+test('keeps transformed marker labels in separate vertically spaced rows', () => {
+    const plan = buildCuttingPlan([{ grade: [
+        { tamanho: 'P', quantidade: 20 },
+        { tamanho: 'M', quantidade: 10 },
+        { tamanho: 'G', quantidade: 5 },
+        { tamanho: 'GG', quantidade: 5 }
+    ] }], 'economy');
+    const html = buildCuttingPlanPrintHtml(plan, [{ tracking_code: '#ATOS-1' }]);
+    const group = html.match(/<g class="marker-labels transformed">([\s\S]*?)<\/g>/)?.[1] || '';
+    const rows = [...group.matchAll(/<text[^>]+y="([\d.]+)"[^>]+class="([^"]+)"[^>]+font-size:([\d.]+)px/g)]
+        .map((match) => ({ y: Number(match[1]), className: match[2], fontSize: Number(match[3]) }));
+
+    assert.deepEqual(rows.map((row) => row.className), ['part', 'size', 'instruction', 'instruction']);
+    rows.slice(1).forEach((row, index) => {
+        const previous = rows[index];
+        assert.ok(row.y - previous.y >= (row.fontSize + previous.fontSize) / 2);
+    });
+});
+
 test('prints a repeated tracking code only once', () => {
     const plan = buildCuttingPlan([{ grade: [{ tamanho: 'GG', quantidade: 20 }] }], 'fewer-spreads');
     const html = buildCuttingPlanPrintHtml(plan, [

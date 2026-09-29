@@ -28,15 +28,37 @@ function fitMarkerFont(text, marker, maximum, heightRatio) {
     return Math.max(2.8, Math.min(maximum, widthLimit, marker.height * heightRatio));
 }
 
-function renderMarkerIdentity(marker, transformed = false) {
+function renderMarkerLabels(marker) {
+    const transformed = Boolean(marker.transformation);
     const partSize = fitMarkerFont(marker.label, marker, 8, transformed ? 0.16 : 0.25);
     const sizeSize = fitMarkerFont(marker.size, marker, 13, transformed ? 0.2 : 0.38);
     const centerX = marker.x + marker.width / 2;
     const centerY = marker.y + marker.height / 2;
-    const offset = Math.max(2.2, (partSize + sizeSize) * 0.24);
+    const instructionSize = transformed ? Math.max(2.8, Math.min(3.8, marker.height * 0.075)) : 0;
+    const gap = Math.max(transformed ? 1.5 : 2, Math.min(2.5, marker.height * 0.03));
+    const rows = [
+        { text: marker.label, className: 'part', fontSize: partSize },
+        { text: marker.size, className: 'size', fontSize: sizeSize },
+        ...(transformed ? [
+            { text: `MANTER ${marker.transformation.keepBack} COSTAS`, className: 'instruction', fontSize: instructionSize },
+            { text: `TRANSFORMAR ${marker.transformation.toFront} EM FRENTE`, className: 'instruction', fontSize: instructionSize }
+        ] : [])
+    ];
+    const totalHeight = rows.reduce((sum, row) => sum + row.fontSize, 0) + gap * (rows.length - 1);
+    let cursorY = centerY - totalHeight / 2;
+    const labels = rows.map((row) => {
+        const y = Math.round((cursorY + row.fontSize / 2) * 100) / 100;
+        cursorY += row.fontSize + gap;
+        const fittedWidth = row.className === 'instruction'
+            ? ` textLength="${marker.width - 4}" lengthAdjust="spacingAndGlyphs"`
+            : '';
+        return `<text x="${centerX}" y="${y}" text-anchor="middle" dominant-baseline="middle" class="${row.className}"${fittedWidth} style="font-size:${row.fontSize}px">${escapeHtml(row.text)}</text>`;
+    }).join('\n');
+
     return `
-        <text x="${centerX}" y="${centerY - offset}" text-anchor="middle" dominant-baseline="middle" class="part" style="font-size:${partSize}px">${escapeHtml(marker.label)}</text>
-        <text x="${centerX}" y="${centerY + offset}" text-anchor="middle" dominant-baseline="middle" class="size" style="font-size:${sizeSize}px">${escapeHtml(marker.size)}</text>
+        <g class="marker-labels${transformed ? ' transformed' : ''}">
+            ${labels}
+        </g>
     `;
 }
 
@@ -44,14 +66,12 @@ function renderMarkers(spread) {
     return spread.markers.map((marker) => marker.transformation ? `
         <g>
             <rect x="${marker.x}" y="${marker.y}" width="${marker.width}" height="${marker.height}" />
-            ${renderMarkerIdentity(marker, true)}
-            <text x="${marker.x + marker.width / 2}" y="${marker.y + marker.height / 2 + 10}" text-anchor="middle" class="instruction" textLength="${marker.width - 4}" lengthAdjust="spacingAndGlyphs">MANTER ${marker.transformation.keepBack} COSTAS</text>
-            <text x="${marker.x + marker.width / 2}" y="${marker.y + marker.height / 2 + 17}" text-anchor="middle" class="instruction" textLength="${marker.width - 4}" lengthAdjust="spacingAndGlyphs">TRANSFORMAR ${marker.transformation.toFront} EM FRENTE</text>
+            ${renderMarkerLabels(marker)}
         </g>
     ` : `
         <g>
             <rect x="${marker.x}" y="${marker.y}" width="${marker.width}" height="${marker.height}" />
-            ${renderMarkerIdentity(marker)}
+            ${renderMarkerLabels(marker)}
         </g>
     `).join('');
 }
