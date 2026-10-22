@@ -107,7 +107,7 @@ function App() {
                                 <Route path="/production" element={<ProductionDashboard />} />
                                 <Route path="/corte" element={
                                     <CutterRoute>
-                                        <CutterDashboard />
+                                        <CutterDashboard modern />
                                     </CutterRoute>
                                 } />
                                 <Route path="/corte-preview" element={

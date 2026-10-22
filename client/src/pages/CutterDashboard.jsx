@@ -294,7 +294,7 @@ function OrderDetails({ order, apiBaseUrl, completing, onClose, onComplete }) {
     );
 }
 
-export default function CutterDashboard({ preview = false }) {
+export default function CutterDashboard({ preview = false, modern = false }) {
     const { token, API_BASE_URL } = useAuth();
     const [orders, setOrders] = useState([]);
     const [selectedFabricId, setSelectedFabricId] = useState('');
@@ -322,12 +322,13 @@ export default function CutterDashboard({ preview = false }) {
     });
     const settingsRevisionRef = useRef(0);
     const fabricTabsRef = useRef(null);
+    const useModernCutting = preview || modern;
     const previewTheme = appConfig.theme === 'monochrome'
         ? 'cutter-preview--monochrome'
         : 'cutter-preview--default';
 
     const centerFabricTab = (button) => {
-        if (!preview || !fabricTabsRef.current || !button) return;
+        if (!useModernCutting || !fabricTabsRef.current || !button) return;
 
         const containerRect = fabricTabsRef.current.getBoundingClientRect();
         const buttonRect = button.getBoundingClientRect();
@@ -659,7 +660,7 @@ export default function CutterDashboard({ preview = false }) {
     };
 
     return (
-        <main className={`${preview ? `cutter-preview ${previewTheme}` : ''} min-h-screen bg-slate-50 text-slate-900 ${cuttingPlan ? 'pb-44' : ''}`}>
+        <main className={`${useModernCutting ? `cutter-preview ${previewTheme}` : ''} min-h-screen bg-slate-50 text-slate-900 ${cuttingPlan ? 'pb-44' : ''}`}>
             <div className="cutter-workspace mx-auto max-w-6xl px-3 py-4 sm:px-6 lg:px-8">
                 <header className="cutter-header mb-4">
                     <div className="cutter-header-kicker">

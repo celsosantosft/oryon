@@ -8,13 +8,14 @@ const layoutSource = readFileSync(new URL('../components/Layout.jsx', import.met
 const previewStylesUrl = new URL('../styles/CutterPreview.css', import.meta.url);
 const previewStyles = existsSync(previewStylesUrl) ? readFileSync(previewStylesUrl, 'utf8') : '';
 
-test('keeps the official cutting route and adds an isolated preview route', () => {
-    assert.match(appSource, /path="\/corte"[\s\S]*?<CutterDashboard \/>/);
+test('uses the approved cutting experience officially and keeps the preview route', () => {
+    assert.match(appSource, /path="\/corte"[\s\S]*?<CutterDashboard modern \/>/);
     assert.match(appSource, /path="\/corte-preview"[\s\S]*?<CutterDashboard preview \/>/);
 });
 
-test('uses the configured tenant theme only in cutting preview mode', () => {
-    assert.match(dashboardSource, /export default function CutterDashboard\(\{ preview = false \}\)/);
+test('uses the configured tenant theme in the official and preview cutting experiences', () => {
+    assert.match(dashboardSource, /export default function CutterDashboard\(\{ preview = false, modern = false \}\)/);
+    assert.match(dashboardSource, /const useModernCutting = preview \|\| modern/);
     assert.match(dashboardSource, /appConfig\.theme === 'monochrome'/);
     assert.match(dashboardSource, /cutter-preview--monochrome/);
     assert.match(dashboardSource, /cutter-preview--default/);
@@ -45,7 +46,7 @@ test('contains cutting cards inside narrow mobile viewports', () => {
 
 test('centers a selected fabric tab with accessible native scrolling', () => {
     assert.match(dashboardSource, /const fabricTabsRef = useRef\(null\)/);
-    assert.match(dashboardSource, /if \(!preview \|\| !fabricTabsRef\.current \|\| !button\) return/);
+    assert.match(dashboardSource, /if \(!useModernCutting \|\| !fabricTabsRef\.current \|\| !button\) return/);
     assert.match(dashboardSource, /window\.matchMedia\('\(prefers-reduced-motion: reduce\)'\)\.matches/);
     assert.match(dashboardSource, /fabricTabsRef\.current\.scrollTo\(\{[\s\S]*?left,[\s\S]*?behavior: reduceMotion \? 'auto' : 'smooth'/);
     assert.match(dashboardSource, /ref=\{fabricTabsRef\}/);
