@@ -3706,6 +3706,14 @@ router.delete('/whatsapp/meta/qualified-leads/history', authenticateToken, autho
     }
 });
 
+router.get('/whatsapp/meta/purchases', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
+    try {
+        res.json(await require('../services/metaPurchaseSync').diagnostics());
+    } catch {
+        res.status(500).json({ error: 'Não foi possível consultar os envios de compras para a Meta.' });
+    }
+});
+
 router.get('/whatsapp/meta/qualified-leads/history', authenticateToken, authorizeRole(WHATSAPP_ROLES), async (req, res) => {
     try {
         const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 50);

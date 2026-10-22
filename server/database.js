@@ -30,13 +30,26 @@ function safeParseDbJson(jsonString) {
 }
 
 // Conexão com o arquivo do banco
+let resolveDatabaseReady;
+let rejectDatabaseReady;
+const databaseReady = new Promise((resolve, reject) => {
+    resolveDatabaseReady = resolve;
+    rejectDatabaseReady = reject;
+});
+// Existing consumers can keep using db; startup services can wait for schema DDL.
+databaseReady.catch(() => {});
 const db = new sqlite3.Database(appPaths.databasePath, (err) => {
     if (err) {
         console.error('Erro ao conectar ao SQLite:', err.message);
+        rejectDatabaseReady(err);
     } else {
         console.log('✅ Conectado ao banco de dados SQLite.');
         db.run('PRAGMA foreign_keys = ON'); // Ativa relacionamentos (chaves estrangeiras)
         createTables();
+        db.get('SELECT 1', (readyError) => {
+            if (readyError) rejectDatabaseReady(readyError);
+            else resolveDatabaseReady();
+        });
     }
 });
 
@@ -750,4 +763,5 @@ function createTables() {
     });
 }
 
+db.ready = databaseReady;
 module.exports = db;

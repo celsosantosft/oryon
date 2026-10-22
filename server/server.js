@@ -65,6 +65,9 @@ if (whatsappRoutes) {
 require('./services/orderCalendarSync').start();
 
 // --- START SERVER ---
-app.listen(PORT, '0.0.0.0', () => {
+require('./services/metaPurchaseSync').start().then(() => app.listen(PORT, '0.0.0.0', () => {
     console.log(`?? Servidor ERP escutando na rede local (Wi-Fi) na porta ${PORT}`);
+})).catch(() => {
+    console.error('Não foi possível preparar o registro de compras Meta. Servidor não iniciado.');
+    process.exitCode = 1;
 });

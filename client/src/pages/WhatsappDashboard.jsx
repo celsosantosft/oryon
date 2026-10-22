@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import Modal from '../components/Modal';
+import MetaPurchasesPanel from '../components/MetaPurchasesPanel';
 import { compressImageSafe } from '../utils/helpers';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -854,6 +855,7 @@ const WhatsappDashboard = () => {
 
         return (
         <div className="flex h-full min-h-0 flex-col gap-4">
+            <MetaPurchasesPanel apiBaseUrl={API_BASE_URL} authConfig={authConfig} />
             <section className="shrink-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                     <div className="grid gap-3 sm:grid-cols-3">
@@ -879,7 +881,7 @@ const WhatsappDashboard = () => {
                 <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                     <div className="shrink-0 border-b border-slate-100 p-5">
                         <h2 className="text-xl font-semibold text-slate-950">Enviar lead para Meta</h2>
-                        <p className="mt-1 text-sm font-bold text-slate-500">Digite o telefone do cliente com DDD.</p>
+                        <p className="mt-1 text-sm font-bold text-slate-500">Use para qualificar um contato. Para registrar uma compra, lance o sinal pago no pedido.</p>
                     </div>
 
                     <div className="min-h-0 flex-1 overflow-y-auto p-5">

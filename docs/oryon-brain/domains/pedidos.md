@@ -1,5 +1,7 @@
 # Pedidos e Orçamentos
 
+- Meta: o primeiro sinal pago confirma a compra. Enviar `Purchase` com o valor total em BRL uma vez por pedido; parcelas não são novas compras e pedidos já pagos antes da ativação não são reenviados. Ver `docs/meta-purchase-on-deposit.md`.
+
 - Preserve the numeric tracking code when an approved quote becomes an order. Never silently substitute another order number.
 - A converted quote must leave operational quote lists and must not appear as ordinary quote history.
 - Portal lookup must accept the complete code or only its numeric portion when the record exists.
