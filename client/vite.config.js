@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from 'tailwindcss';
 import autoprefixer from 'autoprefixer';
+import { fileURLToPath } from 'node:url';
 import themePalette from './themePalette.cjs';
 
 const { applyThemePalette } = themePalette;
@@ -87,6 +88,12 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       rollupOptions: {
+        input: {
+          app: fileURLToPath(new URL('./index.html', import.meta.url)),
+          ...((env.VITE_APP_ORDER_PREFIX || 'ATOS').trim().toUpperCase() === 'ATOS' && {
+            inicioTeste: fileURLToPath(new URL('./inicio-teste/index.html', import.meta.url)),
+          }),
+        },
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return undefined;
