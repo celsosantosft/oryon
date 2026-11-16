@@ -1204,32 +1204,95 @@ const OrderDetailsModal = ({ isOpen, onClose, order, onReset, onExportTxt, onUnl
     </Modal>
 );
 
+const getPreviewDeadline = (order) => {
+    const date = parseDateSafe(order.delivery_date);
+    if (!date || Number.isNaN(date.getTime())) return { label: 'Sem prazo' };
+
+    const label = formatDateSafe(order.delivery_date);
+    if (['Entregue/Concluído', 'Cancelado', 'Arte Arquivada'].includes(order.status)) return { label };
+
+    const today = new Date();
+    date.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    const days = Math.round((date - today) / 86400000);
+    if (days < 0) return { label, note: 'Atrasado', tone: 'danger' };
+    if (days === 0) return { label, note: 'Entrega hoje', tone: 'danger' };
+    if (days === 1) return { label, note: 'Entrega amanhã', tone: 'warning' };
+    return { label };
+};
+
 const OrderRow = React.memo(({ order, isSelected, onCheckboxChange, onView, onEdit, onPrint, onStatusClick, userRole, preview, editDisabled }) => {
     const [isHovered, setIsHovered] = useState(false);
     const paid = getOrderAmountPaid(order);
     const total = normalizeMoneyValue(order.total_price);
     const isFullyPaid = paid >= total && total > 0;
+    const canEdit = userRole === 'admin' || userRole === 'gerente';
+    const selection = <label className={preview ? "orders-select-target" : undefined}><input type="checkbox" aria-label={`Selecionar pedido ${order.tracking_code}`} checked={isSelected} onChange={() => onCheckboxChange(order.id)} style={styles.checkbox} /></label>;
+    const viewOrder = () => onView(order.tracking_code);
+
+    if (preview) {
+        const deadline = getPreviewDeadline(order);
+        const statusStyle = getStatusStyle(order.status);
+        const balance = Math.max(0, total - paid);
+
+        return (
+            <tr role="row" className="orders-preview-row">
+                <td role="cell" className="orders-card-select">{selection}</td>
+                <td role="cell" className="orders-card-client">
+                    <strong>{order.client_name}</strong>
+                    <span>{order.tracking_code}</span>
+                </td>
+                <td role="cell" className="orders-card-status">
+                    <button type="button" className="orders-status" aria-label={`Alterar status de ${order.tracking_code}: ${order.status}`} onClick={() => onStatusClick(order)} style={{ backgroundColor: statusStyle.bg, color: statusStyle.color, border: statusStyle.border }}>
+                        {order.status?.replaceAll('/', '/\u200b')}
+                    </button>
+                </td>
+                <td role="cell" className="orders-card-deadline" data-tone={deadline.tone}>
+                    <span>Prazo</span>
+                    <strong>{deadline.label}</strong>
+                    {deadline.note && <span className="orders-card-deadline-note">{deadline.note}</span>}
+                </td>
+                <td role="cell" className="orders-card-financial">
+                    <dl>
+                        <div><dt>Total</dt><dd>{formatMoney(total)}</dd></div>
+                        <div><dt>Recebido</dt><dd>{formatMoney(paid)}</dd></div>
+                        <div className="orders-card-balance"><dt>Saldo pendente</dt><dd>{formatMoney(balance)}</dd></div>
+                    </dl>
+                </td>
+                <td role="cell" className="orders-card-art" data-attached={Boolean(order.layout_path)}>
+                    {order.layout_path ? <><span aria-hidden="true">{Icons.Image}</span>Arte anexada</> : 'Sem arte anexada'}
+                </td>
+                <td role="cell" className="orders-card-actions">
+                    <div>
+                        <button type="button" onClick={viewOrder}>Visualizar</button>
+                        {canEdit && <button type="button" disabled={editDisabled} onClick={() => onEdit(order)}>Editar</button>}
+                        <button type="button" onClick={() => onPrint(order)}>Imprimir</button>
+                    </div>
+                </td>
+            </tr>
+        );
+    }
 
     return (
-        <tr role={preview ? "row" : undefined} onClick={() => onView(order.tracking_code)} onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)} style={{ ...styles.tr, ...(isHovered ? styles.trHover : {}), cursor: 'pointer' }}>
-            <td role={preview ? "cell" : undefined} style={styles.td} onClick={(e) => e.stopPropagation()}><label className={preview ? "orders-select-target" : undefined}><input type="checkbox" aria-label={`Selecionar pedido ${order.tracking_code}`} checked={isSelected} onChange={() => onCheckboxChange(order.id)} style={styles.checkbox} /></label></td>
-            <td role={preview ? "cell" : undefined} style={{ ...styles.td, fontWeight: '600' }}>{order.client_name}</td>
-            <td role={preview ? "cell" : undefined} style={styles.td}>{order.tracking_code}</td>
-            <td role={preview ? "cell" : undefined} style={styles.td}>{order.layout_path ? <span style={{color:'#2563EB', display:'flex', alignItems:'center', gap:'4px', fontWeight:'600', fontSize:'0.8rem'}}>{Icons.Image} Anexado</span> : <span style={{color:'#94A3B8'}}>-</span>}</td>
-            <td role={preview ? "cell" : undefined} style={styles.td}>{preview ? <button type="button" className="orders-status" aria-label={`Alterar status de ${order.tracking_code}: ${order.status}`} onClick={(e) => { e.stopPropagation(); onStatusClick(order); }} style={{ ...styles.statusBadge, ...getStatusStyle(order.status) }}>{order.status}</button> : <span onClick={(e) => { e.stopPropagation(); onStatusClick(order); }} style={{ ...styles.statusBadge, ...getStatusStyle(order.status), cursor: 'pointer' }}>{order.status}</span>}</td>
-            <td role={preview ? "cell" : undefined} style={{...styles.td, fontWeight:'600', color:'#4B5563'}}>{preview && <span className="orders-mobile-label">Entrega</span>}{formatDateSafe(order.delivery_date)}</td>
-            <td role={preview ? "cell" : undefined} style={{...styles.td, fontWeight:'800', color:'#0F172A'}}>
-                {preview && <span className="orders-mobile-label">Total</span>}{formatMoney(total)}
+        <tr onClick={viewOrder} onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)} style={{ ...styles.tr, ...(isHovered ? styles.trHover : {}), cursor: 'pointer' }}>
+            <td style={styles.td} onClick={(e) => e.stopPropagation()}>{selection}</td>
+            <td style={{ ...styles.td, fontWeight: '600' }}>{order.client_name}</td>
+            <td style={styles.td}>{order.tracking_code}</td>
+            <td style={styles.td}>{order.layout_path ? <span style={{color:'#2563EB', display:'flex', alignItems:'center', gap:'4px', fontWeight:'600', fontSize:'0.8rem'}}>{Icons.Image} Anexado</span> : <span style={{color:'#94A3B8'}}>-</span>}</td>
+            <td style={styles.td}><span onClick={(e) => { e.stopPropagation(); onStatusClick(order); }} style={{ ...styles.statusBadge, ...getStatusStyle(order.status), cursor: 'pointer' }}>{order.status}</span></td>
+            <td style={{...styles.td, fontWeight:'600', color:'#4B5563'}}>{formatDateSafe(order.delivery_date)}</td>
+            <td style={{...styles.td, fontWeight:'800', color:'#0F172A'}}>
+                {formatMoney(total)}
                 {paid > 0 && (
                     <div style={{ fontSize: '0.7rem', color: isFullyPaid ? '#10B981' : '#F59E0B', fontWeight: '700', marginTop: '2px' }}>
                         Pago: {formatMoney(paid)}
                     </div>
                 )}
             </td>
-            <td role={preview ? "cell" : undefined} style={{...styles.td, textAlign:'right'}} onClick={(e) => e.stopPropagation()}>
+            <td style={{...styles.td, textAlign:'right'}} onClick={(e) => e.stopPropagation()}>
                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                    <button onClick={() => onView(order.tracking_code)} aria-label="Ver Detalhes" style={styles.iconButton} title="Detalhes">{Icons.Eye}</button>
-                    {(userRole === 'admin' || userRole === 'gerente') && <button disabled={editDisabled} onClick={() => onEdit(order)} aria-label="Editar e Aprovar" style={styles.iconButton} title="Editar e Aprovar">{Icons.Edit}</button>}
+                    <button onClick={viewOrder} aria-label="Ver Detalhes" style={styles.iconButton} title="Detalhes">{Icons.Eye}</button>
+                    {canEdit && <button disabled={editDisabled} onClick={() => onEdit(order)} aria-label="Editar e Aprovar" style={styles.iconButton} title="Editar e Aprovar">{Icons.Edit}</button>}
                     <button onClick={() => onPrint(order)} aria-label="Imprimir" style={styles.iconButton} title="Imprimir O.S.">{Icons.Printer}</button>
                 </div>
             </td>
@@ -1243,8 +1306,16 @@ const OrdersTable = React.memo(({ orders, selectedIds, onCheckboxChange, onView,
     return (
         <div className={preview ? "orders-results" : undefined} style={styles.tableContainer}>
             <table role={preview ? "table" : undefined} style={styles.table} aria-label="Tabela de Pedidos">
-                <thead>
-                    <tr><th scope="col" style={styles.th}></th><th scope="col" style={styles.th}>Cliente</th><th scope="col" style={styles.th}>Código</th><th scope="col" style={styles.th}>Layout</th><th scope="col" style={styles.th}>Status</th><th scope="col" style={styles.th}>Entrega</th><th scope="col" style={styles.th}>Total (R$)</th><th scope="col" style={{ ...styles.th, textAlign: 'right' }}>Ações</th></tr>
+                <thead role={preview ? "rowgroup" : undefined}>
+                    {preview ? (
+                        <tr role="row">
+                            {['Seleção', 'Cliente e código', 'Status', 'Prazo', 'Valores', 'Arte', 'Ações'].map((label) => (
+                                <th key={label} role="columnheader" scope="col" style={styles.th}>{label}</th>
+                            ))}
+                        </tr>
+                    ) : (
+                        <tr><th scope="col" style={styles.th}></th><th scope="col" style={styles.th}>Cliente</th><th scope="col" style={styles.th}>Código</th><th scope="col" style={styles.th}>Layout</th><th scope="col" style={styles.th}>Status</th><th scope="col" style={styles.th}>Entrega</th><th scope="col" style={styles.th}>Total (R$)</th><th scope="col" style={{ ...styles.th, textAlign: 'right' }}>Ações</th></tr>
+                    )}
                 </thead>
                 <tbody role={preview ? "rowgroup" : undefined}>
                     {orders.map((order) => (

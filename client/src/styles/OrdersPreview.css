@@ -13,6 +13,7 @@
 }
 
 .orders-preview {
+    container-type: inline-size;
     min-width: 0;
     overflow-wrap: anywhere;
     padding-bottom: calc(40px + env(safe-area-inset-bottom)) !important;
@@ -52,9 +53,122 @@
     accent-color: var(--orders-accent) !important;
 }
 
-.orders-preview .orders-actions { flex-wrap: wrap; }
-.orders-preview .orders-status { border: 0; }
-.orders-preview .orders-results tbody tr { transition: background-color 150ms ease-out !important; }
+.orders-preview .orders-results table { min-width: 0 !important; }
+
+.orders-preview .orders-preview-row td {
+    padding: 10px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: middle;
+}
+
+.orders-preview .orders-card-client strong,
+.orders-preview .orders-card-client span,
+.orders-preview .orders-card-deadline > * {
+    display: block;
+}
+
+.orders-preview .orders-card-client span,
+.orders-preview .orders-card-deadline > span,
+.orders-preview .orders-card-financial dt,
+.orders-preview .orders-card-art {
+    font-size: 0.75rem;
+    color: #475569;
+}
+
+.orders-preview :is(.orders-status, .orders-card-actions button) {
+    min-width: 44px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.orders-preview .orders-status {
+    max-width: 100%;
+    overflow-wrap: normal;
+    word-break: normal;
+    text-wrap: balance;
+}
+
+.orders-preview .orders-card-deadline strong {
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.orders-preview .orders-card-deadline-note { font-weight: 700; }
+.orders-preview [data-tone="danger"] .orders-card-deadline-note { color: #B91C1C; }
+.orders-preview [data-tone="warning"] .orders-card-deadline-note { color: #92400E; }
+
+.orders-preview .orders-card-financial dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    align-items: start;
+    margin: 0;
+}
+
+.orders-preview .orders-card-financial dl > div {
+    min-width: 0;
+    padding: 6px 4px;
+}
+
+.orders-preview .orders-card-financial dd {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.orders-preview .orders-card-balance {
+    color: var(--orders-accent-strong);
+    background: var(--orders-accent-soft);
+    border-radius: 8px;
+}
+
+.orders-preview .orders-card-art[data-attached="true"] {
+    color: var(--orders-accent-strong);
+    font-weight: 600;
+}
+
+.orders-preview .orders-card-art span {
+    display: inline-flex;
+    margin-inline-end: 4px;
+    vertical-align: middle;
+}
+
+.orders-preview .orders-card-art svg { width: 14px; height: 14px; }
+
+.orders-preview .orders-card-actions > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.orders-preview .orders-card-actions button {
+    flex: 1 0 auto;
+    border: 1px solid #cbd5e1;
+    background: white;
+    color: #334155;
+}
+
+.orders-preview .orders-card-actions button:first-child {
+    border-color: var(--orders-accent);
+    background: var(--orders-accent);
+    color: white;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .orders-preview .orders-card-actions button:hover:not(:disabled) {
+        box-shadow: inset 0 0 0 1px currentColor;
+    }
+}
+
+.orders-preview :is(.orders-status, .orders-card-actions button):active:not(:disabled) {
+    box-shadow: inset 0 0 0 2px currentColor;
+}
 
 .orders-preview :is(.premium-input, .premium-btn, .premium-btn-danger) {
     transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
@@ -107,7 +221,9 @@
     .orders-preview .orders-dates span:first-child { grid-column: 1 / -1; }
     .orders-preview .orders-dates span:nth-child(3) { display: none; }
     .orders-preview .orders-dates input { width: 100%; }
+}
 
+@container (max-width: 880px) {
     .orders-preview .orders-results {
         overflow: visible !important;
         border: 0 !important;
@@ -128,11 +244,12 @@
         clip-path: inset(50%);
     }
 
-    .orders-preview .orders-results tbody tr {
+    .orders-preview .orders-preview-row {
         display: grid;
-        grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
         align-items: center;
-        gap: 4px 12px;
+        gap: 8px;
+        position: relative;
         padding: 12px;
         margin-bottom: 10px;
         border: 1px solid #CBD5E1;
@@ -140,18 +257,26 @@
         background: white;
     }
 
-    .orders-preview .orders-results td {
+    .orders-preview .orders-preview-row td {
         min-width: 0;
-        padding: 4px 0 !important;
-        border: 0 !important;
+        padding: 0;
+        border: 0;
     }
 
-    .orders-preview .orders-results td:nth-child(2),
-    .orders-preview .orders-results td:last-child { grid-column: 2 / -1; }
+    .orders-preview :is(.orders-card-client, .orders-card-financial, .orders-card-art, .orders-card-actions) {
+        grid-column: 1 / -1;
+    }
 
-    .orders-preview .orders-results td:nth-child(odd):not(:first-child) { grid-column: 2; }
-    .orders-preview .orders-results td:last-child > div { flex-wrap: wrap; }
-    .orders-preview .orders-results td:last-child button { min-width: 44px; }
+    .orders-preview .orders-preview-row .orders-card-client {
+        padding-inline-end: 48px;
+        min-height: 44px;
+    }
+
+    .orders-preview .orders-card-select {
+        position: absolute;
+        inset-block-start: 8px;
+        inset-inline-end: 8px;
+    }
 
     .orders-preview .orders-select-target {
         display: grid;
@@ -191,16 +316,5 @@
 @media (hover: hover) and (pointer: fine) {
     .orders-preview .orders-primary-button:hover:not(:disabled) {
         background: var(--orders-accent-strong) !important;
-    }
-}
-
-.orders-preview .orders-mobile-label { display: none; }
-
-@media (max-width: 960px) {
-    .orders-preview .orders-mobile-label {
-        display: block;
-        color: #475569;
-        font-size: 0.75rem;
-        font-weight: 600;
     }
 }
