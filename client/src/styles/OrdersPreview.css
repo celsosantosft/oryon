@@ -112,7 +112,7 @@
 
 .orders-preview .orders-card-financial dl > div {
     min-width: 0;
-    padding: 6px 4px;
+    padding: 4px;
 }
 
 .orders-preview .orders-card-financial dd {
@@ -123,8 +123,8 @@
 }
 
 .orders-preview .orders-card-balance {
-    color: var(--orders-accent-strong);
-    background: var(--orders-accent-soft);
+    color: #0f172a;
+    background: #f1f5f9;
     border-radius: 8px;
 }
 
@@ -144,17 +144,25 @@
 .orders-preview .orders-card-actions > div {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px;
 }
 
 .orders-preview .orders-card-actions button {
-    flex: 1 0 auto;
-    border: 1px solid #cbd5e1;
-    background: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 4px 6px;
+    border: 1px solid transparent;
+    background: transparent;
     color: #334155;
 }
 
+.orders-preview .orders-card-actions button > span { display: inline-flex; }
+.orders-preview .orders-card-actions svg { width: 14px; height: 14px; }
+
 .orders-preview .orders-card-actions button:first-child {
+    flex: 1 0 auto;
     border-color: var(--orders-accent);
     background: var(--orders-accent);
     color: white;
@@ -248,10 +256,10 @@
         display: grid;
         grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
         align-items: center;
-        gap: 8px;
+        gap: 4px 8px;
         position: relative;
-        padding: 12px;
-        margin-bottom: 10px;
+        padding: 8px 10px;
+        margin-bottom: 8px;
         border: 1px solid #CBD5E1;
         border-radius: 12px;
         background: white;
@@ -270,6 +278,13 @@
     .orders-preview .orders-preview-row .orders-card-client {
         padding-inline-end: 48px;
         min-height: 44px;
+    }
+
+    .orders-preview .orders-card-client strong {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
     }
 
     .orders-preview .orders-card-select {

@@ -1215,7 +1215,7 @@ const getPreviewDeadline = (order) => {
     date.setHours(0, 0, 0, 0);
     today.setHours(0, 0, 0, 0);
     const days = Math.round((date - today) / 86400000);
-    if (days < 0) return { label, note: 'Atrasado', tone: 'danger' };
+    if (days < 0) return { label, note: 'Entrega atrasada', tone: 'danger' };
     if (days === 0) return { label, note: 'Entrega hoje', tone: 'danger' };
     if (days === 1) return { label, note: 'Entrega amanhã', tone: 'warning' };
     return { label };
@@ -1264,9 +1264,9 @@ const OrderRow = React.memo(({ order, isSelected, onCheckboxChange, onView, onEd
                 </td>
                 <td role="cell" className="orders-card-actions">
                     <div>
-                        <button type="button" onClick={viewOrder}>Visualizar</button>
-                        {canEdit && <button type="button" disabled={editDisabled} onClick={() => onEdit(order)}>Editar</button>}
-                        <button type="button" onClick={() => onPrint(order)}>Imprimir</button>
+                        <button type="button" onClick={viewOrder}><span aria-hidden="true">{Icons.Eye}</span>Visualizar</button>
+                        {canEdit && <button type="button" disabled={editDisabled} onClick={() => onEdit(order)}><span aria-hidden="true">{Icons.Edit}</span>Editar</button>}
+                        <button type="button" onClick={() => onPrint(order)}><span aria-hidden="true">{Icons.Printer}</span>Imprimir</button>
                     </div>
                 </td>
             </tr>
