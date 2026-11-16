@@ -53,35 +53,94 @@
     <section class="lookbook shell" id="modelos" aria-labelledby="galeria">
       <div class="section-heading">
         <h2 id="galeria">Galeria de modelos</h2>
-        <p>Explore as referências ilustrativas e veja trabalhos da Atos no Instagram.</p>
+        <p>Veja frente e costas de cada estampa ilustrativa. Escolha um modelo para personalizar.</p>
+      </div>
+      <div class="gallery-toolbar" hidden>
+        <div class="gallery-filters" role="group" aria-label="Filtrar modelos">
+          <button type="button" data-filter="todos" aria-pressed="true">Todos</button>
+          <button type="button" data-filter="futebol" aria-pressed="false">Futebol</button>
+          <button type="button" data-filter="interclasse" aria-pressed="false">Interclasse</button>
+          <button type="button" data-filter="eventos" aria-pressed="false">Eventos</button>
+          <button type="button" data-filter="abadas" aria-pressed="false" id="abadas">Abadás</button>
+        </div>
+        <span class="gallery-count" role="status"></span>
       </div>
       <div class="gallery">
-        <article class="look">
-          <button type="button" class="look-link" aria-haspopup="dialog" data-quote="Camisa para time" data-example="https://www.instagram.com/vilajerifc/reel/Dbi4i23Rg_L/">
-            <img src="./times.jpg" alt="Camisa esportiva verde com grafismos e gola contrastante" width="480" height="740" loading="lazy" decoding="async">
-            <span class="look-caption"><strong>Times de futebol</strong><span aria-hidden="true">↗</span></span>
+        <article class="look" data-category="futebol">
+          <button type="button" class="look-link" aria-haspopup="dialog">
+            <img src="./futebol-esmeralda.jpg" alt="Frente e costas do modelo Verde Esmeralda" width="1000" height="500" loading="lazy" decoding="async">
+            <span class="look-caption">
+              <span><small>Futebol</small><strong>Verde Esmeralda</strong></span>
+              <span class="look-arrow" aria-hidden="true">↗</span>
+            </span>
           </button>
         </article>
-        <article class="look">
-          <button type="button" class="look-link" aria-haspopup="dialog" data-quote="Camisa para interclasse" data-example="https://www.instagram.com/6b_jfs/p/DduUUndoGBd/">
-            <img src="./interclasse.jpg" alt="Costas de uma camisa branca e azul com o número 12" width="480" height="740" loading="lazy" decoding="async">
-            <span class="look-caption"><strong>Interclasses</strong><span aria-hidden="true">↗</span></span>
+        <article class="look" data-category="futebol">
+          <button type="button" class="look-link" aria-haspopup="dialog">
+            <img src="./futebol-raio.jpg" alt="Frente e costas do modelo Raio Azul" width="1000" height="500" loading="lazy" decoding="async">
+            <span class="look-caption">
+              <span><small>Futebol</small><strong>Raio Azul</strong></span>
+              <span class="look-arrow" aria-hidden="true">↗</span>
+            </span>
           </button>
         </article>
-        <article class="look">
-          <button type="button" class="look-link" aria-haspopup="dialog" data-quote="Camisa para evento" data-example="https://www.instagram.com/atosfardamentos/p/DVycNGBDmZI/">
-            <img src="./eventos.jpg" alt="Camisa roxa com estampa em linhas coral" width="480" height="740" loading="lazy" decoding="async">
-            <span class="look-caption"><strong>Eventos e grupos</strong><span aria-hidden="true">↗</span></span>
+        <article class="look" data-category="interclasse">
+          <button type="button" class="look-link" aria-haspopup="dialog">
+            <img src="./interclasse-onda.jpg" alt="Frente e costas do modelo Onda Cobalto" width="1000" height="500" loading="lazy" decoding="async">
+            <span class="look-caption">
+              <span><small>Interclasse</small><strong>Onda Cobalto</strong></span>
+              <span class="look-arrow" aria-hidden="true">↗</span>
+            </span>
           </button>
         </article>
-        <article class="look" id="abadas">
-          <button type="button" class="look-link" aria-haspopup="dialog" data-quote="Abadá de Carnaval">
-            <img src="./abada.jpg" alt="Abadá sem mangas com estampa azul, coral e amarela" width="600" height="900" loading="lazy" decoding="async">
-            <span class="look-caption"><strong>Abadás de Carnaval</strong><span aria-hidden="true">↗</span></span>
+        <article class="look" data-category="interclasse">
+          <button type="button" class="look-link" aria-haspopup="dialog">
+            <img src="./interclasse-onca.jpg" alt="Frente e costas do modelo Onça Rubra" width="1000" height="500" loading="lazy" decoding="async">
+            <span class="look-caption">
+              <span><small>Interclasse</small><strong>Onça Rubra</strong></span>
+              <span class="look-arrow" aria-hidden="true">↗</span>
+            </span>
+          </button>
+        </article>
+        <article class="look" data-category="eventos">
+          <button type="button" class="look-link" aria-haspopup="dialog">
+            <img src="./eventos-coral.jpg" alt="Frente e costas do modelo Traço Coral" width="1000" height="500" loading="lazy" decoding="async">
+            <span class="look-caption">
+              <span><small>Eventos</small><strong>Traço Coral</strong></span>
+              <span class="look-arrow" aria-hidden="true">↗</span>
+            </span>
+          </button>
+        </article>
+        <article class="look" data-category="eventos">
+          <button type="button" class="look-link" aria-haspopup="dialog">
+            <img src="./eventos-mare.jpg" alt="Frente e costas do modelo Maré" width="1000" height="500" loading="lazy" decoding="async">
+            <span class="look-caption">
+              <span><small>Eventos</small><strong>Maré</strong></span>
+              <span class="look-arrow" aria-hidden="true">↗</span>
+            </span>
+          </button>
+        </article>
+        <article class="look" data-category="abadas">
+          <button type="button" class="look-link" aria-haspopup="dialog">
+            <img src="./abada-frevo.jpg" alt="Frente e costas do modelo Frevo Azul" width="1000" height="500" loading="lazy" decoding="async">
+            <span class="look-caption">
+              <span><small>Abadá de Carnaval</small><strong>Frevo Azul</strong></span>
+              <span class="look-arrow" aria-hidden="true">↗</span>
+            </span>
+          </button>
+        </article>
+        <article class="look" data-category="abadas">
+          <button type="button" class="look-link" aria-haspopup="dialog">
+            <img src="./abada-confete.jpg" alt="Frente e costas do modelo Confete Tropical" width="1000" height="500" loading="lazy" decoding="async">
+            <span class="look-caption">
+              <span><small>Abadá de Carnaval</small><strong>Confete Tropical</strong></span>
+              <span class="look-arrow" aria-hidden="true">↗</span>
+            </span>
           </button>
         </article>
       </div>
     </section>
+
 
     <section class="contact" id="orcamento" aria-labelledby="contato">
       <div class="shell contact-inner">
@@ -111,7 +170,7 @@
         <p class="eyebrow">Imagem ilustrativa</p>
         <h2 id="modelo-titulo"></h2>
         <a class="action model-quote" href="https://wa.me/5581988074760">Pedir orçamento <span aria-hidden="true">↗</span></a>
-        <a class="model-example" href="https://www.instagram.com/atosfardamentos/">Ver trabalho no Instagram ↗</a>
+        <a class="model-example" href="https://www.instagram.com/atosfardamentos/">Ver portfólio da Atos no Instagram ↗</a>
       </div>
     </div>
   </dialog>
