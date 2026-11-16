@@ -16,6 +16,7 @@ const { appConfig, buildTrackingCode, normalizeTrackingCode } = require('../conf
 const { appPaths } = require('../config/paths');
 const { normalizePlayerNumber } = require('../utils/playerNumber');
 const { chooseEffectiveOrderItems } = require('../utils/effectiveOrderItems');
+const { syncConvertedOrdersFromQuote } = require('../utils/convertedOrderSync');
 const {
     enqueueUpsert: enqueueCalendarUpsert,
     enqueueDelete: enqueueCalendarDelete,
@@ -361,14 +362,8 @@ function sumSizes(sizes) {
     return Object.values(sizes || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
 }
 
-function sameSizeGrade(expected, actual) {
-    const expectedSizes = parseSizesValue(expected);
-    const actualSizes = parseSizesValue(actual);
-    const sizes = new Set([...Object.keys(expectedSizes), ...Object.keys(actualSizes)]);
-
-    return [...sizes].every((size) => (
-        (Number(expectedSizes[size]) || 0) === (Number(actualSizes[size]) || 0)
-    ));
+function roundMoney(value) {
+    return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 }
 
 function summarizeItemsBySize(items = []) {
@@ -458,7 +453,7 @@ function normalizeProductLinesForResponse(rows = [], record = {}) {
     const recordHasSizes = sumSizes(recordSizes) > 0;
     const submittedSizes = parseSizesValue(record.submitted_sizes_json);
     const submittedHasSizes = sumSizes(submittedSizes) > 0;
-    const fallbackSizes = recordHasSizes ? recordSizes : submittedSizes;
+    const fallbackSizes = submittedHasSizes ? submittedSizes : recordSizes;
     const fallbackHasSizes = recordHasSizes || submittedHasSizes;
     const paidFallback = Math.max(Number(record.amount_paid || 0), Number(record.synced_amount_paid || 0));
     const recordTotal = Math.max(Number(record.total_price || 0), paidFallback);
@@ -466,7 +461,7 @@ function normalizeProductLinesForResponse(rows = [], record = {}) {
     return (rows || []).map((row) => {
         const lineSizes = parseSizesValue(row.sizes_json);
         const shouldUseRecordSizes = rows.length === 1 && fallbackHasSizes
-            && (recordHasSizes || sumSizes(lineSizes) === 0);
+            && (submittedHasSizes || sumSizes(lineSizes) === 0);
         const sizes = shouldUseRecordSizes ? fallbackSizes : lineSizes;
         const quantity = sumSizes(sizes);
         const unitPrice = Number(row.unit_price || record.unit_price || row.product_sale_price || 0);
@@ -481,8 +476,12 @@ function normalizeProductLinesForResponse(rows = [], record = {}) {
             sizes_json: sizes,
             unit_price: effectiveUnitPrice,
             unit_cost: unitCost,
-            total_price: currentTotal > 0 ? currentTotal : (quantity > 0 && effectiveUnitPrice > 0 ? quantity * effectiveUnitPrice : recordTotal),
-            cost_price: currentCost > 0 ? currentCost : (quantity > 0 && unitCost > 0 ? quantity * unitCost : Number(record.cost_price || 0))
+            total_price: shouldUseRecordSizes && submittedHasSizes && quantity > 0 && effectiveUnitPrice > 0
+                ? roundMoney(quantity * effectiveUnitPrice)
+                : (currentTotal > 0 ? currentTotal : (quantity > 0 && effectiveUnitPrice > 0 ? quantity * effectiveUnitPrice : recordTotal)),
+            cost_price: shouldUseRecordSizes && submittedHasSizes && quantity > 0 && unitCost > 0
+                ? roundMoney(quantity * unitCost)
+                : (currentCost > 0 ? currentCost : (quantity > 0 && unitCost > 0 ? quantity * unitCost : Number(record.cost_price || 0)))
         };
     });
 }
@@ -1871,17 +1870,59 @@ router.post('/api/tracking/portal/:code/submit', (req, res) => {
         if (normalizeClientLockRow(record).is_locked_by_client) return res.status(403).json({ error: 'Lista já confirmada.' });
 
         const newSizes = {};
+        let totalQty = 0;
+
         normalizedItems.forEach(item => {
-            if (item.size) newSizes[item.size] = (newSizes[item.size] || 0) + 1;
+            if (item.size) { newSizes[item.size] = (newSizes[item.size] || 0) + 1; totalQty++; }
         });
-        const officialSizes = parseSizesValue(record.sizes_json);
-        if (sumSizes(officialSizes) === 0) {
-            return res.status(409).json({ error: 'A grade ainda não foi cadastrada pela empresa.' });
-        }
-        if (!sameSizeGrade(officialSizes, newSizes)) {
-            return res.status(409).json({ error: 'A lista deve respeitar exatamente a grade definida pela empresa.' });
-        }
-        db.serialize(() => {
+        const sizesJsonStr = JSON.stringify(newSizes);
+
+        const productLineTable = isQuote ? 'quote_product_lines' : 'order_product_lines';
+        const productLineOwnerColumn = isQuote ? 'quote_id' : 'order_id';
+
+        db.all(`SELECT * FROM ${productLineTable} WHERE ${productLineOwnerColumn} = ? ORDER BY sort_order ASC, id ASC`, [record.id], (lineErr, productLines = []) => {
+            if (lineErr) return res.status(500).json({ error: lineErr.message });
+
+            const primaryLine = productLines[0] || null;
+            const otherLinesTotal = productLines.slice(1).reduce((sum, line) => sum + (Number(line.total_price) || 0), 0);
+            const otherLinesCost = productLines.slice(1).reduce((sum, line) => sum + (Number(line.cost_price) || 0), 0);
+            const effectiveProductType = primaryLine?.product_type || record.product_type;
+
+            db.get(`SELECT sale_price, production_cost FROM products WHERE name = ?`, [effectiveProductType], (err, product) => {
+                const lineUnitPrice = parseFloat(primaryLine?.unit_price) || 0;
+                const lineUnitCost = parseFloat(primaryLine?.unit_cost) || 0;
+                const storedUnitPrice = parseFloat(record.unit_price) || 0;
+                const storedUnitCost = parseFloat(record.unit_cost) || 0;
+                const productUnitPrice = product ? parseFloat(product.sale_price) || 0 : 0;
+                const amountPaidFallback = parseFloat(record.amount_paid) || 0;
+                const paidFallbackUnitPrice = totalQty > 0 && amountPaidFallback > 0 ? amountPaidFallback / totalQty : 0;
+                const uPrice = lineUnitPrice > 0 ? lineUnitPrice : (storedUnitPrice > 0 ? storedUnitPrice : (productUnitPrice > 0 ? productUnitPrice : paidFallbackUnitPrice));
+                const uCost = lineUnitCost > 0 ? lineUnitCost : (storedUnitCost > 0 ? storedUnitCost : (product ? parseFloat(product.production_cost) || 0 : 0));
+                const safeDiscount = parseFloat(record.discount) || 0;
+                const savedTotalFallback = Math.max(Number(primaryLine?.total_price || 0), Number(record.total_price || 0), amountPaidFallback);
+                const primaryLineTotal = uPrice > 0 && totalQty > 0 ? totalQty * uPrice : savedTotalFallback;
+                const primaryLineCost = uCost > 0 ? totalQty * uCost : Number(primaryLine?.cost_price || record.cost_price || 0);
+
+                const finalTotalPrice = Math.max(0, otherLinesTotal + primaryLineTotal - safeDiscount, amountPaidFallback);
+                const finalCostPrice = otherLinesCost + primaryLineCost;
+
+                const syncPrimaryProductLine = (done) => {
+                    if (!primaryLine) return done(null);
+
+                    db.run(
+                        `UPDATE ${productLineTable}
+                         SET sizes_json = ?,
+                             unit_price = ?,
+                             unit_cost = ?,
+                             total_price = ?,
+                             cost_price = ?
+                         WHERE id = ?`,
+                        [sizesJsonStr, uPrice, uCost, primaryLineTotal, primaryLineCost, primaryLine.id],
+                        (lineUpdateErr) => done(lineUpdateErr || null)
+                    );
+                };
+
+            db.serialize(() => {
                 db.run('BEGIN TRANSACTION');
                 
                 if (isQuote) {
@@ -1905,12 +1946,27 @@ router.post('/api/tracking/portal/:code/submit', (req, res) => {
                 stmt.finalize();
 
                 if (isQuote) {
-                    db.run(`UPDATE quotes SET is_locked_by_client = 1 WHERE id = ?`,
-                    [record.id], (err) => {
+                    db.run(`UPDATE quotes SET is_locked_by_client = 1, sizes_json = ?, total_price = ?, cost_price = ? WHERE id = ?`,
+                    [sizesJsonStr, finalTotalPrice, finalCostPrice, record.id], (err) => {
                         if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Erro ao salvar.' }); }
-                        db.run(`INSERT INTO quote_history (quote_id, status_text, changed_by_user_id) VALUES (?, 'Lista Enviada pelo Cliente (Termo Assinado)', NULL)`, [record.id]);
-                        db.run('COMMIT', () => {
-                            res.json({ message: 'Orçamento atualizado!' });
+                        syncPrimaryProductLine((lineUpdateErr) => {
+                            if (lineUpdateErr) { db.run('ROLLBACK'); return res.status(500).json({ error: lineUpdateErr.message }); }
+                            syncConvertedOrdersFromQuote(db, record.id, {
+                                sizesJson: sizesJsonStr,
+                                unitPrice: uPrice,
+                                unitCost: uCost,
+                                primaryLineTotal,
+                                primaryLineCost,
+                                finalTotalPrice,
+                                finalCostPrice
+                            }, (convertedOrderErr, linkedOrderIds = []) => {
+                                if (convertedOrderErr) { db.run('ROLLBACK'); return res.status(500).json({ error: convertedOrderErr.message }); }
+                                db.run(`INSERT INTO quote_history (quote_id, status_text, changed_by_user_id) VALUES (?, 'Lista Enviada pelo Cliente (Termo Assinado)', NULL)`, [record.id]);
+                                db.run('COMMIT', () => {
+                                    linkedOrderIds.forEach((orderId) => syncFinanceWithOrder(orderId));
+                                    res.json({ message: 'Orçamento atualizado!' });
+                                });
+                            });
                         });
                     });
                 } else {
@@ -1922,18 +1978,23 @@ router.post('/api/tracking/portal/:code/submit', (req, res) => {
                         finalStatus = 'Aguardando Aprovação';
                     }
 
-                    db.run(`UPDATE orders SET is_locked_by_client = 1, status = ?, board_order = 999999 WHERE id = ?`,
-                    [finalStatus, record.id], (err) => {
+                    db.run(`UPDATE orders SET is_locked_by_client = 1, status = ?, board_order = 999999, sizes_json = ?, total_price = ?, cost_price = ?, unit_price = ?, unit_cost = ? WHERE id = ?`,
+                    [finalStatus, sizesJsonStr, finalTotalPrice, finalCostPrice, uPrice, uCost, record.id], (err) => {
                         if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Erro.' }); }
-                        db.run(`INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, 'Lista Enviada pelo Cliente (Termo Assinado)', NULL)`, [record.id]);
-                        db.run('COMMIT', () => {
-                            syncFinanceWithOrder(record.id);
-                            res.json({ message: 'Lista enviada com sucesso!' });
+                        syncPrimaryProductLine((lineUpdateErr) => {
+                            if (lineUpdateErr) { db.run('ROLLBACK'); return res.status(500).json({ error: lineUpdateErr.message }); }
+                            db.run(`INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, 'Lista Enviada pelo Cliente (Termo Assinado)', NULL)`, [record.id]);
+                            db.run('COMMIT', () => {
+                                syncFinanceWithOrder(record.id);
+                                res.json({ message: 'Lista enviada com sucesso!' });
+                            });
                         });
                     });
                 }
             });
+        });
     });
+});
 });
 
 router.post('/api/tracking/portal/:code/approve-art', (req, res) => {
@@ -2022,6 +2083,6 @@ router.get('/api/orders/:id/export-txt', authenticateToken, authorizeRole(['admi
 });
 
 router._security = { requirePortalToken, tokenMatches, getPortalCodeCandidates };
-router._test = { normalizeProductLinesForResponse, sameSizeGrade };
+router._test = { normalizeProductLinesForResponse };
 
 module.exports = router;
