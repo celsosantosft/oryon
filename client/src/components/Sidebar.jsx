@@ -159,7 +159,7 @@ const Sidebar = ({ setIsMenuOpen, isMobile, preview = false, onClose }) => {
     const activeMenu = isFinanceModule ? financeConfig : mainConfig;
 
     return (
-        <aside style={styles.sidebar} className={preview ? 'dashboard-preview-sidebar' : undefined}>
+        <aside style={{ ...styles.sidebar, ...(isMobile ? styles.sidebarMobile : {}) }} className={preview ? 'dashboard-preview-sidebar' : undefined}>
             <style>
                 {`
                     .hide-scrollbar::-webkit-scrollbar { display: none; }
@@ -169,13 +169,13 @@ const Sidebar = ({ setIsMenuOpen, isMobile, preview = false, onClose }) => {
 
             {isMobile && setIsMenuOpen && (
                 <button onClick={preview ? onClose : () => setIsMenuOpen(false)} style={styles.closeBtnMobile}
-                    className={preview ? 'dashboard-preview-toggle' : undefined} aria-label={preview ? 'Fechar menu lateral' : undefined} onMouseEnter={(e) => e.currentTarget.style.color = '#ffffff'} onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}>
+                    className={preview ? 'dashboard-preview-toggle' : undefined} aria-label="Fechar menu lateral" onMouseEnter={(e) => e.currentTarget.style.color = '#ffffff'} onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}>
                     {Icons.Close}
                 </button>
             )}
 
             <div style={styles.logoContainer}>
-                <img src={appConfig.logoWhiteUrl} alt={appConfig.brandName} width="581" height="581" decoding="async" style={styles.logoImage} onError={(e) => { e.target.style.display = 'none'; document.getElementById('sidebar-logo-text').style.display = 'block'; }} />
+                <img src={appConfig.logoWhiteUrl} alt={appConfig.brandName} width="581" height="581" decoding="async" style={{ ...styles.logoImage, ...(isMobile ? styles.logoImageMobile : {}) }} onError={(e) => { e.target.style.display = 'none'; document.getElementById('sidebar-logo-text').style.display = 'block'; }} />
                 <h2 id="sidebar-logo-text" style={styles.logoText}>{appConfig.systemName}</h2>
                 <span style={styles.systemSubtitle}>
                     {isFinanceModule ? 'MÓDULO FINANCEIRO' : (userRole === 'admin' ? 'ADMINISTRADOR' : (userRole === 'corte' ? 'CORTE' : 'GESTÃO'))}
@@ -221,9 +221,14 @@ const Sidebar = ({ setIsMenuOpen, isMobile, preview = false, onClose }) => {
 
 const styles = {
     sidebar: { position: 'relative', width: '280px', backgroundColor: '#0f172a', color: '#f8fafc', padding: '24px 20px', display: 'flex', flexDirection: 'column', height: '100vh', flexShrink: 0, boxShadow: '1px 0 0 rgba(255,255,255,0.05)', fontFamily: "'Inter', sans-serif", userSelect: 'none', caretColor: 'transparent', outline: 'none' },
-    closeBtnMobile: { position: 'absolute', top: '24px', right: '20px', background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px', transition: 'color 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+    sidebarMobile: {
+        width: '100%', height: '100%',
+        padding: 'calc(24px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px))'
+    },
+    closeBtnMobile: { position: 'absolute', top: 'calc(18px + env(safe-area-inset-top, 0px))', right: 'max(12px, env(safe-area-inset-right, 0px))', minWidth: '44px', minHeight: '44px', touchAction: 'manipulation', background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px', transition: 'color 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' },
     logoContainer: { marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid #1e293b', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '80px' },
     logoImage: { maxWidth: '180px', maxHeight: '60px', objectFit: 'contain', marginBottom: '4px' },
+    logoImageMobile: { maxWidth: 'min(180px, calc(100% - 88px))' },
     logoText: { display: 'none', color: '#ffffff', fontSize: '1.25rem', letterSpacing: '1px', margin: '0 0 5px 0', fontWeight: '800' },
     systemSubtitle: { color: '#64748b', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: '600' },
     nav: { flexGrow: 1, overflowY: 'auto', overflowX: 'hidden' }, 

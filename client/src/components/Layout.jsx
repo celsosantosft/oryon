@@ -151,10 +151,10 @@ const Layout = ({ children }) => {
                     
                     {/* Botão Hamburguer: Aparece no Mobile OU se estiver no Modo Foco Desktop Fechado */}
                     {(isMobile || (isFocusMode && !isMenuOpen)) && (
-                        <button onClick={() => setIsMenuOpen(!isMenuOpen)} style={styles.menuButton} ref={menuTrigger}
+                        <button onClick={() => setIsMenuOpen(!isMenuOpen)} style={{ ...styles.menuButton, ...(isMobile ? styles.menuButtonMobile : {}) }} ref={menuTrigger}
                             className={preview ? 'dashboard-preview-toggle' : undefined}
-                            aria-label={preview ? 'Abrir menu lateral' : undefined}
-                            aria-expanded={preview ? drawerOpen : undefined}
+                            aria-label={isMenuOpen ? 'Fechar menu lateral' : 'Abrir menu lateral'}
+                            aria-expanded={isMenuOpen}
                             aria-controls={preview ? 'dashboard-preview-menu' : undefined}>
                             {isMenuOpen ? CloseIcon : MenuIcon}
                         </button>
@@ -213,8 +213,8 @@ const styles = {
     },
 
     topBarMobile: {
-        height: '56px',
-        padding: '0 12px',
+        height: 'calc(56px + env(safe-area-inset-top, 0px))',
+        padding: 'env(safe-area-inset-top, 0px) max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px))',
         boxShadow: '0 1px 0 rgba(15, 23, 42, 0.04)'
     },
 
@@ -229,6 +229,12 @@ const styles = {
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 10
+    },
+
+    menuButtonMobile: {
+        minWidth: '44px',
+        minHeight: '44px',
+        touchAction: 'manipulation'
     },
 
     userInfo: {
