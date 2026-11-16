@@ -1384,6 +1384,16 @@ const Orders = ({ preview: forcePreview = false }) => {
     }, [API_BASE_URL, token, toggleModal]);
 
     const handlePrintOrder = useCallback(async (order) => {
+        const mobile = isOrdersMobileViewport();
+        const printWindow = window.open('', '_blank', mobile ? '' : 'width=1000,height=800');
+        if (!printWindow) {
+            Swal.fire('Janela bloqueada', 'Permita a abertura de novas abas para imprimir a ficha do pedido.', 'warning');
+            return;
+        }
+
+        printWindow.document.title = 'Ficha de produção';
+        printWindow.document.body.textContent = 'Carregando ficha de produção…';
+
         try {
             const res = await OrderService.getOrderHistory(API_BASE_URL, token, order.tracking_code);
             const detailedOrder = {
@@ -1394,9 +1404,11 @@ const Orders = ({ preview: forcePreview = false }) => {
                     sizes_json: { ...ORDER_CONSTANTS.DEFAULT_SIZES, ...(line.sizes_json || {}) }
                 })) : []
             };
-            printOrder(detailedOrder, API_BASE_URL);
-        } catch (error) {
-            Swal.fire('Falha ao imprimir', 'Não foi possível carregar os dados completos da ficha de produção.', 'error');
+            if (!printWindow.closed) printOrder(detailedOrder, API_BASE_URL, printWindow, { autoPrint: !mobile });
+        } catch {
+            if (!printWindow.closed) {
+                printWindow.document.body.textContent = 'Não foi possível preparar a ficha de produção. Volte a Pedidos e tente novamente.';
+            }
         }
     }, [API_BASE_URL, token]);
 

@@ -210,6 +210,18 @@ const buildNormalizedLines = (order, apiBaseUrl) => {
     });
 };
 
+const printToolbarStyles = `
+    .print-toolbar { padding: 12px; background: #f1f5f9; }
+    .print-toolbar button { min-height: 44px; padding: 8px 16px; font: inherit; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+    @media print { .print-toolbar { display: none; } }
+`;
+
+const printToolbar = `
+    <div class="print-toolbar">
+        <button id="print-document" type="button" disabled>Imprimir ou salvar PDF</button>
+    </div>
+`;
+
 const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printDate }) => {
     const layoutLines = normalizedLines.filter((line) => line.layoutUrl);
     const notedLines = normalizedLines.filter((line) => line.production_notes);
@@ -234,9 +246,11 @@ const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printD
     return `
     <html>
     <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>O.S. ${order.tracking_code}</title>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
         <style>
+            ${printToolbarStyles}
             @page { margin: 6mm; size: A4; }
             body { font-family: 'Inter', sans-serif; color: #111827; padding: 0; max-width: 100%; margin: 0 auto; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .header { display: grid; grid-template-columns: 1fr 2fr 1fr; align-items: center; border-bottom: 2px solid #111827; padding-bottom: 10px; margin-bottom: 12px; }
@@ -290,6 +304,7 @@ const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printD
         </style>
     </head>
     <body>
+        ${printToolbar}
         <div class="header">
             <div class="header-logo"><img src="${logoUrl}" alt="Logo" /></div>
             <div class="header-title">Ficha de Produção</div>
@@ -361,13 +376,6 @@ const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printD
                 <div class="note-text">${escapeHtml(line.production_notes)}</div>
             </div>`).join('')}
         </div>` : ''}
-        <script>
-            window.onload = function() {
-                setTimeout(function() {
-                    window.print();
-                }, 250);
-            };
-        </script>
         <div class="footer">
             <span>Impresso em ${printDate}</span>
             <span>${escapeHtml(appConfig.systemName)} • Enterprise Edition</span>
@@ -384,9 +392,11 @@ const buildPremiumQuotePrintLayout = ({ order, normalizedLines, printDate }) => 
     return `
     <html>
     <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Orçamento ${order.tracking_code}</title>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
         <style>
+            ${printToolbarStyles}
             @page { size: A4; margin: 10mm; }
             * { box-sizing: border-box; }
             body { font-family: 'Inter', sans-serif; margin: 0; color: #1E293B; background: #FFFFFF; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -444,6 +454,7 @@ const buildPremiumQuotePrintLayout = ({ order, normalizedLines, printDate }) => 
         </style>
     </head>
     <body>
+        ${printToolbar}
             <div class="quote-print">
                 <div class="quote-header">
                     <div>
@@ -549,20 +560,12 @@ const buildPremiumQuotePrintLayout = ({ order, normalizedLines, printDate }) => 
                 <span>${escapeHtml(appConfig.brandName)}</span>
             </div>
         </div>
-        <script>
-            window.onload = function() {
-                setTimeout(function() {
-                    window.print();
-                }, 250);
-            };
-        </script>
     </body>
     </html>`;
 };
 
 // --- FUNÇÃO PRINCIPAL DE IMPRESSÃO ---
-export const printOrder = (order, apiBaseUrl) => {
-    const printWindow = window.open('', '_blank', 'width=1000,height=800');
+export const printOrder = (order, apiBaseUrl, printWindow, { autoPrint = true } = {}) => {
     const logoUrl = resolvePublicAssetUrl(appConfig.logoUrl);
     const isQuote = String(order?.tracking_code || '').startsWith('#ORC-');
     const printDate = new Date().toLocaleString('pt-BR');
@@ -571,6 +574,13 @@ export const printOrder = (order, apiBaseUrl) => {
         ? buildPremiumQuotePrintLayout({ order, normalizedLines, printDate })
         : buildStandardOrderPrintLayout({ order, logoUrl, normalizedLines, printDate });
 
+    printWindow.document.open();
     printWindow.document.write(content);
+    const printButton = printWindow.document.getElementById('print-document');
+    printButton.addEventListener('click', () => printWindow.print());
+    printWindow.addEventListener('load', () => {
+        printButton.disabled = false;
+        if (autoPrint) printWindow.print();
+    }, { once: true });
     printWindow.document.close();
 };

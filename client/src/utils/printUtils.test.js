@@ -3,27 +3,40 @@ import assert from 'node:assert/strict';
 
 import { printOrder } from './printUtils.js';
 
-const renderPrintHtml = (order) => {
+const renderPrintDocument = (order, options) => {
     let html = '';
+    let onLoad;
+    let onClick;
+    let prints = 0;
     const previousWindow = globalThis.window;
+    const button = {
+        disabled: true,
+        addEventListener: (_, handler) => { onClick = handler; }
+    };
+    const printWindow = {
+        document: {
+            open: () => {},
+            write: (content) => { html = content; },
+            getElementById: () => button,
+            close: () => {}
+        },
+        addEventListener: (_, handler) => { onLoad = handler; },
+        print: () => { prints++; }
+    };
 
     globalThis.window = {
-        location: { origin: 'https://atosfardamentos.com.br' },
-        open: () => ({
-            document: {
-                write: (content) => { html = content; },
-                close: () => {}
-            }
-        })
+        location: { origin: 'https://atosfardamentos.com.br' }
     };
 
     try {
-        printOrder(order, 'https://atosfardamentos.com.br/api');
-        return html;
+        printOrder(order, 'https://atosfardamentos.com.br/api', printWindow, options);
+        return { html, button, onLoad, onClick, printCount: () => prints };
     } finally {
         globalThis.window = previousWindow;
     }
 };
+
+const renderPrintHtml = (order) => renderPrintDocument(order).html;
 
 const changedOrder = {
     tracking_code: '#ATOS-9762',
@@ -48,6 +61,21 @@ const changedOrder = {
         { player_name: 'PROF CLECIO', player_number: '67', size: 'XG' }
     ]
 };
+
+test('waits for the mobile print button and keeps automatic printing on desktop', () => {
+    const mobile = renderPrintDocument(changedOrder, { autoPrint: false });
+    assert.match(mobile.html, /Imprimir ou salvar PDF/);
+    assert.equal(mobile.button.disabled, true);
+    mobile.onLoad();
+    assert.equal(mobile.button.disabled, false);
+    assert.equal(mobile.printCount(), 0);
+    mobile.onClick();
+    assert.equal(mobile.printCount(), 1);
+
+    const desktop = renderPrintDocument(changedOrder);
+    desktop.onLoad();
+    assert.equal(desktop.printCount(), 1);
+});
 
 test('prints every current size label submitted by the customer', () => {
     const html = renderPrintHtml(changedOrder);
