@@ -1,27 +1,58 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { shouldCloseFromOverlayPointer } from '../utils/modalInteraction';
 
-const Modal = ({ isOpen, onClose, title, children }) => {
+const Modal = ({ isOpen, onClose, title, children, manageFocus = false }) => {
     const overlayPointerDownTarget = useRef(null);
+    const cardRef = useRef(null);
+    const titleId = useId();
+
+    useEffect(() => {
+        if (!isOpen || !manageFocus) return;
+        const previous = document.activeElement;
+        const card = cardRef.current;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        card.focus({ preventScroll: true });
+
+        const containFocus = (event) => {
+            if (event.key !== 'Tab' || document.querySelector('.swal2-container')) return;
+            const controls = Array.from(card.querySelectorAll(
+                'button, input, textarea, select, a[href], [tabindex]'
+            )).filter(element => !element.disabled && element.tabIndex >= 0 && element.getClientRects().length);
+            const edge = event.shiftKey ? controls.at(-1) : controls[0];
+            const opposite = event.shiftKey ? controls[0] : controls.at(-1);
+            if (!edge || !card.contains(document.activeElement) || document.activeElement === opposite ||
+                (event.shiftKey && document.activeElement === card)) {
+                event.preventDefault();
+                (edge || card).focus();
+            }
+        };
+        document.addEventListener('keydown', containFocus);
+        return () => {
+            document.removeEventListener('keydown', containFocus);
+            document.body.style.overflow = previousOverflow;
+            if (previous?.isConnected) previous.focus({ preventScroll: true });
+        };
+    }, [isOpen, manageFocus]);
     
     // --- LÓGICA DO ESC E SCROLL ---
     useEffect(() => {
         const handleKeyDown = (e) => {
-            if (e.key === 'Escape') {
+            if (e.key === 'Escape' && (!manageFocus || !document.querySelector('.swal2-container'))) {
                 onClose();
             }
         };
 
         if (isOpen) {
             document.addEventListener('keydown', handleKeyDown);
-            document.body.style.overflow = 'hidden'; 
+            if (!manageFocus) document.body.style.overflow = 'hidden';
         }
 
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
-            document.body.style.overflow = 'unset'; 
+            if (!manageFocus) document.body.style.overflow = 'unset';
         };
-    }, [isOpen, onClose]);
+    }, [isOpen, onClose, manageFocus]);
     // -----------------------------
 
     if (!isOpen) return null;
@@ -44,11 +75,11 @@ const Modal = ({ isOpen, onClose, title, children }) => {
             onPointerDown={handleOverlayPointerDown}
             onPointerUp={handleOverlayPointerUp}
         >
-            <div className="oryon-modal-card" style={styles.modal}>
+            <div className="oryon-modal-card" style={styles.modal} ref={cardRef} role={manageFocus ? "dialog" : undefined} aria-modal={manageFocus || undefined} aria-labelledby={manageFocus ? titleId : undefined} tabIndex={manageFocus ? -1 : undefined}>
                 
                 {/* Cabeçalho */}
                 <div className="oryon-modal-header" style={styles.header}>
-                    <h3 className="oryon-modal-title" style={styles.title}>{title}</h3>
+                    <h3 id={manageFocus ? titleId : undefined} className="oryon-modal-title" style={styles.title}>{title}</h3>
                     <button onClick={onClose} style={styles.closeButton} title="Fechar (ESC)">
                         <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>

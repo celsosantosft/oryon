@@ -1,0 +1,206 @@
+.orders-preview--default {
+    --orders-accent: #2563EB;
+    --orders-accent-strong: #1D4ED8;
+    --orders-accent-soft: #EFF6FF;
+    --orders-accent-ring: rgba(37, 99, 235, 0.18);
+}
+
+.orders-preview--monochrome {
+    --orders-accent: #111827;
+    --orders-accent-strong: #030712;
+    --orders-accent-soft: #F3F4F6;
+    --orders-accent-ring: rgba(17, 24, 39, 0.18);
+}
+
+.orders-preview {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding-bottom: calc(40px + env(safe-area-inset-bottom)) !important;
+}
+
+.orders-preview button {
+    min-height: 44px;
+    touch-action: manipulation;
+}
+
+.orders-preview button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.orders-preview :is(button, input, select, textarea, a):focus-visible {
+    outline: 2px solid var(--orders-accent) !important;
+    outline-offset: 2px;
+}
+
+.orders-preview .orders-header-icon {
+    background: var(--orders-accent-soft) !important;
+    color: var(--orders-accent) !important;
+}
+
+.orders-preview .orders-primary-button {
+    background: var(--orders-accent) !important;
+    color: white !important;
+}
+
+.orders-preview .orders-tab[aria-pressed="true"] {
+    border-bottom-color: var(--orders-accent) !important;
+    color: var(--orders-accent) !important;
+}
+
+.orders-preview .orders-select-target input {
+    accent-color: var(--orders-accent) !important;
+}
+
+.orders-preview .orders-actions { flex-wrap: wrap; }
+.orders-preview .orders-status { border: 0; }
+.orders-preview .orders-results tbody tr { transition: background-color 150ms ease-out !important; }
+
+.orders-preview :is(.premium-input, .premium-btn, .premium-btn-danger) {
+    transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
+}
+
+.orders-preview .oryon-modal-overlay {
+    padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right)) !important;
+    padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
+}
+
+.orders-preview .oryon-modal-card {
+    min-width: 0;
+    max-height: min(90dvh, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px));
+}
+
+.orders-preview .oryon-modal-body {
+    overscroll-behavior-y: contain;
+    scroll-padding-block: 16px;
+}
+
+.orders-preview .oryon-modal-header button { min-width: 44px; }
+
+@media (pointer: coarse), (max-width: 640px) {
+    .orders-preview :is(input:not([type="checkbox"]), select, textarea) {
+        font-size: 16px !important;
+        min-height: 44px;
+        min-width: 0 !important;
+        max-width: 100%;
+    }
+}
+
+@media (hover: none), (pointer: coarse) {
+    .orders-preview :is(.premium-btn, .premium-btn-danger):hover {
+        transform: none;
+        box-shadow: none !important;
+    }
+}
+
+@media (max-width: 960px) {
+    .orders-preview .orders-header { gap: 12px; }
+    .orders-preview .orders-filters { width: 100%; min-width: 0; }
+    .orders-preview .orders-dates {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 8px;
+        width: min(100%, 320px);
+        overflow: visible !important;
+    }
+
+    .orders-preview .orders-dates span:first-child { grid-column: 1 / -1; }
+    .orders-preview .orders-dates span:nth-child(3) { display: none; }
+    .orders-preview .orders-dates input { width: 100%; }
+
+    .orders-preview .orders-results {
+        overflow: visible !important;
+        border: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+
+    .orders-preview .orders-results :is(table, tbody) {
+        display: block;
+        min-width: 0 !important;
+    }
+
+    .orders-preview .orders-results thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+    }
+
+    .orders-preview .orders-results tbody tr {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+        align-items: center;
+        gap: 4px 12px;
+        padding: 12px;
+        margin-bottom: 10px;
+        border: 1px solid #CBD5E1;
+        border-radius: 12px;
+        background: white;
+    }
+
+    .orders-preview .orders-results td {
+        min-width: 0;
+        padding: 4px 0 !important;
+        border: 0 !important;
+    }
+
+    .orders-preview .orders-results td:nth-child(2),
+    .orders-preview .orders-results td:last-child { grid-column: 2 / -1; }
+
+    .orders-preview .orders-results td:nth-child(odd):not(:first-child) { grid-column: 2; }
+    .orders-preview .orders-results td:last-child > div { flex-wrap: wrap; }
+    .orders-preview .orders-results td:last-child button { min-width: 44px; }
+
+    .orders-preview .orders-select-target {
+        display: grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        cursor: pointer;
+    }
+}
+
+@media (max-width: 640px) {
+    .orders-preview .oryon-modal-card {
+        max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px) !important;
+    }
+
+    .orders-preview .oryon-modal-body :is(.orders-product, .orders-product-fields, .order-line-content) {
+        grid-template-columns: minmax(0, 1fr) !important;
+        min-width: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .orders-preview :is(.oryon-modal-card, .oryon-modal-overlay) { animation: none !important; }
+    .orders-preview :is(button, input, tr) { transition: none !important; }
+    .orders-preview button:hover { transform: none !important; }
+}
+
+.orders-preview .orders-retry {
+    margin-bottom: 12px;
+    padding-inline: 12px;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    background: white;
+    color: var(--orders-accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .orders-preview .orders-primary-button:hover:not(:disabled) {
+        background: var(--orders-accent-strong) !important;
+    }
+}
+
+.orders-preview .orders-mobile-label { display: none; }
+
+@media (max-width: 960px) {
+    .orders-preview .orders-mobile-label {
+        display: block;
+        color: #475569;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+}

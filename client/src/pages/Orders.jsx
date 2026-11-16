@@ -1,8 +1,10 @@
+import '../styles/OrdersPreview.css';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import { useLocation } from 'react-router-dom';
 import Swal from 'sweetalert2'; 
 import { useAuth } from '../context/AuthContext';
+import { appConfig } from '../config/appConfig';
 import Modal from '../components/Modal';
 import { printOrder } from '../utils/printUtils';
 
@@ -282,7 +284,7 @@ export const OrderService = {
 // ============================================================================
 // --- HOOKS ---
 // ============================================================================
-const useOrders = (API_BASE_URL, token) => {
+const useOrders = (API_BASE_URL, token, preview) => {
     const [state, setState] = useState({ orders: [], dbProducts: [], dbFabrics: [], dbClients: [], loading: true, error: null });
 
     const normalizeOrders = useCallback((orders = []) => (
@@ -298,12 +300,27 @@ const useOrders = (API_BASE_URL, token) => {
     const fetchAllData = useCallback(async () => {
         setState(prev => ({ ...prev, loading: true, error: null }));
         try {
-            const [ordersRes, prodRes, fabRes, cliRes] = await Promise.all([
+            const requests = [
                 OrderService.fetchOrders(API_BASE_URL, token),
                 OrderService.fetchProducts(API_BASE_URL, token),
                 OrderService.fetchFabrics(API_BASE_URL, token),
                 OrderService.fetchClients(API_BASE_URL, token)
-            ]);
+            ];
+            if (preview) {
+                const [list, products, fabrics, clients] = await Promise.allSettled(requests);
+                setState(prev => ({
+                    ...prev,
+                    orders: list.status === 'fulfilled' ? normalizeOrders(list.value.data.orders || []) : prev.orders,
+                    dbProducts: products.value?.data.products || prev.dbProducts,
+                    dbFabrics: fabrics.value?.data.fabrics || prev.dbFabrics,
+                    dbClients: clients.value?.data.clients || prev.dbClients,
+                    loading: false,
+                    error: list.status === 'rejected' ? 'Não foi possível carregar os pedidos.' : null,
+                    auxiliaryError: [products, fabrics, clients].some(result => result.status === 'rejected'),
+                }));
+                return;
+            }
+            const [ordersRes, prodRes, fabRes, cliRes] = await Promise.all(requests);
             setState({
                 orders: normalizeOrders(ordersRes.data.orders || []),
                 dbProducts: prodRes.data.products || [],
@@ -314,7 +331,7 @@ const useOrders = (API_BASE_URL, token) => {
         } catch (err) {
             setState(prev => ({ ...prev, loading: false, error: 'Erro ao carregar dados. Verifique sua conexão.' }));
         }
-    }, [API_BASE_URL, token, normalizeOrders]);
+    }, [API_BASE_URL, token, normalizeOrders, preview]);
 
     useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
@@ -337,7 +354,7 @@ const useOrders = (API_BASE_URL, token) => {
         await refreshOrders();
     }, [API_BASE_URL, token, refreshOrders]);
 
-    return { ...state, refreshOrders, quickAddClient, removeOrders };
+    return { ...state, retry: fetchAllData, refreshOrders, quickAddClient, removeOrders };
 };
 
 // ============================================================================
@@ -511,7 +528,7 @@ const FinancialSummary = ({ subtotal, totalCost, discount, onDiscountChange, amo
     );
 };
 
-const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, auxData, onQuickClientAdd, onRefresh }) => {
+const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, auxData, onQuickClientAdd, onRefresh, preview }) => {
     const isEditMode = !!orderToEdit;
     const initialState = { client_id: '', client_name: '', client_phone: '', category: 'Geral', delivery_date: '', amount_paid: 0, status: 'Criação de Arte', discount: 0 };
 
@@ -730,7 +747,7 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={isEditMode ? "Revisar e Aprovar Pedido" : "Novo Pedido"}>
+        <Modal manageFocus={preview} isOpen={isOpen} onClose={onClose} title={isEditMode ? "Revisar e Aprovar Pedido" : "Novo Pedido"}>
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px' }}>Informações Básicas</h4>
@@ -750,7 +767,7 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
                         </div>
                         <div className="flex flex-col gap-1 w-full">
                             <label htmlFor="delivery_date" style={styles.label}>Data de Entrega</label>
-                            <input id="delivery_date" type="date" name="delivery_date" className="premium-input" value={orderData.delivery_date} onChange={handleInputChange} onClick={(e) => e.target.showPicker()} style={{ ...styles.input, cursor: 'pointer', backgroundColor: '#fff' }} required />
+                            <input id="delivery_date" type="date" name="delivery_date" className="premium-input" value={orderData.delivery_date} onChange={handleInputChange} onClick={preview ? undefined : (e) => e.target.showPicker()} style={{ ...styles.input, cursor: 'pointer', backgroundColor: '#fff' }} required />
                         </div>
                     </div>
                 </div>
@@ -760,7 +777,7 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
                         <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Produtos do pedido</h4>
                         <p style={{ margin: '6px 0 0 0', color: '#64748B', fontSize: '0.92rem' }}>Agora você pode montar o mesmo pedido com vários produtos, grades e layouts separados.</p>
                     </div>
-                    <button type="button" className="premium-btn" onClick={handleAddProductLine} style={styles.addLineButton}>
+                    <button type="button" className={`premium-btn${preview ? ' orders-primary-button' : ''}`} onClick={handleAddProductLine} style={styles.addLineButton}>
                         {Icons.Plus} Adicionar produto
                     </button>
                 </div>
@@ -798,7 +815,7 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minHeight: '175px', flex: 1, minWidth: '250px', maxWidth: '350px' }}>
-                        <button type="submit" className="premium-btn" disabled={isSubmitting} style={{ ...styles.submitButton, width: '100%', padding: '16px', fontSize: '1.05rem', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', opacity: isSubmitting ? 0.75 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
+                        <button type="submit" className={`premium-btn${preview ? ' orders-primary-button' : ''}`} disabled={isSubmitting} style={{ ...styles.submitButton, width: '100%', padding: '16px', fontSize: '1.05rem', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', opacity: isSubmitting ? 0.75 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
                             {isSubmitting ? 'Salvando...' : (isEditMode ? 'Salvar Alterações e Lançar' : 'Salvar Pedido')}
                         </button>
                     </div>
@@ -811,8 +828,8 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
 // ============================================================================
 // --- OUTROS MODAIS E TABELA ---
 // ============================================================================
-const StatusModal = ({ isOpen, onClose, orderToUpdate, onUpdateStatus }) => (
-    <Modal isOpen={isOpen} onClose={onClose} title="Atualizar Status">
+const StatusModal = ({ isOpen, onClose, orderToUpdate, onUpdateStatus, preview }) => (
+    <Modal manageFocus={preview} isOpen={isOpen} onClose={onClose} title="Atualizar Status">
         <div style={{ padding: '8px 0' }}>
             <div style={styles.buttonsGrid}>
                 {ORDER_CONSTANTS.STATUS_OPTIONS.filter(s => s !== 'Criação de Arte').map(status => { 
@@ -889,7 +906,7 @@ const ProductLineEditor = ({
     };
 
     return (
-        <div style={styles.productLineCard}>
+        <div className="orders-product" style={styles.productLineCard}>
             <div style={styles.productLineHeader}>
                 <div>
                     <h4 style={styles.productLineTitle}>Produto {index + 1}</h4>
@@ -909,7 +926,7 @@ const ProductLineEditor = ({
                 )}
             </div>
 
-            <div style={styles.productLineFields}>
+            <div className="orders-product-fields" style={styles.productLineFields}>
                 <div style={styles.formGroup}>
                     <label style={styles.label}>Produto</label>
                     <select className="premium-input" value={line.product_type} onChange={(event) => onProductSelect(line.line_key, event.target.value)} style={styles.select}>
@@ -1084,8 +1101,8 @@ const ProductLineEditor = ({
     );
 };
 
-const OrderDetailsModal = ({ isOpen, onClose, order, onReset, onExportTxt, onUnlockClient, onRevertToQuote, API_BASE_URL, userRole }) => (
-    <Modal isOpen={isOpen} onClose={onClose} title="Detalhes do Pedido">
+const OrderDetailsModal = ({ isOpen, onClose, order, onReset, onExportTxt, onUnlockClient, onRevertToQuote, API_BASE_URL, userRole, preview }) => (
+    <Modal manageFocus={preview} isOpen={isOpen} onClose={onClose} title="Detalhes do Pedido">
         {order ? (
             <div style={styles.detailsContainer}>
                 <h4 style={{fontSize:'1.1rem', fontWeight:'700', marginBottom:'15px'}}>{order.client_name} - {order.tracking_code}</h4>
@@ -1187,32 +1204,32 @@ const OrderDetailsModal = ({ isOpen, onClose, order, onReset, onExportTxt, onUnl
     </Modal>
 );
 
-const OrderRow = React.memo(({ order, isSelected, onCheckboxChange, onView, onEdit, onPrint, onStatusClick, userRole }) => {
+const OrderRow = React.memo(({ order, isSelected, onCheckboxChange, onView, onEdit, onPrint, onStatusClick, userRole, preview, editDisabled }) => {
     const [isHovered, setIsHovered] = useState(false);
     const paid = getOrderAmountPaid(order);
     const total = normalizeMoneyValue(order.total_price);
     const isFullyPaid = paid >= total && total > 0;
 
     return (
-        <tr onClick={() => onView(order.tracking_code)} onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)} style={{ ...styles.tr, ...(isHovered ? styles.trHover : {}), cursor: 'pointer' }}>
-            <td style={styles.td} onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Selecionar pedido ${order.tracking_code}`} checked={isSelected} onChange={() => onCheckboxChange(order.id)} style={styles.checkbox} /></td>
-            <td style={{ ...styles.td, fontWeight: '600' }}>{order.client_name}</td>
-            <td style={styles.td}>{order.tracking_code}</td>
-            <td style={styles.td}>{order.layout_path ? <span style={{color:'#2563EB', display:'flex', alignItems:'center', gap:'4px', fontWeight:'600', fontSize:'0.8rem'}}>{Icons.Image} Anexado</span> : <span style={{color:'#94A3B8'}}>-</span>}</td>
-            <td style={styles.td}><span onClick={(e) => { e.stopPropagation(); onStatusClick(order); }} style={{ ...styles.statusBadge, ...getStatusStyle(order.status), cursor: 'pointer' }}>{order.status}</span></td>
-            <td style={{...styles.td, fontWeight:'600', color:'#4B5563'}}>{formatDateSafe(order.delivery_date)}</td>
-            <td style={{...styles.td, fontWeight:'800', color:'#0F172A'}}>
-                {formatMoney(total)}
+        <tr role={preview ? "row" : undefined} onClick={() => onView(order.tracking_code)} onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)} style={{ ...styles.tr, ...(isHovered ? styles.trHover : {}), cursor: 'pointer' }}>
+            <td role={preview ? "cell" : undefined} style={styles.td} onClick={(e) => e.stopPropagation()}><label className={preview ? "orders-select-target" : undefined}><input type="checkbox" aria-label={`Selecionar pedido ${order.tracking_code}`} checked={isSelected} onChange={() => onCheckboxChange(order.id)} style={styles.checkbox} /></label></td>
+            <td role={preview ? "cell" : undefined} style={{ ...styles.td, fontWeight: '600' }}>{order.client_name}</td>
+            <td role={preview ? "cell" : undefined} style={styles.td}>{order.tracking_code}</td>
+            <td role={preview ? "cell" : undefined} style={styles.td}>{order.layout_path ? <span style={{color:'#2563EB', display:'flex', alignItems:'center', gap:'4px', fontWeight:'600', fontSize:'0.8rem'}}>{Icons.Image} Anexado</span> : <span style={{color:'#94A3B8'}}>-</span>}</td>
+            <td role={preview ? "cell" : undefined} style={styles.td}>{preview ? <button type="button" className="orders-status" aria-label={`Alterar status de ${order.tracking_code}: ${order.status}`} onClick={(e) => { e.stopPropagation(); onStatusClick(order); }} style={{ ...styles.statusBadge, ...getStatusStyle(order.status) }}>{order.status}</button> : <span onClick={(e) => { e.stopPropagation(); onStatusClick(order); }} style={{ ...styles.statusBadge, ...getStatusStyle(order.status), cursor: 'pointer' }}>{order.status}</span>}</td>
+            <td role={preview ? "cell" : undefined} style={{...styles.td, fontWeight:'600', color:'#4B5563'}}>{preview && <span className="orders-mobile-label">Entrega</span>}{formatDateSafe(order.delivery_date)}</td>
+            <td role={preview ? "cell" : undefined} style={{...styles.td, fontWeight:'800', color:'#0F172A'}}>
+                {preview && <span className="orders-mobile-label">Total</span>}{formatMoney(total)}
                 {paid > 0 && (
                     <div style={{ fontSize: '0.7rem', color: isFullyPaid ? '#10B981' : '#F59E0B', fontWeight: '700', marginTop: '2px' }}>
                         Pago: {formatMoney(paid)}
                     </div>
                 )}
             </td>
-            <td style={{...styles.td, textAlign:'right'}} onClick={(e) => e.stopPropagation()}>
+            <td role={preview ? "cell" : undefined} style={{...styles.td, textAlign:'right'}} onClick={(e) => e.stopPropagation()}>
                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                     <button onClick={() => onView(order.tracking_code)} aria-label="Ver Detalhes" style={styles.iconButton} title="Detalhes">{Icons.Eye}</button>
-                    {(userRole === 'admin' || userRole === 'gerente') && <button onClick={() => onEdit(order)} aria-label="Editar e Aprovar" style={styles.iconButton} title="Editar e Aprovar">{Icons.Edit}</button>}
+                    {(userRole === 'admin' || userRole === 'gerente') && <button disabled={editDisabled} onClick={() => onEdit(order)} aria-label="Editar e Aprovar" style={styles.iconButton} title="Editar e Aprovar">{Icons.Edit}</button>}
                     <button onClick={() => onPrint(order)} aria-label="Imprimir" style={styles.iconButton} title="Imprimir O.S.">{Icons.Printer}</button>
                 </div>
             </td>
@@ -1220,18 +1237,18 @@ const OrderRow = React.memo(({ order, isSelected, onCheckboxChange, onView, onEd
     );
 });
 
-const OrdersTable = React.memo(({ orders, selectedIds, onCheckboxChange, onView, onEdit, onPrint, onStatusClick, userRole }) => {
+const OrdersTable = React.memo(({ orders, selectedIds, onCheckboxChange, onView, onEdit, onPrint, onStatusClick, userRole, preview, editDisabled }) => {
     if (orders.length === 0) return <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', border: '1px solid #e2e8f0', borderRadius: '12px', backgroundColor: 'white' }}>Nenhum pedido encontrado.</div>;
 
     return (
-        <div style={styles.tableContainer}>
-            <table style={styles.table} aria-label="Tabela de Pedidos">
+        <div className={preview ? "orders-results" : undefined} style={styles.tableContainer}>
+            <table role={preview ? "table" : undefined} style={styles.table} aria-label="Tabela de Pedidos">
                 <thead>
                     <tr><th scope="col" style={styles.th}></th><th scope="col" style={styles.th}>Cliente</th><th scope="col" style={styles.th}>Código</th><th scope="col" style={styles.th}>Layout</th><th scope="col" style={styles.th}>Status</th><th scope="col" style={styles.th}>Entrega</th><th scope="col" style={styles.th}>Total (R$)</th><th scope="col" style={{ ...styles.th, textAlign: 'right' }}>Ações</th></tr>
                 </thead>
-                <tbody>
+                <tbody role={preview ? "rowgroup" : undefined}>
                     {orders.map((order) => (
-                        <OrderRow key={order.id} order={order} isSelected={selectedIds.includes(order.id)} onCheckboxChange={onCheckboxChange} onView={onView} onEdit={onEdit} onPrint={onPrint} onStatusClick={onStatusClick} userRole={userRole} />
+                        <OrderRow key={order.id} order={order} isSelected={selectedIds.includes(order.id)} onCheckboxChange={onCheckboxChange} onView={onView} onEdit={onEdit} onPrint={onPrint} onStatusClick={onStatusClick} userRole={userRole} preview={preview} editDisabled={editDisabled} />
                     ))}
                 </tbody>
             </table>
@@ -1242,10 +1259,10 @@ const OrdersTable = React.memo(({ orders, selectedIds, onCheckboxChange, onView,
 // ============================================================================
 // --- MAIN COMPONENT ---
 // ============================================================================
-const Orders = () => {
+const Orders = ({ preview = false }) => {
     const { token, API_BASE_URL, user } = useAuth();
     const location = useLocation();
-    const { orders, dbProducts, dbFabrics, dbClients, loading, error, refreshOrders, quickAddClient, removeOrders } = useOrders(API_BASE_URL, token);
+    const { orders, dbProducts, dbFabrics, dbClients, loading, error, auxiliaryError, retry, refreshOrders, quickAddClient, removeOrders } = useOrders(API_BASE_URL, token, preview);
     
     const [currentTab, setCurrentTab] = useState('active'); 
     const [filterStatus, setFilterStatus] = useState(null);
@@ -1258,6 +1275,9 @@ const Orders = () => {
     const [orderToEdit, setOrderToEdit] = useState(null);
     const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
     const [orderToUpdateStatus, setOrderToUpdateStatus] = useState(null);
+    const previewTheme = appConfig.theme === 'monochrome'
+        ? 'orders-preview--monochrome'
+        : 'orders-preview--default';
 
     useEffect(() => { if (location.state?.filterBy) setFilterStatus(location.state.filterBy); }, [location]);
 
@@ -1457,10 +1477,10 @@ const Orders = () => {
         }
     }, [API_BASE_URL, token, refreshOrders, loadOrderDetails]);
 
-    if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>Carregando painel de pedidos...</div>;
+    if (loading && !preview) return <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>Carregando painel de pedidos...</div>;
 
     return (
-        <div style={{ fontFamily: "'Inter', sans-serif", color: '#0f172a', maxWidth: '1600px', margin: '0 auto', paddingBottom: '40px' }}>
+        <div className={preview ? `orders-preview ${previewTheme}` : undefined} style={{ fontFamily: "'Inter', sans-serif", color: '#0f172a', maxWidth: '1600px', margin: '0 auto', paddingBottom: '40px' }}>
             <style>{`
                 .no-spin::-webkit-outer-spin-button,
                 .no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -1484,10 +1504,10 @@ const Orders = () => {
                 }
             `}</style>
             
-            <header style={styles.header}>
+            <header className="orders-header" style={styles.header}>
                 <div>
                     <h1 style={{ fontSize: '1.75rem', fontWeight: '800', color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.5px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span style={{ backgroundColor: '#EFF6FF', color: '#2563EB', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center' }} aria-hidden="true">
+                        <span className={preview ? 'orders-header-icon' : undefined} style={{ backgroundColor: '#EFF6FF', color: '#2563EB', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center' }} aria-hidden="true">
                             <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
                         </span>
                         Painel de Pedidos
@@ -1496,19 +1516,19 @@ const Orders = () => {
                         Acompanhamento e faturamento de vendas
                     </p>
                 </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
+                <div className="orders-actions" style={{ display: 'flex', gap: '12px' }}>
                     {selectedOrderIds.length > 0 && user?.role === 'admin' && (<button onClick={handleDeleteSelected} style={styles.deleteButton}><span style={{ marginRight: '6px', display: 'flex' }}>{Icons.Trash}</span> Excluir</button>)}
                     {selectedOrderIds.length > 0 && (user?.role === 'admin' || user?.role === 'gerente') && (<button onClick={handleRevertSelectedToQuote} style={styles.revertQuoteButton}><span style={{ marginRight: '6px', display: 'flex' }}>{Icons.Return}</span> Mover p/ Orçamento</button>)}
-                    <button onClick={openCreateModal} className="premium-btn" style={{...styles.addButton, backgroundColor: '#2563eb'}}><span style={{ marginRight: '6px', display: 'flex' }}>{Icons.Plus}</span> Novo Pedido</button>
+                    <button onClick={openCreateModal} disabled={preview && (loading || auxiliaryError)} className={`premium-btn${preview ? ' orders-primary-button' : ''}`} style={{...styles.addButton, backgroundColor: '#2563eb'}}><span style={{ marginRight: '6px', display: 'flex' }}>{Icons.Plus}</span> Novo Pedido</button>
                 </div>
             </header>
 
-            <div style={styles.controlsContainer}>
+            <div className="orders-controls" style={styles.controlsContainer}>
                 <div style={styles.tabsContainer}>
-                    <button onClick={() => { setCurrentTab('active'); clearFilters(); }} style={currentTab === 'active' && !filterStatus ? styles.tabActive : styles.tabInactive}>Em Produção</button>
-                    <button onClick={() => { setCurrentTab('history'); clearFilters(); }} style={currentTab === 'history' ? styles.tabActive : styles.tabInactive}>Histórico</button>
+                    <button className={preview ? 'orders-tab' : undefined} aria-pressed={preview ? currentTab === 'active' && !filterStatus : undefined} onClick={() => { setCurrentTab('active'); clearFilters(); }} style={currentTab === 'active' && !filterStatus ? styles.tabActive : styles.tabInactive}>Em Produção</button>
+                    <button className={preview ? 'orders-tab' : undefined} aria-pressed={preview ? currentTab === 'history' : undefined} onClick={() => { setCurrentTab('history'); clearFilters(); }} style={currentTab === 'history' ? styles.tabActive : styles.tabInactive}>Histórico</button>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }} className="orders-filters">
                     <div style={styles.searchBox}>
                         <span style={{ color: '#94a3b8' }}>{Icons.Search}</span>
                         <input aria-label="Buscar pedidos" type="text" placeholder="Buscar cliente ou código..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} />
@@ -1517,29 +1537,32 @@ const Orders = () => {
                         <span style={{ color: '#94a3b8' }}>{Icons.Filter}</span>
                         <select aria-label="Filtrar por status" value={filterStatus || ''} onChange={(e) => setFilterStatus(e.target.value || null)} style={styles.selectInput}><option value="">Todos os Status</option>{ORDER_CONSTANTS.STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select>
                     </div>
-                    <div style={styles.dateBox}>
+                    <div className="orders-dates" style={styles.dateBox}>
                         <span style={{ color: '#64748b', fontSize: '0.8rem', marginRight: '5px', fontWeight: '500' }}>Entrega:</span>
-                        <input aria-label="Data inicial" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} onClick={(e) => e.target.showPicker()} style={{ ...styles.dateInput, cursor: 'pointer' }} />
+                        <input aria-label="Data inicial" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} onClick={preview ? undefined : (e) => e.target.showPicker()} style={{ ...styles.dateInput, cursor: 'pointer' }} />
                         <span style={{ color: '#94a3b8' }}>-</span>
-                        <input aria-label="Data final" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} onClick={(e) => e.target.showPicker()} style={{ ...styles.dateInput, cursor: 'pointer' }} />
+                        <input aria-label="Data final" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} onClick={preview ? undefined : (e) => e.target.showPicker()} style={{ ...styles.dateInput, cursor: 'pointer' }} />
                     </div>
-                    {(filterStatus || searchTerm || (startDate && endDate)) && (<button aria-label="Limpar filtros" onClick={clearFilters} style={styles.clearFilterButton}><span style={{ marginRight: '4px', display: 'flex' }}>{Icons.Close}</span> Limpar</button>)}
+                    {(filterStatus || searchTerm || (preview ? (startDate || endDate) : (startDate && endDate))) && (<button aria-label="Limpar filtros" onClick={clearFilters} style={styles.clearFilterButton}><span style={{ marginRight: '4px', display: 'flex' }}>{Icons.Close}</span> Limpar</button>)}
                 </div>
             </div>
 
             {error && <p style={styles.error} role="alert">{error}</p>}
+            {preview && auxiliaryError && <p style={styles.error} role="alert">Falha ao carregar os cadastros necessários para criar ou editar pedidos.</p>}
+            {preview && (error || auxiliaryError) && !loading && <button className="orders-retry" type="button" onClick={retry}>Tentar novamente</button>}
+            {preview && loading && <p role="status">Carregando painel de pedidos…</p>}
 
-            <OrdersTable 
+            {(!preview || (!loading && (!error || filteredOrders.length > 0))) && <OrdersTable preview={preview} editDisabled={preview && auxiliaryError}
                 orders={filteredOrders} selectedIds={selectedOrderIds} 
                 onCheckboxChange={handleCheckboxChange} onView={loadOrderDetails} 
                 onEdit={openEditModal} onPrint={handlePrintOrder} 
                 onStatusClick={(o) => { setOrderToUpdateStatus(o); toggleModal('status', true); }} 
-                userRole={user?.role} 
-            />
+                userRole={user?.role}
+            />}
 
-            <OrderFormModal isOpen={modals.form} onClose={() => toggleModal('form', false)} orderToEdit={orderToEdit} API_BASE_URL={API_BASE_URL} token={token} auxData={{dbProducts, dbFabrics, dbClients}} onQuickClientAdd={quickAddClient} onRefresh={refreshOrders} />
-            <StatusModal isOpen={modals.status} onClose={() => toggleModal('status', false)} orderToUpdate={orderToUpdateStatus} onUpdateStatus={handleUpdateStatus} />
-            <OrderDetailsModal isOpen={modals.details} onClose={() => toggleModal('details', false)} order={selectedOrderDetails} onReset={handleResetOrder} onExportTxt={handleExportTxt} onUnlockClient={handleUnlockClient} onRevertToQuote={handleRevertToQuote} API_BASE_URL={API_BASE_URL} userRole={user?.role} />
+            <OrderFormModal preview={preview} isOpen={modals.form} onClose={() => toggleModal('form', false)} orderToEdit={orderToEdit} API_BASE_URL={API_BASE_URL} token={token} auxData={{dbProducts, dbFabrics, dbClients}} onQuickClientAdd={quickAddClient} onRefresh={refreshOrders} />
+            <StatusModal preview={preview} isOpen={modals.status} onClose={() => toggleModal('status', false)} orderToUpdate={orderToUpdateStatus} onUpdateStatus={handleUpdateStatus} />
+            <OrderDetailsModal preview={preview} isOpen={modals.details} onClose={() => toggleModal('details', false)} order={selectedOrderDetails} onReset={handleResetOrder} onExportTxt={handleExportTxt} onUnlockClient={handleUnlockClient} onRevertToQuote={handleRevertToQuote} API_BASE_URL={API_BASE_URL} userRole={user?.role} />
         </div>
     );
 };
