@@ -14,7 +14,8 @@ document.querySelectorAll('.look-link').forEach((button) => {
     preview.alt = photo.alt;
     title.textContent = model;
     quote.href = `https://wa.me/5581988074760?text=${encodeURIComponent(message)}`;
-    example.href = button.dataset.example;
+    example.hidden = !button.dataset.example;
+    example.href = button.dataset.example || 'https://www.instagram.com/atosfardamentos/';
     dialog.showModal();
   });
 });
