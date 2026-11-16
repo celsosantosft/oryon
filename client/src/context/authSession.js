@@ -4,7 +4,7 @@ export const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou. Faça login novamen
 export const INACTIVITY_EXPIRED_MESSAGE = 'Sua sessão expirou por segurança. Entre novamente.';
 export const GENERIC_AUTH_NOTICE_MESSAGE = 'Sua sessão foi encerrada. Entre novamente.';
 export const LAST_ACTIVITY_KEY = 'auth_last_activity';
-export const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000;
+export const INACTIVITY_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 
 const DEFAULT_LOGIN_ERROR_MESSAGE = 'E-mail ou senha incorretos.';
 const OBJECT_OBJECT_MESSAGE = '[object object]';

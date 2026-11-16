@@ -32,12 +32,12 @@ test('auth notice falls back instead of rendering objects', () => {
     );
 });
 
-test('inactive session expires after one hour', () => {
-    assert.equal(isInactiveSessionExpired(1_000, 3_601_000), true);
+test('inactive session expires after four hours', () => {
+    assert.equal(isInactiveSessionExpired(1_000, 14_401_000), true);
 });
 
-test('inactive session stays active before one hour', () => {
-    assert.equal(isInactiveSessionExpired(1_000, 3_600_999), false);
+test('inactive session stays active before four hours', () => {
+    assert.equal(isInactiveSessionExpired(1_000, 14_400_999), false);
 });
 
 test('expired activity is stopped before protected handlers run', () => {
@@ -51,7 +51,7 @@ test('expired activity is stopped before protected handlers run', () => {
     const expired = handleSessionActivity({
         event,
         lastActivityTime: 1_000,
-        currentTime: 3_601_000,
+        currentTime: 14_401_000,
         onExpired: () => calls.push('onExpired'),
         onActive: () => calls.push('onActive')
     });
