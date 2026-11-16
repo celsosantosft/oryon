@@ -1239,12 +1239,14 @@ const OrderRow = React.memo(({ order, isSelected, onCheckboxChange, onView, onEd
             <tr role="row" className="orders-preview-row">
                 <td role="cell" className="orders-card-select">{selection}</td>
                 <td role="cell" className="orders-card-client">
-                    <strong>{order.client_name}</strong>
+                    <strong title={order.client_name}>{order.client_name}</strong>
                     <span>{order.tracking_code}</span>
                 </td>
                 <td role="cell" className="orders-card-status">
-                    <button type="button" className="orders-status" aria-label={`Alterar status de ${order.tracking_code}: ${order.status}`} onClick={() => onStatusClick(order)} style={{ backgroundColor: statusStyle.bg, color: statusStyle.color, border: statusStyle.border }}>
-                        {order.status?.replaceAll('/', '/\u200b')}
+                    <button type="button" className="orders-status" aria-label={`Alterar status de ${order.tracking_code}: ${order.status}`} onClick={() => onStatusClick(order)}>
+                        <span style={{ backgroundColor: statusStyle.bg, color: statusStyle.color, border: statusStyle.border }}>
+                            {order.status?.replaceAll('/', '/\u200b')}
+                        </span>
                     </button>
                 </td>
                 <td role="cell" className="orders-card-deadline" data-tone={deadline.tone}>
