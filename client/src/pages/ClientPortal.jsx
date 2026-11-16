@@ -11,7 +11,7 @@ import { appConfig } from '../config/appConfig';
 import { Icons } from '../components/Icons'; 
 import { styles, injectGlobalStyles } from '../utils/ClientPortalStyles';
 import { formatMoney, parseNull, getAsArray, generateId } from '../utils/helpers';
-import { showToastSuccess, showToastEdit, confirmSubmitListAlert, confirmBulkSubmitAlert, confirmApproveArtAlert } from '../utils/alerts';
+import { showToastSuccess, showToastEdit, confirmSubmitListAlert, confirmApproveArtAlert } from '../utils/alerts';
 import { PLAYER_NUMBER_MAX_LENGTH, isValidPlayerNumber, normalizePlayerNumberInput } from '../utils/playerNumber';
 import { getPortalErrorContent } from '../utils/portalRequestState';
 
@@ -58,7 +58,6 @@ const ClientPortal = ({ preview = false, modern = false }) => {
     const { items, setItems, removeItem, updateItem, confirmItem, saveEditedItem } = useOrderItems([]);
     
     const [activeTab, setActiveTab] = useState('home');
-    const [bulkSizes, setBulkSizes] = useState({});
     const [editingItem, setEditingItem] = useState(null);
     const [pendingAction, setPendingAction] = useState(null);
     const pendingActionRef = useRef(null);
@@ -78,12 +77,6 @@ const ClientPortal = ({ preview = false, modern = false }) => {
     useEffect(() => {
         injectGlobalStyles();
         if (order) {
-            let adminSizes = {};
-            if (order.sizes) {
-                try { adminSizes = typeof order.sizes === 'string' ? JSON.parse(order.sizes) : order.sizes; } 
-                catch (e) { console.error('Erro ao ler tamanhos do painel:', e); }
-            }
-            
             // ⭐ A CORREÇÃO DA ABERTURA ESTÁ AQUI ⭐
             // Agora ele usa apenas a informação oficial do banco de dados para abrir ou fechar os campos
             const isLockedDb = order.is_locked_by_client === 1 || order.is_locked_by_client === true;
@@ -102,17 +95,12 @@ const ClientPortal = ({ preview = false, modern = false }) => {
                 }
                 setItems(loadedItems);
 
-                const counts = {};
-                loadedItems.forEach(item => { if (item.size && item.confirmed) counts[item.size] = (counts[item.size] || 0) + 1; });
-                // eslint-disable-next-line react-hooks/set-state-in-effect
-                setBulkSizes(Object.keys(counts).length > 0 ? counts : adminSizes);
             } else {
                 if (!isLockedDb) {
                     setItems([{ id: generateId(), player_name: '', player_number: '', size: '', confirmed: false }]);
                 } else {
                     setItems([]);
                 }
-                setBulkSizes(adminSizes);
             }
         }
     }, [order, setItems]);
@@ -155,33 +143,8 @@ const ClientPortal = ({ preview = false, modern = false }) => {
                 await trackingService.submitItems(code, portalToken, finalItemsToSubmit);
                 fireAlert('Sucesso!', 'Lista enviada.', 'success').then(() => window.location.reload());
             }
-        } catch {
-            fireAlert('Erro', 'Erro ao enviar.', 'error');
-        } finally {
-            endAction();
-        }
-    };
-
-    const handleBulkSubmit = async () => {
-        const hasQty = Object.values(bulkSizes).some(qty => parseInt(qty) > 0);
-        if (!hasQty) return fireAlert({ title: 'Atenção', text: 'Preencha a quantidade.', icon: 'warning', confirmButtonColor: '#2563EB' });
-
-        const finalItemsToSubmit = [];
-        for (const [size, qty] of Object.entries(bulkSizes)) {
-            for (let i = 0; i < parseInt(qty); i++) {
-                finalItemsToSubmit.push({ id: generateId(), player_name: '', player_number: '', size: size, confirmed: true });
-            }
-        }
-
-        if (!beginAction('submit-bulk')) return;
-        try {
-            const result = await confirmBulkSubmitAlert(finalItemsToSubmit.length);
-            if (result.isConfirmed) {
-                await trackingService.submitItems(code, portalToken, finalItemsToSubmit);
-                fireAlert('Sucesso!', 'Grade enviada.', 'success').then(() => window.location.reload());
-            }
-        } catch {
-            fireAlert('Erro', 'Erro ao enviar.', 'error');
+        } catch (err) {
+            fireAlert('Erro', err.response?.data?.error || 'Erro ao enviar.', 'error');
         } finally {
             endAction();
         }
@@ -235,13 +198,7 @@ const ClientPortal = ({ preview = false, modern = false }) => {
         const isBulkOnly = (hasAdminSizes || isLocked) && !hasNamesOrNumbers;
         
         const confirmedItemsAll = items.filter(i => isLocked ? true : i.confirmed);
-        let summaryCounts = confirmedItemsAll.reduce((acc, item) => { if (item.size) acc[item.size] = (acc[item.size] || 0) + 1; return acc; }, {});
-
-        if (Object.keys(summaryCounts).length === 0 && hasAdminSizes) {
-            summaryCounts = adminSizes;
-        }
-
-        const totalConfirmed = Object.values(summaryCounts).reduce((a, b) => a + b, 0);
+        const summaryCounts = adminSizes;
 
         const nominalConfirmedItems = confirmedItemsAll
             .filter(i => (i.player_name && i.player_name !== '') || (i.player_number && i.player_number !== ''))
@@ -260,7 +217,7 @@ const ClientPortal = ({ preview = false, modern = false }) => {
 
         return {
             isLocked, isBulkOnly, isUsingNominalList: hasNamesOrNumbers, hasAdminSizes, availableSizes, 
-            summaryCounts, totalConfirmed, nominalConfirmedItems, nominalItemsForTab, activeItems, 
+            summaryCounts, nominalConfirmedItems, nominalItemsForTab, activeItems,
             lastAddedNominalItem, currentStepIndex,
             needsArtApproval: order.layout_path && currentStepIndex < 2 && order.status !== 'Cancelado',
             artIsApproved: currentStepIndex >= 2,
@@ -409,7 +366,7 @@ const ClientPortal = ({ preview = false, modern = false }) => {
                 {activeTab === 'home' && <HomeTab preview={useModernPortal} order={order} API_BASE_URL={API_BASE_URL} needsArtApproval={derivedData.needsArtApproval} artIsApproved={derivedData.artIsApproved} onApproveArt={handleApproveArt} pendingAction={pendingAction} />}
                 {activeTab === 'tracking' && <TrackingTab preview={useModernPortal} order={order} currentStepIndex={derivedData.currentStepIndex} STATUS_STEPS_CONFIG={STATUS_STEPS_CONFIG} />}
                 {activeTab === 'finance' && <FinanceTab preview={useModernPortal} remainingOrder={derivedData.remainingOrder} percentPaid={derivedData.percentPaid} totalOrder={derivedData.totalOrder} paidOrder={derivedData.paidOrder} formatMoney={formatMoney} />}
-                {activeTab === 'bulk' && <BulkTab preview={useModernPortal} isQuote={order.tracking_code?.startsWith('#ORC-')} isLocked={derivedData.isLocked} isUsingNominalList={derivedData.isUsingNominalList} hasAdminSizes={derivedData.hasAdminSizes} availableSizes={derivedData.availableSizes} summaryCounts={derivedData.summaryCounts} totalConfirmed={derivedData.totalConfirmed} bulkSizes={bulkSizes} setBulkSizes={setBulkSizes} handleBulkSubmit={handleBulkSubmit} pendingAction={pendingAction} />}
+                {activeTab === 'bulk' && <BulkTab preview={useModernPortal} isQuote={order.tracking_code?.startsWith('#ORC-')} availableSizes={derivedData.availableSizes} summaryCounts={derivedData.summaryCounts} />}
                 {activeTab === 'list' && <ListTab preview={useModernPortal} isLocked={derivedData.isLocked} items={derivedData.nominalItemsForTab} activeItems={derivedData.activeItems} confirmedItems={derivedData.nominalConfirmedItems} availableSizes={derivedData.availableSizes} lastAddedItem={derivedData.lastAddedNominalItem} handleRemoveItem={handleRemoveItem} handleItemChange={updateItem} handleConfirmItem={handleConfirmItem} handleSubmit={handleSubmit} handleEditItem={setEditingItem} pendingAction={pendingAction} />}
             </div>
             

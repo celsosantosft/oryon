@@ -24,5 +24,5 @@ test('exposes request errors and prevents repeated portal actions', () => {
     assert.match(portalSource, /pendingActionRef\.current/);
     assert.match(actionSources, /disabled=\{pendingAction === 'approve-art'\}/);
     assert.match(actionSources, /disabled=\{pendingAction === 'submit-list'\}/);
-    assert.match(actionSources, /disabled=\{pendingAction === 'submit-bulk'\}/);
+    assert.doesNotMatch(actionSources, /submit-bulk/);
 });

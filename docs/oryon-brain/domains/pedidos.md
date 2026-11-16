@@ -11,6 +11,7 @@
 - A ficha de produção deve usar a grade e a lista nominal atuais do pedido. Na impressão, o layout vem primeiro e os nomes/números ficam compactos abaixo, agrupados por tamanho, priorizando uma única folha A4.
 - Ao abrir um pedido no Kanban de Produção, o modal deve exibir o layout anexado sem ocultar a grade de tamanhos.
 - As rotas oficiais `/portal` usam a experiência mobile aprovada; `/portal-preview` permanece disponível para comparação e é a única que exibe o selo de teste.
+- No portal do cliente, a grade oficial é somente para visualização. Somente a empresa altera quantidades e valores; listas nominais enviadas pelo cliente devem respeitar exatamente essa grade.
 - A rota `/orders-preview` isola a experiência mobile de Pedidos para validação sem alterar `/orders`; o preview deve respeitar o tema de cada empresa (Atos azul e PD monocromático).
 - O Google Agenda é opcional e configurado por instalação em `Entregas da Semana`. Somente pedidos gerados criam eventos; orçamentos não criam.
 - Administradores podem cadastrar as credenciais OAuth do Google no próprio painel; o Client Secret fica criptografado no servidor e nunca volta ao navegador.
