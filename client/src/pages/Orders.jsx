@@ -1,5 +1,5 @@
 import '../styles/OrdersPreview.css';
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useSyncExternalStore } from 'react';
 import axios from 'axios';
 import { useLocation } from 'react-router-dom';
 import Swal from 'sweetalert2'; 
@@ -1330,7 +1330,19 @@ const OrdersTable = React.memo(({ orders, selectedIds, onCheckboxChange, onView,
 // ============================================================================
 // --- MAIN COMPONENT ---
 // ============================================================================
-const Orders = ({ preview = false }) => {
+const ordersMobileQuery = '(width < 1000px)';
+
+const subscribeToOrdersViewport = (onChange) => {
+    const viewport = window.matchMedia(ordersMobileQuery);
+    viewport.addEventListener('change', onChange);
+    return () => viewport.removeEventListener('change', onChange);
+};
+
+const isOrdersMobileViewport = () => window.matchMedia(ordersMobileQuery).matches;
+
+const Orders = ({ preview: forcePreview = false }) => {
+    const isMobile = useSyncExternalStore(subscribeToOrdersViewport, isOrdersMobileViewport);
+    const preview = forcePreview || isMobile;
     const { token, API_BASE_URL, user } = useAuth();
     const location = useLocation();
     const { orders, dbProducts, dbFabrics, dbClients, loading, error, auxiliaryError, retry, refreshOrders, quickAddClient, removeOrders } = useOrders(API_BASE_URL, token, preview);

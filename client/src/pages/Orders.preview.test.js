@@ -7,13 +7,12 @@ const ordersSource = readFileSync(new URL('./Orders.jsx', import.meta.url), 'utf
 const modalSource = readFileSync(new URL('../components/Modal.jsx', import.meta.url), 'utf8');
 const previewStyles = readFileSync(new URL('../styles/OrdersPreview.css', import.meta.url), 'utf8');
 
-test('uses the approved orders experience on the official and preview routes', () => {
-    assert.match(appSource, /path="\/orders" element={<Orders preview \/>}/);
+test('lets the official orders route adapt to the viewport and keeps the preview available', () => {
+    assert.match(appSource, /path="\/orders" element={<Orders \/>}/);
     assert.match(appSource, /path="\/orders-preview" element={<Orders key="preview" preview \/>}/);
 });
 
-test('scopes the mobile experience and tenant theme to orders preview', () => {
-    assert.match(ordersSource, /const Orders = \(\{ preview = false \}\)/);
+test('applies the tenant theme to the approved orders experience', () => {
     assert.match(ordersSource, /appConfig\.theme === 'monochrome'/);
     assert.match(ordersSource, /orders-preview--monochrome/);
     assert.match(ordersSource, /orders-preview--default/);

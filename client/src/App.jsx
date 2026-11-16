@@ -98,7 +98,7 @@ function App() {
                                 <Route path="/visao" element={<SmartHomeRoute preview />} />
                                 
                                 <Route path="/users" element={<Users />} />
-                                <Route path="/orders" element={<Orders preview />} />
+                                <Route path="/orders" element={<Orders />} />
                                 <Route path="/orders-preview" element={<Orders key="preview" preview />} />
                                 <Route path="/quotes" element={<Quotes />} /> 
                                 <Route path="/reports" element={<Reports />} />
