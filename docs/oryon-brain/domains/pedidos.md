@@ -12,7 +12,7 @@
 - Ao abrir um pedido no Kanban de Produção, o modal deve exibir o layout anexado sem ocultar a grade de tamanhos.
 - As rotas oficiais `/portal` usam a experiência mobile aprovada; `/portal-preview` permanece disponível para comparação e é a única que exibe o selo de teste.
 - No portal do cliente, a aba Grade é somente para visualização. Quando a lista estiver liberada, o cliente pode adicionar camisas e alterar tamanhos pela aba Nomes; o envio dessa lista atualiza a grade e os valores do pedido.
-- A rota `/orders-preview` isola a experiência mobile de Pedidos para validação sem alterar `/orders`; o preview deve respeitar o tema de cada empresa (Atos azul e PD monocromático).
+- A rota oficial `/orders` usa a experiência mobile aprovada de Pedidos. `/orders-preview` continua acessível com a mesma experiência, que respeita o tema de cada empresa (Atos azul e PD monocromático).
 - O Google Agenda é opcional e configurado por instalação em `Entregas da Semana`. Somente pedidos gerados criam eventos; orçamentos não criam.
 - Administradores podem cadastrar as credenciais OAuth do Google no próprio painel; o Client Secret fica criptografado no servidor e nunca volta ao navegador.
 - O OAuth usa somente `calendar.app.created`: o Oryon cria e administra a agenda secundária `Entregas Oryon`, sem acesso às demais agendas da conta.

@@ -7,8 +7,8 @@ const ordersSource = readFileSync(new URL('./Orders.jsx', import.meta.url), 'utf
 const modalSource = readFileSync(new URL('../components/Modal.jsx', import.meta.url), 'utf8');
 const previewStyles = readFileSync(new URL('../styles/OrdersPreview.css', import.meta.url), 'utf8');
 
-test('keeps the official orders route and adds an isolated preview route', () => {
-    assert.match(appSource, /path="\/orders" element={<Orders \/>}/);
+test('uses the approved orders experience on the official and preview routes', () => {
+    assert.match(appSource, /path="\/orders" element={<Orders preview \/>}/);
     assert.match(appSource, /path="\/orders-preview" element={<Orders key="preview" preview \/>}/);
 });
 

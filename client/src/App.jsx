@@ -97,7 +97,7 @@ function App() {
                                 <Route path="/" element={<SmartHomeRoute />} />
                                 
                                 <Route path="/users" element={<Users />} />
-                                <Route path="/orders" element={<Orders />} />
+                                <Route path="/orders" element={<Orders preview />} />
                                 <Route path="/orders-preview" element={<Orders key="preview" preview />} />
                                 <Route path="/quotes" element={<Quotes />} /> 
                                 <Route path="/reports" element={<Reports />} />
