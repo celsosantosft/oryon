@@ -198,6 +198,17 @@ h2 { font-size: clamp(3rem, 6.7vw, 7rem); line-height: .88; letter-spacing: -.02
 .product-photo:is([data-view="front"], [data-view="back"]) .model-image { width: 200%; max-width: none; }
 .product-photo[data-view="back"] .model-image { transform: translateX(-50%); }
 .product-views { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.product-enlarge {
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 6px 0;
+  border: 0;
+  color: var(--blue);
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.product-enlarge span { margin-inline-start: 8px; }
 .product-views button {
   padding: 5px 7px;
   border: 1px solid #839cca55;

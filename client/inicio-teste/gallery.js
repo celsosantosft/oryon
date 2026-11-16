@@ -1,3 +1,6 @@
+import PhotoSwipeLightbox from 'photoswipe/lightbox';
+import 'photoswipe/style.css';
+
 const toolbar = document.querySelector('.gallery-toolbar');
 const filters = [...toolbar.querySelectorAll('[data-filter]')];
 const count = toolbar.querySelector('.gallery-count');
@@ -50,6 +53,33 @@ if (selected) {
       preview.alt = `${button.textContent.trim()} do modelo ${name}`;
       views.forEach((view) => view.setAttribute('aria-pressed', String(view === button)));
     });
+  });
+
+  const categoryModels = models.filter((model) => model.dataset.category === selected.dataset.category);
+  const lightbox = new PhotoSwipeLightbox({
+    dataSource: categoryModels.map((model) => {
+      const image = model.querySelector('img');
+      return {
+        src: image.src,
+        width: Number(image.getAttribute('width')),
+        height: Number(image.getAttribute('height')),
+        alt: image.alt,
+      };
+    }),
+    pswpModule: () => import('photoswipe'),
+    showHideAnimationType: 'fade',
+    bgOpacity: 0.96,
+    loop: false,
+    secondaryZoomLevel: 2,
+    closeTitle: 'Fechar galeria',
+    zoomTitle: 'Alternar zoom',
+    arrowPrevTitle: 'Foto anterior',
+    arrowNextTitle: 'Próxima foto',
+    errorMsg: 'Não foi possível carregar a foto.',
+  });
+  lightbox.init();
+  detail.querySelector('.product-enlarge').addEventListener('click', () => {
+    lightbox.loadAndOpen(categoryModels.indexOf(selected));
   });
   detail.hidden = false;
 } else if (categoryCard) {
