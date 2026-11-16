@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLocation } from 'react-router-dom'; // <--- IMPORTANTE: Adicionado para detectar a rota
 import Sidebar from './Sidebar';
+import '../styles/dashboard-preview.css';
 
 // Componente de Notificação
 const Notification = ({ message, type }) => {
@@ -37,6 +38,38 @@ const Layout = ({ children }) => {
     // 1. Estados
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1000);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+    const preview = location.pathname === '/visao';
+    const drawerOpen = preview && isMobile && isMenuOpen;
+    const drawer = useRef(null);
+    const menuTrigger = useRef(null);
+
+    useEffect(() => {
+        if (drawerOpen) drawer.current?.querySelector('button')?.focus();
+    }, [drawerOpen]);
+
+    const closePreviewMenu = () => {
+        setIsMenuOpen(false);
+        requestAnimationFrame(() => menuTrigger.current?.focus());
+    };
+
+    const handleDrawerKey = (event) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closePreviewMenu();
+        }
+        if (event.key !== 'Tab') return;
+        const controls = drawer.current.querySelectorAll('button, a[href]');
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (event.shiftKey && event.target === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && event.target === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    };
 
     // Verifica se estamos em uma página de foco, com a sidebar principal recolhida.
     const isFocusMode = location.pathname === '/production'
@@ -93,29 +126,36 @@ const Layout = ({ children }) => {
     };
 
     return (
-        <div style={styles.container}>
+        <div style={styles.container} className={preview ? 'dashboard-preview' : undefined}>
             
             {notification && <Notification message={notification.message} type={notification.type} />}
 
             {/* 1. SIDEBAR */}
-            <div style={sidebarStyle}>
-                <Sidebar setIsMenuOpen={setIsMenuOpen} isMobile={isMobile} />
+            <div style={sidebarStyle} ref={drawer} className={preview ? 'dashboard-preview-drawer' : undefined}
+                id={preview ? 'dashboard-preview-menu' : undefined} inert={preview && isMobile && !drawerOpen ? true : undefined}
+                role={drawerOpen ? 'dialog' : undefined} aria-modal={drawerOpen || undefined}
+                aria-label={drawerOpen ? 'Menu lateral' : undefined} onKeyDown={drawerOpen ? handleDrawerKey : undefined}>
+                <Sidebar setIsMenuOpen={setIsMenuOpen} isMobile={isMobile} preview={preview} onClose={closePreviewMenu} />
             </div>
             
             {/* 1b. Overlay em Mobile */}
             {isMobile && isMenuOpen && (
-                <div style={styles.mobileOverlay} onClick={() => setIsMenuOpen(false)} />
+                <div style={styles.mobileOverlay} onClick={preview ? closePreviewMenu : () => setIsMenuOpen(false)} />
             )}
 
             {/* 2. ÁREA DE CONTEÚDO */}
-            <main style={styles.mainContent}>
+            <main style={styles.mainContent} inert={drawerOpen || undefined}>
                 
                 {/* Barra de Topo */}
-                <header style={{ ...styles.topBar, ...(isMobile ? styles.topBarMobile : {}) }}>
+                <header className={preview ? 'dashboard-preview-topbar' : undefined} style={{ ...styles.topBar, ...(isMobile ? styles.topBarMobile : {}) }}>
                     
                     {/* Botão Hamburguer: Aparece no Mobile OU se estiver no Modo Foco Desktop Fechado */}
                     {(isMobile || (isFocusMode && !isMenuOpen)) && (
-                        <button onClick={() => setIsMenuOpen(!isMenuOpen)} style={styles.menuButton}>
+                        <button onClick={() => setIsMenuOpen(!isMenuOpen)} style={styles.menuButton} ref={menuTrigger}
+                            className={preview ? 'dashboard-preview-toggle' : undefined}
+                            aria-label={preview ? 'Abrir menu lateral' : undefined}
+                            aria-expanded={preview ? drawerOpen : undefined}
+                            aria-controls={preview ? 'dashboard-preview-menu' : undefined}>
                             {isMenuOpen ? CloseIcon : MenuIcon}
                         </button>
                     )}

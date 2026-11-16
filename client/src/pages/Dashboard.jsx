@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const THEME = {
     colors: {
@@ -42,11 +42,15 @@ const getRelativeLabel = (dateString) => {
     return weekDay.charAt(0).toUpperCase() + weekDay.slice(1);
 };
 
-const Dashboard = () => {
+const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const Dashboard = ({ preview = false }) => {
     const { token, API_BASE_URL } = useAuth();
     const navigate = useNavigate();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
+    const [attempt, setAttempt] = useState(0);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1000);
 
     useEffect(() => {
@@ -56,20 +60,41 @@ const Dashboard = () => {
     }, []);
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const response = await axios.get(`${API_BASE_URL}/api/dashboard/summary`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                setData(response.data);
-            } catch (error) { console.error("Erro dashboard:", error); } 
-            finally { setLoading(false); }
-        };
-        fetchData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        const controller = new AbortController();
+        axios.get(`${API_BASE_URL}/api/dashboard/summary`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: controller.signal
+        }).then(({ data: summary }) => {
+            if (!controller.signal.aborted) setData(summary);
+        }).catch((requestError) => {
+            if (controller.signal.aborted) return;
+            console.error('Erro dashboard:', requestError);
+            setError(true);
+        }).finally(() => {
+            if (!controller.signal.aborted) setLoading(false);
+        });
+        return () => controller.abort();
+    }, [API_BASE_URL, token, attempt]);
 
-    if (loading || !data) return <div style={{padding:'60px', textAlign:'center', color: THEME.colors.text.secondary}}>Carregando sistema...</div>;
+    if (preview && error) {
+        return (
+            <div className="dashboard-preview-feedback">
+                <p role="alert">Não foi possível carregar o painel.</p>
+                <button type="button" onClick={() => {
+                    setError(false);
+                    setLoading(true);
+                    setAttempt((previousAttempt) => previousAttempt + 1);
+                }}>Tentar novamente</button>
+            </div>
+        );
+    }
+
+    if (loading || !data) return <div role={preview ? 'status' : undefined} style={{padding:'60px', textAlign:'center', color: THEME.colors.text.secondary}}>Carregando sistema...</div>;
+
+    const maxProductCount = Math.max(1, ...data.productCounts.map(({ count }) => count));
+
+    const formatCurrency = (value) => preview ? currency.format(value) : `R$ ${value.toFixed(2)}`;
+    const OrderRow = preview ? Link : 'div';
 
     const getCount = (statusName) => {
         const found = data.statusCounts.find(item => item.status === statusName);
@@ -91,7 +116,7 @@ const Dashboard = () => {
     };
 
     return (
-        <div style={{ fontFamily: "'Inter', sans-serif", maxWidth: '1600px', margin: '0 auto', color: THEME.colors.text.primary, paddingBottom: '40px' }}>
+        <div className={preview ? 'dashboard-preview-content' : undefined} style={{ fontFamily: "'Inter', sans-serif", maxWidth: '1600px', margin: '0 auto', color: THEME.colors.text.primary, paddingBottom: '40px' }}>
             
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '24px' : '32px', gap: '16px', flexWrap: 'wrap' }}>
                 <div>
@@ -108,22 +133,22 @@ const Dashboard = () => {
             </header>
 
             <div style={isMobile ? styles.topGridMobile : styles.topGrid}>
-                <KPICard title="Total dos Pedidos" value={`R$ ${(data.totals.active_value || 0).toFixed(2)}`} icon={<Icons.Money />} color="#3B82F6" />
-                <KPICard title="Falta Receber" value={`R$ ${Math.max(0, (data.totals.active_value || 0) - (data.totals.active_paid || 0)).toFixed(2)}`} icon={<Icons.Alert />} color="#EF4444" />
-                <KPICard title="Em Produção" value={data.totals.active_count || 0} icon={<Icons.Box />} color="#F59E0B" />
-                <KPICard title="Pedidos Concluídos" value={data.totals.completed_count || 0} icon={<Icons.Check />} color="#10B981" />
+                <KPICard preview={preview} title="Total dos Pedidos" value={formatCurrency(data.totals.active_value || 0)} icon={<Icons.Money />} color="#3B82F6" />
+                <KPICard preview={preview} title="Falta Receber" value={formatCurrency(Math.max(0, (data.totals.active_value || 0) - (data.totals.active_paid || 0)))} icon={<Icons.Alert />} color="#EF4444" />
+                <KPICard preview={preview} title="Em Produção" value={data.totals.active_count || 0} icon={<Icons.Box />} color="#F59E0B" />
+                <KPICard preview={preview} title="Pedidos Concluídos" value={data.totals.completed_count || 0} icon={<Icons.Check />} color="#10B981" />
             </div>
 
             <section style={{ marginBottom: '40px' }}>
                 <h3 style={styles.sectionTitle}>Fluxo de Produção</h3>
-                <div style={{...styles.statusGrid, ...(isMobile ? styles.statusGridMobile : {}), justifyContent: isMobile ? 'space-between' : 'center', gap: isMobile ? '16px 10px' : '32px'}}>
-                    <ProductionCircle compact={isMobile} title="Criação de Arte" count={getCount('Criação de Arte')} color={THEME.colors.status.artCreation} onClick={() => goToStatus('Criação de Arte')} />
-                    <ProductionCircle compact={isMobile} title="Arte Aprovada" count={getCount('Arte Aprovada/Liberada')} color={THEME.colors.status.artApproved} onClick={() => goToStatus('Arte Aprovada/Liberada')} />
-                    <ProductionCircle compact={isMobile} title="Corte" count={getCount('Corte Iniciado')} color={THEME.colors.status.cutting} onClick={() => goToStatus('Corte Iniciado')} />
-                    <ProductionCircle compact={isMobile} title="Estampa / Sublim." count={getCount('Impressão/Estampa Iniciada')} color={THEME.colors.status.printing} onClick={() => goToStatus('Impressão/Estampa Iniciada')} />
-                    <ProductionCircle compact={isMobile} title="Costura" count={getCount('Costura Iniciada')} color={THEME.colors.status.sewing} onClick={() => goToStatus('Costura Iniciada')} />
-                    <ProductionCircle compact={isMobile} title="Controle Qualidade" count={getCount('Controle de Qualidade')} color={THEME.colors.status.quality} onClick={() => goToStatus('Controle de Qualidade')} />
-                    <ProductionCircle compact={isMobile} title="Pronto p/ Envio" count={getCount('Pronto para Envio')} color={THEME.colors.status.ready} onClick={() => goToStatus('Pronto para Envio')} />
+                <div className={preview ? 'dashboard-preview-flow' : undefined} style={{...styles.statusGrid, ...(isMobile ? styles.statusGridMobile : {}), justifyContent: isMobile ? 'space-between' : 'center', gap: isMobile ? '16px 10px' : '32px'}}>
+                    <ProductionCircle preview={preview} compact={isMobile} title="Criação de Arte" count={getCount('Criação de Arte')} color={THEME.colors.status.artCreation} onClick={() => goToStatus('Criação de Arte')} />
+                    <ProductionCircle preview={preview} compact={isMobile} title="Arte Aprovada" count={getCount('Arte Aprovada/Liberada')} color={THEME.colors.status.artApproved} onClick={() => goToStatus('Arte Aprovada/Liberada')} />
+                    <ProductionCircle preview={preview} compact={isMobile} title="Corte" count={getCount('Corte Iniciado')} color={THEME.colors.status.cutting} onClick={() => goToStatus('Corte Iniciado')} />
+                    <ProductionCircle preview={preview} compact={isMobile} title="Estampa / Sublim." count={getCount('Impressão/Estampa Iniciada')} color={THEME.colors.status.printing} onClick={() => goToStatus('Impressão/Estampa Iniciada')} />
+                    <ProductionCircle preview={preview} compact={isMobile} title="Costura" count={getCount('Costura Iniciada')} color={THEME.colors.status.sewing} onClick={() => goToStatus('Costura Iniciada')} />
+                    <ProductionCircle preview={preview} compact={isMobile} title="Controle Qualidade" count={getCount('Controle de Qualidade')} color={THEME.colors.status.quality} onClick={() => goToStatus('Controle de Qualidade')} />
+                    <ProductionCircle preview={preview} compact={isMobile} title="Pronto p/ Envio" count={getCount('Pronto para Envio')} color={THEME.colors.status.ready} onClick={() => goToStatus('Pronto para Envio')} />
                 </div>
             </section>
 
@@ -131,11 +156,11 @@ const Dashboard = () => {
                 <div style={styles.cardContainer}>
                     <div style={styles.cardHeader}><h3 style={styles.cardTitle}>Produtos em Produção</h3></div>
                     <div style={styles.listContainer}>
-                        {data.productCounts.length === 0 ? <p style={{color: THEME.colors.text.secondary, textAlign:'center'}}></p> : 
+                        {data.productCounts.length === 0 ? <p style={{color: THEME.colors.text.secondary, textAlign:'center'}}>{preview && 'Nenhum produto em produção.'}</p> :
                             data.productCounts.map((item, index) => (
                                 <div key={index} style={styles.listItem}>
                                     <div style={styles.listLabel}>{item.product_type}</div>
-                                    <div style={styles.listBarBg}><div style={{ width: `${Math.min(item.count * 15, 100)}%`, backgroundColor: '#2563EB', height: '100%', borderRadius: '4px' }}></div></div>
+                                    <div style={styles.listBarBg}><div style={{ width: `${preview ? item.count / maxProductCount * 100 : Math.min(item.count * 15, 100)}%`, backgroundColor: '#2563EB', height: '100%', borderRadius: '4px' }}></div></div>
                                     <div style={styles.listValue}>{item.count}</div>
                                 </div>
                             ))
@@ -156,17 +181,18 @@ const Dashboard = () => {
                             ) : (
                                 <div>
                                     {data.overdueList.map((order, idx) => (
-                                        <div 
-                                            key={idx} 
+                                        <OrderRow
+                                            key={idx}
+                                            className={preview ? 'dashboard-preview-order' : undefined}
                                             style={styles.overdueItem}
-                                            onClick={() => navigate('/orders')} 
+                                            {...(preview ? { to: '/orders' } : { onClick: () => navigate('/orders') })}
                                         >
                                             <div><strong style={{display:'block', color:'#1e293b'}}>{order.tracking_code}</strong><span style={{fontSize:'0.75rem', color:'#64748b'}}>{order.client_name}</span></div>
                                             <div style={{textAlign:'right', color:'#DC2626', fontWeight:'700', fontSize:'0.85rem'}}>
                                                 {formatDate(order.delivery_date)}
                                                 <span style={{display:'block', fontSize:'0.65rem', fontWeight:'400'}}>Vencido</span>
                                             </div>
-                                        </div>
+                                        </OrderRow>
                                     ))}
                                     <button onClick={() => navigate('/orders')} style={styles.viewAllButton}>Visualizar Todos</button>
                                 </div>
@@ -184,7 +210,7 @@ const Dashboard = () => {
                         {data.upcomingList && data.upcomingList.length > 0 ? (
                             <div>
                                 {data.upcomingList.map((order, idx) => (
-                                    <DeliveryCard 
+                                    <DeliveryCard preview={preview}
                                         key={idx}
                                         order={order}
                                         onClick={() => navigate('/orders')}
@@ -211,20 +237,22 @@ const Dashboard = () => {
     );
 };
 
-const DeliveryCard = ({ order, onClick, formatDate }) => {
+const DeliveryCard = ({ order, onClick, formatDate, preview }) => {
     const [hover, setHover] = useState(false);
+    const Row = preview ? Link : 'div';
     const relativeTime = getRelativeLabel(order.delivery_date);
 
     return (
-        <div 
-            onClick={onClick}
-            onMouseEnter={() => setHover(true)}
-            onMouseLeave={() => setHover(false)}
+        <Row
+            className={preview ? 'dashboard-preview-order' : undefined}
+            {...(preview ? { to: '/orders' } : { onClick })}
+            onMouseEnter={preview ? undefined : () => setHover(true)}
+            onMouseLeave={preview ? undefined : () => setHover(false)}
             style={{
                 ...styles.alertItem,
                 cursor: 'pointer',
                 backgroundColor: hover ? '#FFF7ED' : 'transparent',
-                transition: 'all 0.2s',
+                transition: preview ? undefined : 'all 0.2s',
                 borderLeft: hover ? '4px solid #F59E0B' : '4px solid transparent',
                 paddingLeft: hover ? '16px' : '20px'
             }}
@@ -239,17 +267,18 @@ const DeliveryCard = ({ order, onClick, formatDate }) => {
                     {relativeTime}
                 </span>
             </div>
-        </div>
+        </Row>
     );
 };
 
-const KPICard = ({ title, value, icon, color }) => {
+const KPICard = ({ title, value, icon, color, preview }) => {
     const [hover, setHover] = useState(false);
 
     return (
         <div 
-            onMouseEnter={() => setHover(true)}
-            onMouseLeave={() => setHover(false)}
+            onMouseEnter={preview ? undefined : () => setHover(true)}
+            onMouseLeave={preview ? undefined : () => setHover(false)}
+            className={preview ? 'dashboard-preview-kpi' : undefined}
             style={{
                 ...styles.kpiCard,
                 border: hover ? `1px solid ${color}` : `1px solid ${THEME.colors.border}`,
@@ -264,32 +293,34 @@ const KPICard = ({ title, value, icon, color }) => {
                 </span>
                 <div style={{ color: color, opacity: 0.8 }}>{icon}</div>
             </div>
-            <div style={{ fontSize: '1.75rem', fontWeight: '700', color: THEME.colors.text.primary, letterSpacing: '-0.03em' }}>
+            <div className={preview ? 'dashboard-preview-value' : undefined} style={{ fontSize: '1.75rem', fontWeight: '700', color: THEME.colors.text.primary, letterSpacing: '-0.03em' }}>
                 {value}
             </div>
         </div>
     );
 };
 
-const ProductionCircle = ({ title, count, color, onClick, compact = false }) => {
+const ProductionCircle = ({ title, count, color, onClick, compact = false, preview }) => {
     const [hover, setHover] = useState(false);
     const isZero = count === 0;
+    const Stage = preview && !isZero ? 'button' : 'div';
     const finalColor = isZero ? THEME.colors.status.zero : color;
-    const textColor = isZero ? THEME.colors.text.disabled : color;
+    const textColor = isZero ? (preview ? THEME.colors.text.secondary : THEME.colors.text.disabled) : color;
 
     return (
-        <div 
+        <Stage
+            className={preview ? 'dashboard-preview-stage' : undefined}
             onClick={!isZero ? onClick : undefined}
-            onMouseEnter={() => setHover(true)} 
-            onMouseLeave={() => setHover(false)}
+            onMouseEnter={preview ? undefined : () => setHover(true)}
+            onMouseLeave={preview ? undefined : () => setHover(false)}
             style={{ 
                 ...styles.productionCircleContainer,
                 cursor: isZero ? 'default' : 'pointer',
                 transform: hover && !isZero ? 'translateY(-4px)' : 'translateY(0)',
-                opacity: isZero ? 0.8 : 1
+                opacity: isZero && !preview ? 0.8 : 1
             }}
         >
-            <div style={{
+            <span style={{
                 width: compact ? '68px' : '90px',
                 height: compact ? '68px' : '90px',
                 borderRadius: '50%',
@@ -305,18 +336,18 @@ const ProductionCircle = ({ title, count, color, onClick, compact = false }) => 
                 <span style={{ fontSize: compact ? '1.5rem' : '2rem', fontWeight: '700', color: textColor, letterSpacing: '-0.02em' }}>
                     {count}
                 </span>
-            </div>
+            </span>
             <span style={{ 
                 fontSize: compact ? '0.68rem' : '0.75rem',
                 fontWeight: '600', 
-                color: isZero ? THEME.colors.text.disabled : THEME.colors.text.secondary,
+                color: isZero && !preview ? THEME.colors.text.disabled : THEME.colors.text.secondary,
                 textAlign: 'center',
                 maxWidth: compact ? '76px' : '100px',
                 lineHeight: '1.2'
             }}>
                 {title}
             </span>
-        </div>
+        </Stage>
     );
 };
 

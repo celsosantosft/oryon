@@ -10,7 +10,7 @@ const fireSidebarAlert = async (...args) => {
 };
 
 // --- 1. COMPONENTE DE LINK NORMAL ---
-const SidebarLink = ({ to, icon, label, onLinkClick, isBackLink = false }) => {
+const SidebarLink = ({ to, icon, label, onLinkClick, isBackLink = false, preview = false }) => {
     const location = useLocation();
     const isActive = location.pathname === to;
     const [isHovered, setIsHovered] = useState(false);
@@ -30,14 +30,16 @@ const SidebarLink = ({ to, icon, label, onLinkClick, isBackLink = false }) => {
     };
 
     return (
-        <Link to={to} style={style} onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)} onClick={handleClick}>
+        <Link to={to} style={style} className={preview ? 'dashboard-preview-nav-item' : undefined}
+            aria-current={preview && isActive ? 'page' : undefined} onMouseEnter={preview ? undefined : () => setIsHovered(true)}
+            onMouseLeave={preview ? undefined : () => setIsHovered(false)} onClick={handleClick}>
             <span style={{ marginRight: '12px', display: 'flex', alignItems: 'center', opacity: isActive ? 1 : 0.8 }}>{icon}</span><span>{label}</span>
         </Link>
     );
 };
 
 // --- 2. COMPONENTE DE BOTÃO DE AÇÃO (Para o Portal) ---
-const SidebarActionBtn = ({ icon, label, onClick }) => {
+const SidebarActionBtn = ({ icon, label, onClick, preview }) => {
     const [isHovered, setIsHovered] = useState(false);
 
     const style = {
@@ -51,14 +53,15 @@ const SidebarActionBtn = ({ icon, label, onClick }) => {
     };
 
     return (
-        <button style={style} onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)} onClick={onClick}>
+        <button style={style} className={preview ? 'dashboard-preview-nav-item' : undefined}
+            onMouseEnter={preview ? undefined : () => setIsHovered(true)} onMouseLeave={preview ? undefined : () => setIsHovered(false)} onClick={onClick}>
             <span style={{ marginRight: '12px', display: 'flex', alignItems: 'center', opacity: isHovered ? 1 : 0.8 }}>{icon}</span><span>{label}</span>
         </button>
     );
 };
 
 // --- COMPONENTE PRINCIPAL SIDEBAR ---
-const Sidebar = ({ setIsMenuOpen, isMobile }) => { 
+const Sidebar = ({ setIsMenuOpen, isMobile, preview = false, onClose }) => {
     const { logout, user, token, API_BASE_URL } = useAuth();
     const location = useLocation();
     const userRole = user?.role || ''; 
@@ -156,7 +159,7 @@ const Sidebar = ({ setIsMenuOpen, isMobile }) => {
     const activeMenu = isFinanceModule ? financeConfig : mainConfig;
 
     return (
-        <aside style={styles.sidebar}>
+        <aside style={styles.sidebar} className={preview ? 'dashboard-preview-sidebar' : undefined}>
             <style>
                 {`
                     .hide-scrollbar::-webkit-scrollbar { display: none; }
@@ -165,7 +168,8 @@ const Sidebar = ({ setIsMenuOpen, isMobile }) => {
             </style>
 
             {isMobile && setIsMenuOpen && (
-                <button onClick={() => setIsMenuOpen(false)} style={styles.closeBtnMobile} onMouseEnter={(e) => e.currentTarget.style.color = '#ffffff'} onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}>
+                <button onClick={preview ? onClose : () => setIsMenuOpen(false)} style={styles.closeBtnMobile}
+                    className={preview ? 'dashboard-preview-toggle' : undefined} aria-label={preview ? 'Fechar menu lateral' : undefined} onMouseEnter={(e) => e.currentTarget.style.color = '#ffffff'} onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}>
                     {Icons.Close}
                 </button>
             )}
@@ -178,17 +182,18 @@ const Sidebar = ({ setIsMenuOpen, isMobile }) => {
                 </span>
             </div>
             
-            <nav style={styles.nav} className="hide-scrollbar">
+            <nav style={styles.nav} className={preview ? 'dashboard-preview-nav' : 'hide-scrollbar'} aria-label={preview ? 'Módulos do Oryon' : undefined}>
                 <ul style={styles.menu}>
                     {activeMenu.map((item, index) => {
                         if (item.roles.includes(userRole)) {
                             return (
                                 <li key={index} style={styles.menuItem}>
                                     {item.to ? (
-                                        <SidebarLink to={item.to} icon={item.icon} label={item.label} onLinkClick={handleLinkClick} />
+                                        <SidebarLink to={item.to} preview={preview} icon={item.icon}
+                                            label={item.label} onLinkClick={handleLinkClick} />
                                     ) : (
                                         <div style={{ marginTop: '24px' }}> 
-                                            <SidebarActionBtn icon={item.icon} label={item.label} onClick={item.action} />
+                                            <SidebarActionBtn preview={preview} icon={item.icon} label={item.label} onClick={item.action} />
                                         </div>
                                     )}
                                 </li>
@@ -206,7 +211,7 @@ const Sidebar = ({ setIsMenuOpen, isMobile }) => {
             </nav>
 
             <div style={styles.footer}>
-                <button onClick={logout} style={styles.logoutButton}>
+                <button onClick={logout} style={styles.logoutButton} className={preview ? 'dashboard-preview-nav-item' : undefined}>
                     <span style={styles.icon}>{Icons.Logout}</span>Sair
                 </button>
             </div>
