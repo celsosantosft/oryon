@@ -222,7 +222,7 @@ const printToolbar = `
     </div>
 `;
 
-const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printDate }) => {
+const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printDate, compactPrint }) => {
     const layoutLines = normalizedLines.filter((line) => line.layoutUrl);
     const notedLines = normalizedLines.filter((line) => line.production_notes);
     const submittedItems = Array.isArray(order.items)
@@ -301,6 +301,18 @@ const buildStandardOrderPrintLayout = ({ order, logoUrl, normalizedLines, printD
             .note-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #2563EB; margin-bottom: 4px; }
             .note-text { font-size: 11px; color: #334155; line-height: 1.55; white-space: pre-wrap; }
             .footer { margin-top: 12px; border-top: 1px solid #E5E7EB; padding-top: 8px; font-size: 8px; color: #9CA3AF; display: flex; justify-content: space-between; align-items: center; }
+            ${compactPrint ? `
+            @media print {
+                .header { padding-bottom: 6px; margin-bottom: 8px; }
+                .header-logo img { max-height: 60px; max-width: 100%; }
+                .line-section, .table-container { margin-bottom: 6px; }
+                th, td { height: auto; padding-block: 3px; }
+                .layout-card, .image-frame, .single-layout-frame, .note-card { padding: 5px; }
+                .layout-card-subtitle { margin-bottom: 4px; }
+                .image-frame img { display: block; margin-inline: auto; max-height: 150px; }
+                .single-layout-frame img { display: block; margin-inline: auto; width: auto; max-width: 100%; max-height: 280px; }
+                .footer { margin-top: 6px; padding-top: 4px; }
+            }` : ''}
         </style>
     </head>
     <body>
@@ -565,14 +577,14 @@ const buildPremiumQuotePrintLayout = ({ order, normalizedLines, printDate }) => 
 };
 
 // --- FUNÇÃO PRINCIPAL DE IMPRESSÃO ---
-export const printOrder = (order, apiBaseUrl, printWindow, { autoPrint = true } = {}) => {
+export const printOrder = (order, apiBaseUrl, printWindow, { autoPrint = true, compactPrint = false } = {}) => {
     const logoUrl = resolvePublicAssetUrl(appConfig.logoUrl);
     const isQuote = String(order?.tracking_code || '').startsWith('#ORC-');
     const printDate = new Date().toLocaleString('pt-BR');
     const normalizedLines = buildNormalizedLines(order, apiBaseUrl);
     const content = isQuote
         ? buildPremiumQuotePrintLayout({ order, normalizedLines, printDate })
-        : buildStandardOrderPrintLayout({ order, logoUrl, normalizedLines, printDate });
+        : buildStandardOrderPrintLayout({ order, logoUrl, normalizedLines, printDate, compactPrint });
 
     printWindow.document.open();
     printWindow.document.write(content);

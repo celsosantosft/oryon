@@ -1404,7 +1404,10 @@ const Orders = ({ preview: forcePreview = false }) => {
                     sizes_json: { ...ORDER_CONSTANTS.DEFAULT_SIZES, ...(line.sizes_json || {}) }
                 })) : []
             };
-            if (!printWindow.closed) printOrder(detailedOrder, API_BASE_URL, printWindow, { autoPrint: !mobile });
+            if (!printWindow.closed) printOrder(detailedOrder, API_BASE_URL, printWindow, {
+                autoPrint: !mobile,
+                compactPrint: mobile
+            });
         } catch {
             if (!printWindow.closed) {
                 printWindow.document.body.textContent = 'Não foi possível preparar a ficha de produção. Volte a Pedidos e tente novamente.';
