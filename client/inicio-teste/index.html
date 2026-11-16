@@ -2,54 +2,99 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex">
-  <meta name="description" content="Uniformes personalizados para empresas e equipes. Solicite um orçamento ou acompanhe seu pedido com a Aatos Fardamentos.">
-  <meta name="theme-color" content="#0a1224">
-  <title>Aatos Fardamentos | Uniformes personalizados</title>
+  <meta name="description" content="Camisas sublimadas personalizadas para times, interclasses e eventos. Conheça os modelos da Atos Fardamentos, em Olinda, PE.">
+  <meta name="theme-color" content="#11100e">
+  <title>Atos Fardamentos | Camisas sublimadas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Chivo:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <script type="module" src="gallery.js"></script>
 </head>
-<body>
-  <header class="shell top">
-    <a class="brand" href="./"><img src="/logo-white.png" alt="Aatos Fardamentos"></a>
+<body id="inicio">
+  <header class="top shell">
+    <a class="brand" href="#inicio"><img src="/logo-white.png" alt="Atos Fardamentos"></a>
     <nav aria-label="Menu principal">
+      <a href="#modelos">Modelos</a>
       <a href="/portal">Acompanhar pedido</a>
-      <a class="button outline" href="#orcamento">Pedir orçamento <span aria-hidden="true">↗</span></a>
     </nav>
+    <a class="top-quote" href="#orcamento">Orçamento <span aria-hidden="true">↗</span></a>
   </header>
   <main>
-    <section class="shell hero" aria-labelledby="titulo">
-      <div class="intro">
-        <p class="label">Uniformes personalizados</p>
-        <h1 id="titulo">Sua equipe.<br><em>Sua identidade.</em></h1>
-        <p class="summary">Fardamentos para empresas e equipes que querem vestir sua marca no dia a dia.</p>
-        <a class="button primary" href="#orcamento">Solicitar orçamento <span aria-hidden="true">↗</span></a>
+    <section class="hero" aria-labelledby="titulo">
+      <picture class="hero-shot">
+        <source media="(max-width: 700px)" srcset="./abertura-mobile.jpg">
+        <img src="./abertura.jpg" alt="" fetchpriority="high" width="1440" height="960">
+      </picture>
+      <div class="hero-content shell">
+        <p class="eyebrow">Atos Fardamentos · Olinda, PE</p>
+        <h1 id="titulo">Camisas<br><em>sublimadas.</em></h1>
+        <p class="hero-copy">Estampas personalizadas para times, interclasses e eventos.</p>
+        <a class="action" href="#modelos">Explorar modelos <span aria-hidden="true">↓</span></a>
       </div>
-      <figure class="photo">
-        <img src="uniformes-aatos.jpg" alt="Duas pessoas vestindo uma camisa polo azul e uma camiseta escura" fetchpriority="high">
-        <figcaption>Imagem ilustrativa</figcaption>
-      </figure>
+      <span class="hero-credit">Imagem ilustrativa</span>
     </section>
-    <section class="details" id="orcamento" aria-labelledby="contato">
-      <div class="shell contact">
+
+    <section class="lookbook shell" id="modelos" aria-labelledby="galeria">
+      <div class="section-heading">
+        <h2 id="galeria">Galeria de modelos</h2>
+        <p>Explore as referências ilustrativas e veja trabalhos da Atos no Instagram.</p>
+      </div>
+      <div class="gallery">
+        <article class="look">
+          <button type="button" class="look-link" aria-haspopup="dialog" data-quote="Camisa para time" data-example="https://www.instagram.com/vilajerifc/reel/Dbi4i23Rg_L/">
+            <img src="./times.jpg" alt="Camisa esportiva verde com grafismos e gola contrastante" width="480" height="740" loading="lazy" decoding="async">
+            <span class="look-caption"><strong>Times de futebol</strong><span aria-hidden="true">↗</span></span>
+          </button>
+        </article>
+        <article class="look">
+          <button type="button" class="look-link" aria-haspopup="dialog" data-quote="Camisa para interclasse" data-example="https://www.instagram.com/6b_jfs/p/DduUUndoGBd/">
+            <img src="./interclasse.jpg" alt="Costas de uma camisa branca e azul com o número 12" width="480" height="740" loading="lazy" decoding="async">
+            <span class="look-caption"><strong>Interclasses</strong><span aria-hidden="true">↗</span></span>
+          </button>
+        </article>
+        <article class="look">
+          <button type="button" class="look-link" aria-haspopup="dialog" data-quote="Camisa para evento" data-example="https://www.instagram.com/atosfardamentos/p/DVycNGBDmZI/">
+            <img src="./eventos.jpg" alt="Camisa roxa com estampa em linhas coral" width="480" height="740" loading="lazy" decoding="async">
+            <span class="look-caption"><strong>Eventos e grupos</strong><span aria-hidden="true">↗</span></span>
+          </button>
+        </article>
+      </div>
+    </section>
+
+    <section class="contact" id="orcamento" aria-labelledby="contato">
+      <div class="shell contact-inner">
         <div>
-          <p class="label">Orçamento</p>
-          <h2 id="contato">Vamos vestir sua equipe?</h2>
-          <p>Conte qual modelo você procura, a quantidade aproximada e quando precisa receber. Se já tiver a arte ou a marca, envie junto com a mensagem.</p>
+          <p class="eyebrow">Orçamento</p>
+          <h2 id="contato">Vamos vestir<br>sua equipe?</h2>
+          <p>Envie pelo WhatsApp o modelo, a quantidade aproximada e o prazo. Se já tiver a arte, pode mandar junto.</p>
         </div>
-        <a class="button primary" href="mailto:atosfardamentos@gmail.com?subject=Or%C3%A7amento%20de%20fardamentos">Enviar e-mail <span aria-hidden="true">↗</span></a>
+        <a class="action" href="https://wa.me/5581988074760?text=Ol%C3%A1%2C%20quero%20um%20or%C3%A7amento%20para%20camisas%20sublimadas.">Pedir pelo WhatsApp <span aria-hidden="true">↗</span></a>
       </div>
     </section>
   </main>
   <footer class="shell footer">
-    <span>Aatos Fardamentos</span>
+    <span>Atos Fardamentos</span>
     <nav aria-label="Links do rodapé">
       <a href="https://www.instagram.com/atosfardamentos">Instagram</a>
+      <a href="/portal">Acompanhar pedido</a>
       <a href="/login">Acesso ao sistema</a>
     </nav>
   </footer>
+
+  <dialog class="model-dialog" aria-labelledby="modelo-titulo">
+    <div class="model-panel">
+      <form method="dialog"><button class="close" aria-label="Fechar modelo" autofocus>×</button></form>
+      <img class="model-image" alt="">
+      <div class="model-info">
+        <p class="eyebrow">Imagem ilustrativa</p>
+        <h2 id="modelo-titulo"></h2>
+        <a class="action model-quote" href="https://wa.me/5581988074760">Pedir orçamento <span aria-hidden="true">↗</span></a>
+        <a class="model-example" href="https://www.instagram.com/atosfardamentos/">Ver trabalho no Instagram ↗</a>
+      </div>
+    </div>
+  </dialog>
 </body>
 </html>
