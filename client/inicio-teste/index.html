@@ -18,7 +18,7 @@
     <a class="brand" href="#inicio"><img src="/logo-white.png" alt="Atos Fardamentos"></a>
     <nav aria-label="Menu principal">
       <a href="#modelos">Modelos</a>
-      <a href="#abadas">Abadás</a>
+      <a href="?categoria=abadas">Abadás</a>
       <a href="/portal">Acompanhar pedido</a>
     </nav>
     <a class="top-quote" href="#orcamento">Orçamento <span aria-hidden="true">↗</span></a>
@@ -39,9 +39,28 @@
     </section>
 
     <section class="lookbook shell" id="modelos" aria-labelledby="galeria">
+      <a class="category-return" href="./#modelos" hidden>← Ver todas as categorias</a>
       <div class="section-heading">
         <h2 id="galeria">Galeria de modelos</h2>
-        <p>Veja frente e costas de cada estampa ilustrativa. Escolha um modelo para personalizar.</p>
+        <p>Escolha uma categoria para explorar os modelos ilustrativos.</p>
+      </div>
+      <div class="category-grid">
+        <a class="category-card" href="?categoria=futebol">
+          <img src="./times.jpg" alt="" loading="lazy" decoding="async">
+          <span class="category-label"><strong>Times de futebol</strong><span class="look-arrow" aria-hidden="true">↗</span></span>
+        </a>
+        <a class="category-card" href="?categoria=interclasse">
+          <img src="./interclasse.jpg" alt="" loading="lazy" decoding="async">
+          <span class="category-label"><strong>Interclasses</strong><span class="look-arrow" aria-hidden="true">↗</span></span>
+        </a>
+        <a class="category-card" href="?categoria=eventos">
+          <img src="./eventos.jpg" alt="" loading="lazy" decoding="async">
+          <span class="category-label"><strong>Eventos e grupos</strong><span class="look-arrow" aria-hidden="true">↗</span></span>
+        </a>
+        <a class="category-card" href="?categoria=abadas" id="abadas">
+          <img src="./abada.jpg" alt="" loading="lazy" decoding="async">
+          <span class="category-label"><strong>Abadás de Carnaval</strong><span class="look-arrow" aria-hidden="true">↗</span></span>
+        </a>
       </div>
       <div class="gallery-toolbar" hidden>
         <div class="gallery-filters" role="group" aria-label="Filtrar modelos">
@@ -49,11 +68,11 @@
           <button type="button" data-filter="futebol" aria-pressed="false">Futebol</button>
           <button type="button" data-filter="interclasse" aria-pressed="false">Interclasse</button>
           <button type="button" data-filter="eventos" aria-pressed="false">Eventos</button>
-          <button type="button" data-filter="abadas" aria-pressed="false" id="abadas">Abadás</button>
+          <button type="button" data-filter="abadas" aria-pressed="false">Abadás</button>
         </div>
         <span class="gallery-count" role="status"></span>
       </div>
-      <div class="gallery">
+      <div class="gallery" hidden>
         <article class="look" data-category="futebol">
           <a class="look-link" href="?modelo=futebol-esmeralda"><span class="look-media"><img src="./futebol-esmeralda.jpg" alt="Frente e costas do modelo Verde Esmeralda" width="1000" height="500" loading="lazy" decoding="async"></span><span class="look-caption">
               <span><small>Futebol</small><strong>Verde Esmeralda</strong></span>

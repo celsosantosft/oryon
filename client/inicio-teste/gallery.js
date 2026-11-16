@@ -16,12 +16,12 @@ function showCategory(category) {
   count.textContent = visible === 1 ? '1 modelo' : `${visible} modelos`;
 }
 
-function followGalleryLink() {
-  if (location.hash === '#abadas') showCategory('abadas');
-  if (location.hash === '#modelos') showCategory('todos');
-}
-
-const slug = new URLSearchParams(location.search).get('modelo');
+const params = new URLSearchParams(location.search);
+const slug = params.get('modelo');
+const categorySlug = params.get('categoria');
+const categoryCard = [...document.querySelectorAll('.category-card')].find(
+  (card) => card.getAttribute('href') === `?categoria=${categorySlug}`
+);
 const selected = models.find((model) => model.querySelector('.look-link').getAttribute('href') === `?modelo=${slug}`);
 
 if (selected) {
@@ -39,6 +39,7 @@ if (selected) {
   document.title = `${name} | Atos Fardamentos`;
   detail.querySelector('h1').textContent = name;
   detail.querySelector('.model-category').textContent = category;
+  detail.querySelector('.product-nav a').href = `?categoria=${selected.dataset.category}`;
   detail.querySelector('.model-quote').href = `https://wa.me/5581988074760?text=${encodeURIComponent(message)}`;
   preview.src = photo.src;
   preview.alt = photo.alt;
@@ -51,18 +52,24 @@ if (selected) {
     });
   });
   detail.hidden = false;
-} else {
+} else if (categoryCard) {
+  const heading = document.querySelector('#galeria');
+  const categoryName = categoryCard.querySelector('strong').textContent;
+  document.body.classList.add('category-page');
+  document.querySelector('.top').hidden = true;
+  document.querySelector('.hero').hidden = true;
+  document.querySelector('.category-grid').hidden = true;
+  document.querySelector('.category-return').hidden = false;
+  document.querySelector('.section-heading p').textContent = 'Veja frente e costas de cada modelo ilustrativo.';
+  heading.textContent = categoryName;
+  document.title = `${categoryName} | Atos Fardamentos`;
+  document.querySelector('.gallery').hidden = false;
   filters.forEach((filter) => {
     filter.addEventListener('click', () => showCategory(filter.dataset.filter));
   });
 
   toolbar.hidden = false;
-  showCategory('todos');
-  followGalleryLink();
-  window.addEventListener('hashchange', followGalleryLink);
-  document.querySelectorAll('a[href="#modelos"], a[href="#abadas"]').forEach((link) => {
-    link.addEventListener('click', () => showCategory(link.hash === '#abadas' ? 'abadas' : 'todos'));
-  });
+  showCategory(categorySlug);
 
   models.forEach((model) => {
     const photo = model.querySelector('img');

@@ -216,3 +216,29 @@ h2 { font-size: clamp(3rem, 6.7vw, 7rem); line-height: .88; letter-spacing: -.02
 @media (max-width: 700px) {
   .product-layout { grid-template-columns: 1fr; padding-top: 22px; }
 }
+
+.hero[hidden], .category-grid[hidden], .gallery[hidden] { display: none; }
+.category-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(12px, 2vw, 24px); }
+.category-card { display: block; position: relative; aspect-ratio: 4 / 5; overflow: hidden; background: #101b33; }
+.category-card img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 40%; }
+.category-label {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 8px;
+  padding: 52px 14px 16px;
+  color: #fff;
+  background: linear-gradient(transparent, #050a15f0 85%);
+}
+.category-label strong { font: 800 clamp(1.2rem, 2.6vw, 2.2rem)/.95 var(--display); text-transform: uppercase; }
+.category-return { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 16px; color: var(--blue); }
+.category-return[hidden] { display: none; }
+.category-page .lookbook { padding-block: max(24px, env(safe-area-inset-top)) 64px; }
+@media (hover: hover) and (pointer: fine) {
+  .category-card:hover .look-arrow { background: var(--blue); color: #08142b; }
+}
+@media (max-width: 760px) {
+  .category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
