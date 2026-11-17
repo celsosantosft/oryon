@@ -227,20 +227,9 @@
     }
 }
 
-@media (max-width: 960px) {
+@media (width < 1000px) {
     .orders-preview .orders-header { gap: 12px; }
     .orders-preview .orders-filters { width: 100%; min-width: 0; }
-    .orders-preview .orders-dates {
-        display: grid !important;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        gap: 8px;
-        width: min(100%, 320px);
-        overflow: visible !important;
-    }
-
-    .orders-preview .orders-dates span:first-child { grid-column: 1 / -1; }
-    .orders-preview .orders-dates span:nth-child(3) { display: none; }
-    .orders-preview .orders-dates input { width: 100%; }
 }
 
 @container (max-width: 880px) {

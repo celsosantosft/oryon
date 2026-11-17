@@ -1426,13 +1426,13 @@ const Orders = ({ preview: forcePreview = false }) => {
             if (filterStatus && o.status !== filterStatus) return false;
             const searchLower = searchTerm.toLowerCase();
             if (searchTerm && (!o.client_name || !o.client_name.toLowerCase().includes(searchLower)) && (!o.tracking_code || !o.tracking_code.toLowerCase().includes(searchLower))) return false;
-            if (startDate && endDate) {
+            if (!isMobile && startDate && endDate) {
                 const orderDate = new Date(o.delivery_date).toISOString().split('T')[0];
                 if (orderDate < startDate || orderDate > endDate) return false;
             }
             return true;
         });
-    }, [orders, currentTab, filterStatus, searchTerm, startDate, endDate]);
+    }, [orders, currentTab, filterStatus, searchTerm, startDate, endDate, isMobile]);
 
     const handleDeleteSelected = useCallback(async () => {
         if (!selectedOrderIds.length) return;
@@ -1629,7 +1629,7 @@ const Orders = ({ preview: forcePreview = false }) => {
                     <button className={preview ? 'orders-tab' : undefined} aria-pressed={preview ? currentTab === 'history' : undefined} onClick={() => { setCurrentTab('history'); clearFilters(); }} style={currentTab === 'history' ? styles.tabActive : styles.tabInactive}>Histórico</button>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }} className="orders-filters">
-                    <div style={styles.searchBox}>
+                    <div style={isMobile ? { ...styles.searchBox, width: '100%' } : styles.searchBox}>
                         <span style={{ color: '#94a3b8' }}>{Icons.Search}</span>
                         <input aria-label="Buscar pedidos" type="text" placeholder="Buscar cliente ou código..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} />
                     </div>
@@ -1637,13 +1637,13 @@ const Orders = ({ preview: forcePreview = false }) => {
                         <span style={{ color: '#94a3b8' }}>{Icons.Filter}</span>
                         <select aria-label="Filtrar por status" value={filterStatus || ''} onChange={(e) => setFilterStatus(e.target.value || null)} style={styles.selectInput}><option value="">Todos os Status</option>{ORDER_CONSTANTS.STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select>
                     </div>
-                    <div className="orders-dates" style={styles.dateBox}>
+                    {!isMobile && <div style={styles.dateBox}>
                         <span style={{ color: '#64748b', fontSize: '0.8rem', marginRight: '5px', fontWeight: '500' }}>Entrega:</span>
                         <input aria-label="Data inicial" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} onClick={preview ? undefined : (e) => e.target.showPicker()} style={{ ...styles.dateInput, cursor: 'pointer' }} />
                         <span style={{ color: '#94a3b8' }}>-</span>
                         <input aria-label="Data final" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} onClick={preview ? undefined : (e) => e.target.showPicker()} style={{ ...styles.dateInput, cursor: 'pointer' }} />
-                    </div>
-                    {(filterStatus || searchTerm || (preview ? (startDate || endDate) : (startDate && endDate))) && (<button aria-label="Limpar filtros" onClick={clearFilters} style={styles.clearFilterButton}><span style={{ marginRight: '4px', display: 'flex' }}>{Icons.Close}</span> Limpar</button>)}
+                    </div>}
+                    {(filterStatus || searchTerm || (!isMobile && (preview ? (startDate || endDate) : (startDate && endDate)))) && (<button aria-label="Limpar filtros" onClick={clearFilters} style={styles.clearFilterButton}><span style={{ marginRight: '4px', display: 'flex' }}>{Icons.Close}</span> Limpar</button>)}
                 </div>
             </div>
 
