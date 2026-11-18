@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { appConfig } from '../config/appConfig';
 import Modal from '../components/Modal';
 import { printOrder } from '../utils/printUtils';
+import { normalizeGradeSize, sortGradeItems } from '../utils/cuttingGrouping';
 
 // ============================================================================
 // --- ÍCONES ---
@@ -1101,6 +1102,38 @@ const ProductLineEditor = ({
     );
 };
 
+const OrderSizeGroups = ({ sizes, itemIndex }) => {
+    const mergedSizes = Object.entries(sizes || {}).reduce((totals, [size, quantity]) => {
+        const normalizedSize = normalizeGradeSize(size);
+        totals.set(normalizedSize, (totals.get(normalizedSize) || 0) + (Number(quantity) || 0));
+        return totals;
+    }, new Map());
+    const orderedSizes = sortGradeItems(
+        [...mergedSizes].map(([tamanho, quantidade]) => ({ tamanho, quantidade }))
+    ).filter(({ quantidade }) => quantidade > 0);
+    const groups = [
+        { label: 'Infantil', items: orderedSizes.filter(({ tamanho }) => /^\d{1,2} ANOS$/.test(tamanho)) },
+        { label: 'Adulto', items: orderedSizes.filter(({ tamanho }) => !/^\d{1,2} ANOS$/.test(tamanho)) }
+    ].filter(({ items }) => items.length > 0);
+
+    return (
+        <div style={{ display: 'grid', gap: '10px', marginBottom: '12px' }}>
+            {groups.map(({ label, items }) => (
+                <div key={label}>
+                    <span style={{ display: 'block', marginBottom: '6px', color: '#64748B', fontSize: '0.72rem', fontWeight: '800', textTransform: 'uppercase' }}>{label}</span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {items.map(({ tamanho, quantidade }) => (
+                            <span key={`${itemIndex}-${tamanho}`} style={{ padding: '6px 12px', backgroundColor: '#f1f5f9', borderRadius: '6px', fontSize: '0.85rem', border: '1px solid #e2e8f0', color: '#0F172A' }}>
+                                <b>{tamanho}:</b> {quantidade}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
 const OrderDetailsModal = ({ isOpen, onClose, order, onReset, onExportTxt, onUnlockClient, onRevertToQuote, API_BASE_URL, userRole, preview }) => (
     <Modal manageFocus={preview} isOpen={isOpen} onClose={onClose} title="Detalhes do Pedido">
         {order ? (
@@ -1136,9 +1169,7 @@ const OrderDetailsModal = ({ isOpen, onClose, order, onReset, onExportTxt, onUnl
                                     </div>
                                 ) : null}
 
-                                <div style={{display:'flex', flexWrap:'wrap', gap:'6px', marginBottom: line.layout_path ? '12px' : 0}}>
-                                    {Object.entries(line.sizes_json || {}).map(([key, val]) => (val > 0 && <span key={`${index}-${key}`} style={{padding:'6px 12px', backgroundColor:'#f1f5f9', borderRadius:'6px', fontSize:'0.85rem', border:'1px solid #e2e8f0', color: '#0F172A'}}><b>{key}:</b> {val}</span>))}
-                                </div>
+                                <OrderSizeGroups sizes={line.sizes_json} itemIndex={index} />
 
                                 {line.production_notes ? (
                                     <div style={styles.detailNoteBox}>

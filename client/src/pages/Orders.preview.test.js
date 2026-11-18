@@ -30,3 +30,11 @@ test('uses native mobile controls and accessible preview dialogs', () => {
     assert.match(modalSource, /role=\{manageFocus \? "dialog" : undefined\}/);
     assert.match(modalSource, /aria-modal=\{manageFocus \|\| undefined\}/);
 });
+
+test('groups order detail sizes from smallest infant to adult sizes', () => {
+    assert.match(ordersSource, /normalizeGradeSize/);
+    assert.match(ordersSource, /sortGradeItems/);
+    assert.match(ordersSource, /label: 'Infantil'/);
+    assert.match(ordersSource, /label: 'Adulto'/);
+    assert.match(ordersSource, /<OrderSizeGroups sizes=\{line\.sizes_json\}/);
+});
