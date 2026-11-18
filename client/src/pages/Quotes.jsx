@@ -1150,10 +1150,21 @@ const Quotes = () => {
     }, [fetchQuoteSnapshot, toggleModal]);
 
     const handlePrint = useCallback(async (quote) => {
+        const mobile = window.matchMedia?.('(max-width: 768px)').matches ?? window.innerWidth <= 768;
+        const printWindow = window.open('', '_blank', mobile ? '' : 'width=1000,height=800');
+        if (!printWindow) {
+            Swal.fire('Janela bloqueada', 'Permita a abertura de novas abas para imprimir o orçamento.', 'warning');
+            return;
+        }
+
+        printWindow.document.title = 'Orçamento';
+        printWindow.document.body.textContent = 'Carregando orçamento…';
+
         try {
             const detailedQuote = await fetchQuoteSnapshot(quote.tracking_code);
-            printQuote(detailedQuote, API_BASE_URL);
+            if (!printWindow.closed) printQuote(detailedQuote, API_BASE_URL, printWindow, { autoPrint: !mobile });
         } catch (error) {
+            if (!printWindow.closed) printWindow.document.body.textContent = 'Não foi possível preparar o orçamento. Volte a Orçamentos e tente novamente.';
             Swal.fire('Falha ao imprimir', 'Não foi possível carregar o orçamento completo para impressão.', 'error');
         }
     }, [API_BASE_URL, fetchQuoteSnapshot]);
