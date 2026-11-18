@@ -1139,7 +1139,12 @@ const OrderDetailsModal = ({ isOpen, onClose, order, onReset, onExportTxt, onOpe
     <Modal manageFocus={preview} isOpen={isOpen} onClose={onClose} title="Detalhes do Pedido">
         {order ? (
             <div style={styles.detailsContainer}>
-                <h4 style={{fontSize:'1.1rem', fontWeight:'700', marginBottom:'15px'}}>{order.client_name} - {order.tracking_code}</h4>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginBottom: '15px' }}>
+                    <h4 style={{ fontSize: '1.1rem', fontWeight: '700', margin: 0, flex: '1 1 220px' }}>{order.client_name} - {order.tracking_code}</h4>
+                    <button type="button" onClick={() => onOpenPortal(order)} aria-label="Acessar portal do cliente" title="Acessar portal do cliente" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', minHeight: '32px', padding: '5px 10px', backgroundColor: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', borderRadius: '7px', fontSize: '0.75rem', fontWeight: '800', cursor: 'pointer' }}>
+                        <span style={{ display: 'flex' }}>{Icons.Eye}</span> Portal
+                    </button>
+                </div>
                 
                 {Array.isArray(order.product_lines) && order.product_lines.length > 0 ? (
                     <div style={{ marginBottom: '20px', display: 'grid', gap: '14px' }}>
@@ -1201,9 +1206,6 @@ const OrderDetailsModal = ({ isOpen, onClose, order, onReset, onExportTxt, onOpe
                 <h5 style={{fontSize:'0.85rem', fontWeight:'700', color:'#64748B', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'15px', borderBottom:'1px solid #E2E8F0', paddingBottom:'10px'}}>Ações de Produção (Lista do Cliente)</h5>
                 
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '24px' }}>
-                    <button onClick={() => onOpenPortal(order)} className="premium-btn" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: '#2563EB', color: 'white', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.25)' }}>
-                        <span style={{ display: 'flex' }}>{Icons.Eye}</span> Acessar Portal do Cliente
-                    </button>
                     <button onClick={() => onExportTxt(order.id)} className="premium-btn" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: '#10B981', color: 'white', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.2)' }}>
                         <span style={{ display: 'flex' }}>{Icons.Download}</span> Baixar TXT para Produção (ZIP)
                     </button>

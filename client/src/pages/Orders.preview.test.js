@@ -43,5 +43,6 @@ test('opens the selected order portal with its authenticated private link', () =
     assert.match(ordersSource, /api\/portal-link\/\$\{encodeURIComponent\(trackingCode\)\}/);
     assert.match(ordersSource, /window\.open\('', '_blank'\)/);
     assert.match(ordersSource, /onOpenPortal\(order\)/);
-    assert.match(ordersSource, /Acessar Portal do Cliente/);
+    assert.match(ordersSource, /aria-label="Acessar portal do cliente"/);
+    assert.match(ordersSource, /Icons\.Eye\}\<\/span\> Portal/);
 });
