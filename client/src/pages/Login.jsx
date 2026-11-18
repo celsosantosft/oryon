@@ -21,10 +21,10 @@ const Login = () => {
 
     useEffect(() => {
         document.title = appConfig.brandName;
-        const storedNotice = sessionStorage.getItem(AUTH_NOTICE_KEY);
+        const storedNotice = localStorage.getItem(AUTH_NOTICE_KEY);
         if (storedNotice) {
             setNotice(normalizeAuthNotice(storedNotice));
-            sessionStorage.removeItem(AUTH_NOTICE_KEY);
+            localStorage.removeItem(AUTH_NOTICE_KEY);
         }
     }, []);
 

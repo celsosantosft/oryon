@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
     getLoginErrorMessage,
@@ -72,4 +73,15 @@ test('active activity only refreshes the activity timestamp', () => {
 
     assert.equal(expired, false);
     assert.deepEqual(calls, ['onActive']);
+});
+
+test('shares login and logout between browser tabs', () => {
+    const contextSource = readFileSync(new URL('./AuthContext.jsx', import.meta.url), 'utf8');
+    const loginSource = readFileSync(new URL('../pages/Login.jsx', import.meta.url), 'utf8');
+
+    assert.match(contextSource, /localStorage\.setItem\('token', newToken\)/);
+    assert.match(contextSource, /localStorage\.getItem\('token'\)/);
+    assert.match(contextSource, /window\.addEventListener\('storage', syncAuthBetweenTabs\)/);
+    assert.match(contextSource, /sessionStorage\.getItem\('token'\)/);
+    assert.match(loginSource, /localStorage\.getItem\(AUTH_NOTICE_KEY\)/);
 });

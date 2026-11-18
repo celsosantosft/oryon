@@ -6,7 +6,8 @@ import {
     INACTIVITY_EXPIRED_MESSAGE,
     LAST_ACTIVITY_KEY,
     SESSION_EXPIRED_MESSAGE,
-    handleSessionActivity
+    handleSessionActivity,
+    isInactiveSessionExpired
 } from './authSession';
 
 const AuthContext = createContext();
@@ -61,10 +62,10 @@ export const AuthProvider = ({ children }) => {
     const API_BASE_URL = resolveApiBaseUrl();
 
     const clearSession = () => {
-        sessionStorage.removeItem('token');
-        sessionStorage.removeItem('user');
-        sessionStorage.removeItem(AUTH_API_BASE_URL_KEY);
-        sessionStorage.removeItem(LAST_ACTIVITY_KEY);
+        ['token', 'user', AUTH_API_BASE_URL_KEY, LAST_ACTIVITY_KEY].forEach((key) => {
+            localStorage.removeItem(key);
+            sessionStorage.removeItem(key);
+        });
     };
 
     // 3. Função de Logout
@@ -73,7 +74,7 @@ export const AuthProvider = ({ children }) => {
         clearSession();
 
         if (message) {
-            sessionStorage.setItem(AUTH_NOTICE_KEY, message);
+            localStorage.setItem(AUTH_NOTICE_KEY, message);
         }
 
         setToken(null);
@@ -86,9 +87,21 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         const loadStorageData = () => {
             try {
-                const storedToken = sessionStorage.getItem('token');
-                const storedUser = sessionStorage.getItem('user');
-                const storedApiBaseUrl = sessionStorage.getItem(AUTH_API_BASE_URL_KEY);
+                if (!localStorage.getItem('token') && sessionStorage.getItem('token')) {
+                    ['token', 'user', AUTH_API_BASE_URL_KEY, LAST_ACTIVITY_KEY].forEach((key) => {
+                        const value = sessionStorage.getItem(key);
+                        if (value !== null) localStorage.setItem(key, value);
+                    });
+                }
+
+                const storedToken = localStorage.getItem('token');
+                const storedUser = localStorage.getItem('user');
+                const storedApiBaseUrl = localStorage.getItem(AUTH_API_BASE_URL_KEY);
+                const storedLastActivity = localStorage.getItem(LAST_ACTIVITY_KEY);
+                const lastActivity = storedLastActivity === null ? Date.now() : Number(storedLastActivity);
+                if (storedLastActivity === null) {
+                    localStorage.setItem(LAST_ACTIVITY_KEY, String(lastActivity));
+                }
 
                 if (storedToken && storedUser) {
                     const isLocalHost = typeof window !== 'undefined' && isLocalDevHost(window.location.hostname);
@@ -97,10 +110,13 @@ export const AuthProvider = ({ children }) => {
 
                     if (sessionFromDifferentApi || legacyLocalSession) {
                         clearSession();
-                        sessionStorage.setItem(AUTH_NOTICE_KEY, 'Sua sessão era de outro servidor. Faça login novamente neste ambiente.');
+                        localStorage.setItem(AUTH_NOTICE_KEY, 'Sua sessão era de outro servidor. Faça login novamente neste ambiente.');
                     } else if (isTokenExpired(storedToken)) {
                         clearSession();
-                        sessionStorage.setItem(AUTH_NOTICE_KEY, SESSION_EXPIRED_MESSAGE);
+                        localStorage.setItem(AUTH_NOTICE_KEY, SESSION_EXPIRED_MESSAGE);
+                    } else if (isInactiveSessionExpired(lastActivity)) {
+                        clearSession();
+                        localStorage.setItem(AUTH_NOTICE_KEY, INACTIVITY_EXPIRED_MESSAGE);
                     } else {
                         setToken(storedToken);
                         setUser(JSON.parse(storedUser));
@@ -115,6 +131,31 @@ export const AuthProvider = ({ children }) => {
         };
 
         loadStorageData();
+    }, []);
+
+    useEffect(() => {
+        const syncAuthBetweenTabs = (event) => {
+            if (event.storageArea !== localStorage || !['token', 'user'].includes(event.key)) return;
+
+            const storedToken = localStorage.getItem('token');
+            const storedUser = localStorage.getItem('user');
+
+            if (!storedToken || !storedUser) {
+                setToken(null);
+                setUser(null);
+                if (window.location.pathname !== '/login') window.location.replace('/login');
+                return;
+            }
+
+            if (!isTokenExpired(storedToken)) {
+                setToken(storedToken);
+                setUser(JSON.parse(storedUser));
+                if (window.location.pathname === '/login') window.location.replace('/');
+            }
+        };
+
+        window.addEventListener('storage', syncAuthBetweenTabs);
+        return () => window.removeEventListener('storage', syncAuthBetweenTabs);
     }, []);
 
     useEffect(() => {
@@ -146,19 +187,19 @@ export const AuthProvider = ({ children }) => {
         if (!token) return undefined;
 
         const recordActivity = (event) => {
-            if (!sessionStorage.getItem('token')) return;
+            if (!localStorage.getItem('token')) return;
 
-            const lastActivity = Number(sessionStorage.getItem(LAST_ACTIVITY_KEY));
+            const lastActivity = Number(localStorage.getItem(LAST_ACTIVITY_KEY));
             handleSessionActivity({
                 event,
                 lastActivityTime: lastActivity,
                 onExpired: () => logout(INACTIVITY_EXPIRED_MESSAGE),
-                onActive: () => sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()))
+                onActive: () => localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()))
             });
         };
 
-        if (!sessionStorage.getItem(LAST_ACTIVITY_KEY)) {
-            sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+        if (!localStorage.getItem(LAST_ACTIVITY_KEY)) {
+            localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
         }
 
         const activityEvents = ['pointerdown', 'keydown', 'touchstart', 'scroll'];
@@ -190,7 +231,7 @@ export const AuthProvider = ({ children }) => {
                 error => {
                     const status = error.response?.status;
                     const message = String(error.response?.data?.message || error.response?.data?.error || '').toLowerCase();
-                    const hasActiveSession = Boolean(sessionStorage.getItem('token'));
+                    const hasActiveSession = Boolean(localStorage.getItem('token'));
                     const isAuthProblem = status === 401 || message.includes('token') || message.includes('jwt');
 
                     if (hasActiveSession && isAuthProblem) {
@@ -215,10 +256,10 @@ export const AuthProvider = ({ children }) => {
         console.log("Login realizado:", userData);
         
         try {
-            sessionStorage.setItem('token', newToken);
-            sessionStorage.setItem('user', JSON.stringify(userData));
-            sessionStorage.setItem(AUTH_API_BASE_URL_KEY, API_BASE_URL);
-            sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+            localStorage.setItem('token', newToken);
+            localStorage.setItem('user', JSON.stringify(userData));
+            localStorage.setItem(AUTH_API_BASE_URL_KEY, API_BASE_URL);
+            localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
             
             setToken(newToken);
             setUser(userData);
