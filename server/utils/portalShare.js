@@ -43,6 +43,8 @@ function buildPortalShareHtml(record) {
     const imageUrl = absoluteAppUrl(buildPortalPreviewImagePath(record));
     const title = `${appConfig.brandName} • ${record.tracking_code}`;
     const description = 'Acompanhe seu pedido e confira o layout pelo Portal do Cliente.';
+    const accentColor = appConfig.tenantKey === 'pd' ? '#111827' : '#2563eb';
+    const directUrlJson = JSON.stringify(directUrl).replace(/</g, '\\u003c');
 
     return `<!doctype html>
 <html lang="pt-BR">
@@ -64,9 +66,26 @@ function buildPortalShareHtml(record) {
   <meta property="og:image:height" content="${PREVIEW_HEIGHT}">
   <meta property="og:image:alt" content="Layout do pedido com a marca ${escapeHtml(appConfig.brandName)}">
   <meta http-equiv="refresh" content="0;url=${escapeHtml(directUrl)}">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 20px; background: #f8fafc; color: #0f172a; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .portal-loader { display: flex; flex-direction: column; align-items: center; text-align: center; }
+    .portal-spinner { width: 36px; height: 36px; margin-bottom: 16px; border: 3px solid ${accentColor}26; border-top-color: ${accentColor}; border-radius: 50%; animation: portal-spin .8s linear infinite; }
+    h1 { margin: 0 0 6px; font-size: 1.1rem; line-height: 1.35; font-weight: 800; letter-spacing: .02em; }
+    p { margin: 0; color: #64748b; font-size: .85rem; font-weight: 500; }
+    a { margin-top: 18px; color: ${accentColor}; font-size: .8rem; font-weight: 700; }
+    @keyframes portal-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .portal-spinner { animation: none; } }
+  </style>
 </head>
 <body>
-  <p>Abrindo o Portal do Cliente… <a href="${escapeHtml(directUrl)}">Continuar</a></p>
+  <main class="portal-loader" role="status" aria-live="polite">
+    <div class="portal-spinner" aria-hidden="true"></div>
+    <h1>Preparando seu portal...</h1>
+    <p>Buscando as informações do pedido</p>
+    <a href="${escapeHtml(directUrl)}">Continuar agora</a>
+  </main>
+  <script>window.location.replace(${directUrlJson});</script>
 </body>
 </html>`;
 }

@@ -95,7 +95,7 @@ const Sidebar = ({ setIsMenuOpen, isMobile, preview = false, onClose }) => {
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
 
-                window.open(response.data.portal_path, '_blank');
+                window.open(response.data.portal_direct_path || response.data.portal_path, '_blank');
             } catch {
                 fireSidebarAlert({
                     title: 'Portal não encontrado',

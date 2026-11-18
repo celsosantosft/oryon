@@ -1598,7 +1598,7 @@ const Orders = ({ preview: forcePreview = false }) => {
 
         try {
             const response = await OrderService.getPortalLink(API_BASE_URL, token, order.tracking_code);
-            portalWindow.location.replace(new URL(response.data.portal_path, window.location.origin).toString());
+            portalWindow.location.replace(new URL(response.data.portal_direct_path || response.data.portal_path, window.location.origin).toString());
         } catch {
             portalWindow.close();
             Swal.fire('Portal não encontrado', 'Não foi possível abrir o portal deste pedido.', 'error');

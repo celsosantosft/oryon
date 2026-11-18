@@ -30,6 +30,9 @@ test('builds a private share link that redirects to the authenticated portal', (
     assert.match(html, /property="og:image"/);
     assert.match(html, /og:image:width" content="1200"/);
     assert.match(html, /http-equiv="refresh"/);
+    assert.match(html, /class="portal-loader" role="status"/);
+    assert.match(html, /Preparando seu portal/);
+    assert.match(html, /window\.location\.replace/);
     assert.doesNotMatch(html, /client_name/);
 });
 

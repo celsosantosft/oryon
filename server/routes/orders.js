@@ -18,6 +18,7 @@ const { normalizePlayerNumber } = require('../utils/playerNumber');
 const { chooseEffectiveOrderItems } = require('../utils/effectiveOrderItems');
 const { syncConvertedOrdersFromQuote } = require('../utils/convertedOrderSync');
 const {
+    buildPortalDirectPath,
     buildPortalShareHtml,
     buildPortalSharePath,
     createPortalPreviewImage
@@ -1425,7 +1426,8 @@ router.get('/api/portal-link/:code', authenticateToken, authorizeRole(['admin', 
         res.json({
             tracking_code: record.tracking_code,
             type: record.type,
-            portal_path: buildPortalPath(record)
+            portal_path: buildPortalPath(record),
+            portal_direct_path: buildPortalDirectPath(record)
         });
     });
 });

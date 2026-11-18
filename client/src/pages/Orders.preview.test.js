@@ -42,6 +42,7 @@ test('groups order detail sizes from smallest infant to adult sizes', () => {
 test('opens the selected order portal with its authenticated private link', () => {
     assert.match(ordersSource, /api\/portal-link\/\$\{encodeURIComponent\(trackingCode\)\}/);
     assert.match(ordersSource, /window\.open\('', '_blank'\)/);
+    assert.match(ordersSource, /response\.data\.portal_direct_path \|\| response\.data\.portal_path/);
     assert.match(ordersSource, /onOpenPortal\(order\)/);
     assert.match(ordersSource, /aria-label="Acessar portal do cliente"/);
     assert.match(ordersSource, /Icons\.Eye\}\<\/span\> Portal/);
