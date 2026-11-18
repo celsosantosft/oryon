@@ -38,3 +38,10 @@ test('groups order detail sizes from smallest infant to adult sizes', () => {
     assert.match(ordersSource, /label: 'Adulto'/);
     assert.match(ordersSource, /<OrderSizeGroups sizes=\{line\.sizes_json\}/);
 });
+
+test('opens the selected order portal with its authenticated private link', () => {
+    assert.match(ordersSource, /api\/portal-link\/\$\{encodeURIComponent\(trackingCode\)\}/);
+    assert.match(ordersSource, /window\.open\('', '_blank'\)/);
+    assert.match(ordersSource, /onOpenPortal\(order\)/);
+    assert.match(ordersSource, /Acessar Portal do Cliente/);
+});

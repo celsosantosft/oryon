@@ -277,6 +277,7 @@ export const OrderService = {
     deleteOrder: (api, token, id) => axios.delete(`${api}/api/orders/${id}`, OrderService.getHeaders(token)),
     resetOrder: (api, token, trackingCode) => axios.post(`${api}/api/orders/${encodeURIComponent(trackingCode)}/reset`, {}, OrderService.getHeaders(token)),
     getOrderHistory: (api, token, trackingCode) => axios.get(`${api}/api/orders/${encodeURIComponent(trackingCode)}/history`, OrderService.getHeaders(token)),
+    getPortalLink: (api, token, trackingCode) => axios.get(`${api}/api/portal-link/${encodeURIComponent(trackingCode)}`, OrderService.getHeaders(token)),
     exportTxt: (api, token, id) => axios.get(`${api}/api/orders/${id}/export-txt`, { ...OrderService.getHeaders(token), responseType: 'blob' }),
     unlockOrder: (api, token, id) => axios.post(`${api}/api/orders/${id}/unlock`, {}, OrderService.getHeaders(token)),
     revertToQuote: (api, token, id) => axios.post(`${api}/orders/${id}/reverter-para-orcamento`, {}, OrderService.getHeaders(token))
@@ -1134,7 +1135,7 @@ const OrderSizeGroups = ({ sizes, itemIndex }) => {
     );
 };
 
-const OrderDetailsModal = ({ isOpen, onClose, order, onReset, onExportTxt, onUnlockClient, onRevertToQuote, API_BASE_URL, userRole, preview }) => (
+const OrderDetailsModal = ({ isOpen, onClose, order, onReset, onExportTxt, onOpenPortal, onUnlockClient, onRevertToQuote, API_BASE_URL, userRole, preview }) => (
     <Modal manageFocus={preview} isOpen={isOpen} onClose={onClose} title="Detalhes do Pedido">
         {order ? (
             <div style={styles.detailsContainer}>
@@ -1200,6 +1201,9 @@ const OrderDetailsModal = ({ isOpen, onClose, order, onReset, onExportTxt, onUnl
                 <h5 style={{fontSize:'0.85rem', fontWeight:'700', color:'#64748B', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'15px', borderBottom:'1px solid #E2E8F0', paddingBottom:'10px'}}>Ações de Produção (Lista do Cliente)</h5>
                 
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '24px' }}>
+                    <button onClick={() => onOpenPortal(order)} className="premium-btn" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: '#2563EB', color: 'white', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.25)' }}>
+                        <span style={{ display: 'flex' }}>{Icons.Eye}</span> Acessar Portal do Cliente
+                    </button>
                     <button onClick={() => onExportTxt(order.id)} className="premium-btn" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: '#10B981', color: 'white', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.2)' }}>
                         <span style={{ display: 'flex' }}>{Icons.Download}</span> Baixar TXT para Produção (ZIP)
                     </button>
@@ -1572,6 +1576,27 @@ const Orders = ({ preview: forcePreview = false }) => {
         }
     };
 
+    const handleOpenClientPortal = useCallback(async (order) => {
+        if (!order?.tracking_code) return;
+
+        const portalWindow = window.open('', '_blank');
+        if (!portalWindow) {
+            Swal.fire('Janela bloqueada', 'Permita a abertura de novas abas para acessar o portal do cliente.', 'warning');
+            return;
+        }
+
+        portalWindow.document.title = 'Portal do Cliente';
+        portalWindow.document.body.textContent = 'Abrindo portal do cliente…';
+
+        try {
+            const response = await OrderService.getPortalLink(API_BASE_URL, token, order.tracking_code);
+            portalWindow.location.replace(new URL(response.data.portal_path, window.location.origin).toString());
+        } catch {
+            portalWindow.close();
+            Swal.fire('Portal não encontrado', 'Não foi possível abrir o portal deste pedido.', 'error');
+        }
+    }, [API_BASE_URL, token]);
+
     const handleUnlockClient = async (id) => {
         const result = await Swal.fire({ title: 'Liberar edição?', text: "Se você fizer isso, o cliente poderá alterar a lista pelo celular novamente.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#D97706', confirmButtonText: 'Sim, desbloquear' });
         if (result.isConfirmed) {
@@ -1693,7 +1718,7 @@ const Orders = ({ preview: forcePreview = false }) => {
 
             <OrderFormModal preview={preview} isOpen={modals.form} onClose={() => toggleModal('form', false)} orderToEdit={orderToEdit} API_BASE_URL={API_BASE_URL} token={token} auxData={{dbProducts, dbFabrics, dbClients}} onQuickClientAdd={quickAddClient} onRefresh={refreshOrders} />
             <StatusModal preview={preview} isOpen={modals.status} onClose={() => toggleModal('status', false)} orderToUpdate={orderToUpdateStatus} onUpdateStatus={handleUpdateStatus} />
-            <OrderDetailsModal preview={preview} isOpen={modals.details} onClose={() => toggleModal('details', false)} order={selectedOrderDetails} onReset={handleResetOrder} onExportTxt={handleExportTxt} onUnlockClient={handleUnlockClient} onRevertToQuote={handleRevertToQuote} API_BASE_URL={API_BASE_URL} userRole={user?.role} />
+            <OrderDetailsModal preview={preview} isOpen={modals.details} onClose={() => toggleModal('details', false)} order={selectedOrderDetails} onReset={handleResetOrder} onExportTxt={handleExportTxt} onOpenPortal={handleOpenClientPortal} onUnlockClient={handleUnlockClient} onRevertToQuote={handleRevertToQuote} API_BASE_URL={API_BASE_URL} userRole={user?.role} />
         </div>
     );
 };
