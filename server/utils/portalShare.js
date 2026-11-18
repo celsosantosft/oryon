@@ -24,6 +24,7 @@ function buildPortalDirectPath(record) {
 function buildPortalSharePath(record) {
     const params = new URLSearchParams({ token: record.portal_token || '' });
     if (record.layout_path) params.set('v', path.basename(record.layout_path));
+    params.set('pv', '2');
     return `/api/share/portal/${encodeURIComponent(record.tracking_code)}?${params.toString()}`;
 }
 

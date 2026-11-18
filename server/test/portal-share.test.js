@@ -20,7 +20,7 @@ const record = {
 test('builds a private share link that redirects to the authenticated portal', () => {
     assert.equal(
         buildPortalSharePath(record),
-        '/api/share/portal/%23ATOS-1892?token=token-seguro&v=layout-cliente.png'
+        '/api/share/portal/%23ATOS-1892?token=token-seguro&v=layout-cliente.png&pv=2'
     );
     assert.equal(
         buildPortalDirectPath(record),
