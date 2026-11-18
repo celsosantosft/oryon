@@ -41,8 +41,9 @@ function buildPortalShareHtml(record) {
     const directUrl = absoluteAppUrl(buildPortalDirectPath(record));
     const shareUrl = absoluteAppUrl(buildPortalSharePath(record));
     const imageUrl = absoluteAppUrl(buildPortalPreviewImagePath(record));
-    const title = `${appConfig.brandName} • ${record.tracking_code}`;
-    const description = 'Acompanhe seu pedido e confira o layout pelo Portal do Cliente.';
+    const clientName = String(record.client_name || '').trim();
+    const title = `${clientName || appConfig.brandName} • ${record.tracking_code}`;
+    const description = `${appConfig.brandName} • Acompanhe seu pedido e confira o layout pelo Portal do Cliente.`;
     const accentColor = appConfig.tenantKey === 'pd' ? '#111827' : '#2563eb';
     const directUrlJson = JSON.stringify(directUrl).replace(/</g, '\\u003c');
 

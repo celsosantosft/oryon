@@ -13,6 +13,7 @@ const {
 const record = {
     tracking_code: '#ATOS-1892',
     portal_token: 'token-seguro',
+    client_name: 'Colégio Central',
     layout_path: 'layout-cliente.png'
 };
 
@@ -28,12 +29,13 @@ test('builds a private share link that redirects to the authenticated portal', (
 
     const html = buildPortalShareHtml(record);
     assert.match(html, /property="og:image"/);
+    assert.match(html, /property="og:title" content="Colégio Central • #ATOS-1892"/);
+    assert.match(html, /property="og:description" content="Atos Fardamentos • Acompanhe seu pedido/);
     assert.match(html, /og:image:width" content="1200"/);
     assert.match(html, /http-equiv="refresh"/);
     assert.match(html, /class="portal-loader" role="status"/);
     assert.match(html, /Preparando seu portal/);
     assert.match(html, /window\.location\.replace/);
-    assert.doesNotMatch(html, /client_name/);
 });
 
 test('registers the protected share page and image routes', () => {
