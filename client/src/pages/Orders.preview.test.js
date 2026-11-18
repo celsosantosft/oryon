@@ -46,3 +46,10 @@ test('opens the selected order portal with its authenticated private link', () =
     assert.match(ordersSource, /aria-label="Acessar portal do cliente"/);
     assert.match(ordersSource, /Icons\.Eye\}\<\/span\> Portal/);
 });
+
+test('copies the branded share link instead of the redirected portal address', () => {
+    assert.match(ordersSource, /navigator\.clipboard\.writeText\(portalUrl\)/);
+    assert.match(ordersSource, /onCopyPortal\(order\)/);
+    assert.match(ordersSource, /aria-label="Copiar link do portal para o WhatsApp"/);
+    assert.match(ordersSource, /Icons\.Link\}\<\/span\> Link/);
+});

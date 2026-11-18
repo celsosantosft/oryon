@@ -26,7 +26,8 @@ const Icons = {
     User: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>,
     Download: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
     Return: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h11a4 4 0 010 8H7m-4-8l4-4m-4 4l4 4" /></svg>,
-    Unlock: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0v2M5 11h14v10H5z" /></svg>
+    Unlock: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0v2M5 11h14v10H5z" /></svg>,
+    Link: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 007.07 0l2-2a5 5 0 00-7.07-7.07l-1.15 1.15M14 11a5 5 0 00-7.07 0l-2 2A5 5 0 0012 20.07l1.15-1.15" /></svg>
 };
 
 // ============================================================================
@@ -1135,15 +1136,20 @@ const OrderSizeGroups = ({ sizes, itemIndex }) => {
     );
 };
 
-const OrderDetailsModal = ({ isOpen, onClose, order, onReset, onExportTxt, onOpenPortal, onUnlockClient, onRevertToQuote, API_BASE_URL, userRole, preview }) => (
+const OrderDetailsModal = ({ isOpen, onClose, order, onReset, onExportTxt, onOpenPortal, onCopyPortal, onUnlockClient, onRevertToQuote, API_BASE_URL, userRole, preview }) => (
     <Modal manageFocus={preview} isOpen={isOpen} onClose={onClose} title="Detalhes do Pedido">
         {order ? (
             <div style={styles.detailsContainer}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginBottom: '15px' }}>
                     <h4 style={{ fontSize: '1.1rem', fontWeight: '700', margin: 0, flex: '1 1 220px' }}>{order.client_name} - {order.tracking_code}</h4>
-                    <button type="button" onClick={() => onOpenPortal(order)} aria-label="Acessar portal do cliente" title="Acessar portal do cliente" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', minHeight: '32px', padding: '5px 10px', backgroundColor: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', borderRadius: '7px', fontSize: '0.75rem', fontWeight: '800', cursor: 'pointer' }}>
-                        <span style={{ display: 'flex' }}>{Icons.Eye}</span> Portal
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                        <button type="button" onClick={() => onOpenPortal(order)} aria-label="Acessar portal do cliente" title="Acessar portal do cliente" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', minHeight: '32px', padding: '5px 10px', backgroundColor: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', borderRadius: '7px', fontSize: '0.75rem', fontWeight: '800', cursor: 'pointer' }}>
+                            <span style={{ display: 'flex' }}>{Icons.Eye}</span> Portal
+                        </button>
+                        <button type="button" onClick={() => onCopyPortal(order)} aria-label="Copiar link do portal para o WhatsApp" title="Copiar link para o WhatsApp" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', minHeight: '32px', padding: '5px 10px', backgroundColor: '#F8FAFC', color: '#334155', border: '1px solid #CBD5E1', borderRadius: '7px', fontSize: '0.75rem', fontWeight: '800', cursor: 'pointer' }}>
+                            <span style={{ display: 'flex' }}>{Icons.Link}</span> Link
+                        </button>
+                    </div>
                 </div>
                 
                 {Array.isArray(order.product_lines) && order.product_lines.length > 0 ? (
@@ -1599,6 +1605,19 @@ const Orders = ({ preview: forcePreview = false }) => {
         }
     }, [API_BASE_URL, token]);
 
+    const handleCopyClientPortalLink = useCallback(async (order) => {
+        if (!order?.tracking_code) return;
+
+        try {
+            const response = await OrderService.getPortalLink(API_BASE_URL, token, order.tracking_code);
+            const portalUrl = new URL(response.data.portal_path, window.location.origin).toString();
+            await navigator.clipboard.writeText(portalUrl);
+            Swal.fire({ title: 'Link copiado!', text: 'Agora é só colar no WhatsApp.', icon: 'success', showConfirmButton: false, timer: 1800 });
+        } catch {
+            Swal.fire('Não foi possível copiar', 'Tente novamente ou verifique a permissão da área de transferência.', 'error');
+        }
+    }, [API_BASE_URL, token]);
+
     const handleUnlockClient = async (id) => {
         const result = await Swal.fire({ title: 'Liberar edição?', text: "Se você fizer isso, o cliente poderá alterar a lista pelo celular novamente.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#D97706', confirmButtonText: 'Sim, desbloquear' });
         if (result.isConfirmed) {
@@ -1720,7 +1739,7 @@ const Orders = ({ preview: forcePreview = false }) => {
 
             <OrderFormModal preview={preview} isOpen={modals.form} onClose={() => toggleModal('form', false)} orderToEdit={orderToEdit} API_BASE_URL={API_BASE_URL} token={token} auxData={{dbProducts, dbFabrics, dbClients}} onQuickClientAdd={quickAddClient} onRefresh={refreshOrders} />
             <StatusModal preview={preview} isOpen={modals.status} onClose={() => toggleModal('status', false)} orderToUpdate={orderToUpdateStatus} onUpdateStatus={handleUpdateStatus} />
-            <OrderDetailsModal preview={preview} isOpen={modals.details} onClose={() => toggleModal('details', false)} order={selectedOrderDetails} onReset={handleResetOrder} onExportTxt={handleExportTxt} onOpenPortal={handleOpenClientPortal} onUnlockClient={handleUnlockClient} onRevertToQuote={handleRevertToQuote} API_BASE_URL={API_BASE_URL} userRole={user?.role} />
+            <OrderDetailsModal preview={preview} isOpen={modals.details} onClose={() => toggleModal('details', false)} order={selectedOrderDetails} onReset={handleResetOrder} onExportTxt={handleExportTxt} onOpenPortal={handleOpenClientPortal} onCopyPortal={handleCopyClientPortalLink} onUnlockClient={handleUnlockClient} onRevertToQuote={handleRevertToQuote} API_BASE_URL={API_BASE_URL} userRole={user?.role} />
         </div>
     );
 };
