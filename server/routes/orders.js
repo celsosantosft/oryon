@@ -18,6 +18,11 @@ const { normalizePlayerNumber } = require('../utils/playerNumber');
 const { chooseEffectiveOrderItems } = require('../utils/effectiveOrderItems');
 const { syncConvertedOrdersFromQuote } = require('../utils/convertedOrderSync');
 const {
+    buildPortalShareHtml,
+    buildPortalSharePath,
+    createPortalPreviewImage
+} = require('../utils/portalShare');
+const {
     enqueueUpsert: enqueueCalendarUpsert,
     enqueueDelete: enqueueCalendarDelete,
     enqueueForCurrentState: enqueueCalendarState
@@ -106,7 +111,7 @@ const ORDER_LIST_UNLOCKED_STATUS = 'Lista Desbloqueada';
 const QUOTE_LIST_UNLOCKED_STATUS = 'Lista Desbloqueada para Cliente';
 
 function buildPortalPath(record) {
-    return `/portal/${encodeURIComponent(record.tracking_code)}?token=${encodeURIComponent(record.portal_token || '')}`;
+    return buildPortalSharePath(record);
 }
 
 function normalizePortalTrackingCode(value) {
@@ -171,7 +176,7 @@ function findPortalRecordByCode(code, callback) {
     const candidates = getPortalCodeCandidates(code);
     const placeholders = candidates.map(() => '?').join(',');
 
-    db.get(`SELECT id, tracking_code, portal_token FROM orders WHERE tracking_code IN (${placeholders}) OR legacy_tracking_code IN (${placeholders}) ORDER BY id DESC LIMIT 1`, [...candidates, ...candidates], (orderErr, order) => {
+    db.get(`SELECT id, tracking_code, portal_token, client_name, layout_path FROM orders WHERE tracking_code IN (${placeholders}) OR legacy_tracking_code IN (${placeholders}) ORDER BY id DESC LIMIT 1`, [...candidates, ...candidates], (orderErr, order) => {
         if (orderErr) return callback(orderErr);
         if (order) {
             return ensurePortalToken('orders', order, (ensureErr, ensuredOrder) => {
@@ -179,7 +184,7 @@ function findPortalRecordByCode(code, callback) {
             });
         }
 
-        db.get(`SELECT id, tracking_code, portal_token FROM quotes WHERE tracking_code IN (${placeholders}) ORDER BY id DESC LIMIT 1`, candidates, (quoteErr, quote) => {
+        db.get(`SELECT id, tracking_code, portal_token, client_name, layout_path FROM quotes WHERE tracking_code IN (${placeholders}) ORDER BY id DESC LIMIT 1`, candidates, (quoteErr, quote) => {
             if (quoteErr) return callback(quoteErr);
             ensurePortalToken('quotes', quote, (ensureErr, ensuredQuote) => {
                 callback(ensureErr, ensuredQuote ? { ...ensuredQuote, type: 'quote' } : null);
@@ -1435,6 +1440,33 @@ router.get('/api/tracking/portal-link/:code', portalLookupLimit, (req, res) => {
             type: record.type,
             portal_path: buildPortalPath(record)
         });
+    });
+});
+
+router.get('/share/portal/:code/image', portalLookupLimit, (req, res) => {
+    findPortalRecordByCode(req.params.code, async (err, record) => {
+        if (err) return res.status(500).json({ error: 'Não foi possível preparar a imagem do portal.' });
+        if (!record) return res.status(404).json({ error: 'Pedido ou orçamento não encontrado.' });
+        if (!requirePortalToken(record, req, res)) return;
+
+        try {
+            const image = await createPortalPreviewImage(record.layout_path);
+            res.set('Cache-Control', 'public, max-age=86400');
+            res.type('jpeg').send(image);
+        } catch {
+            res.status(500).json({ error: 'Não foi possível preparar a imagem do portal.' });
+        }
+    });
+});
+
+router.get('/share/portal/:code', portalLookupLimit, (req, res) => {
+    findPortalRecordByCode(req.params.code, (err, record) => {
+        if (err) return res.status(500).send('Não foi possível abrir o portal.');
+        if (!record) return res.status(404).send('Pedido ou orçamento não encontrado.');
+        if (!requirePortalToken(record, req, res)) return;
+
+        res.set('Cache-Control', 'private, no-store');
+        res.type('html').send(buildPortalShareHtml(record));
     });
 });
 

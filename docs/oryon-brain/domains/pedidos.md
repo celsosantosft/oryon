@@ -13,6 +13,7 @@
 - As rotas oficiais `/portal` usam a experiência mobile aprovada; `/portal-preview` permanece disponível para comparação e é a única que exibe o selo de teste.
 - No portal do cliente, a aba Grade é somente para visualização. Quando a lista estiver liberada, o cliente pode adicionar camisas e alterar tamanhos pela aba Nomes; o envio dessa lista atualiza a grade e os valores do pedido.
 - Em Detalhes do Pedido, o acesso direto ao portal deve usar o link privado retornado pela API autenticada, nunca montar ou expor o token a partir dos dados públicos da listagem.
+- Links do portal gerados pelo sistema usam uma página segura de compartilhamento para o WhatsApp: a prévia mostra o layout com a logo pequena da instalação e redireciona ao portal autenticado; sem imagem raster, usa a marca como fallback.
 - A rota oficial `/orders` usa a experiência aprovada em telas abaixo de 1000 px e mantém a tabela clássica no desktop. `/orders-preview` continua acessível para conferir a experiência aprovada em qualquer largura. O tema segue a empresa (Atos azul e PD monocromático).
 - O Google Agenda é opcional e configurado por instalação em `Entregas da Semana`. Somente pedidos gerados criam eventos; orçamentos não criam.
 - Administradores podem cadastrar as credenciais OAuth do Google no próprio painel; o Client Secret fica criptografado no servidor e nunca volta ao navegador.

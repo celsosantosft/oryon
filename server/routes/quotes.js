@@ -6,6 +6,7 @@ const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 const { appConfig, buildTrackingCode } = require('../config/appConfig');
 const { createLayoutUpload } = require('../utils/layoutUpload');
 const { buildOrderCodeFromQuoteCode } = require('../utils/quoteOrderTracking');
+const { buildPortalSharePath } = require('../utils/portalShare');
 const { enqueueUpsert: enqueueCalendarUpsert } = require('../services/orderCalendarSync');
 db.run("ALTER TABLE quotes ADD COLUMN portal_token TEXT", () => {});
 db.run("ALTER TABLE orders ADD COLUMN portal_token TEXT", () => {});
@@ -42,7 +43,7 @@ function generatePortalToken() {
 }
 
 function buildPortalPath(record) {
-    return `/portal/${encodeURIComponent(record.tracking_code)}?token=${encodeURIComponent(record.portal_token || '')}`;
+    return buildPortalSharePath(record);
 }
 
 const QUOTE_CONVERTED_STATUS = 'Convertido em Pedido';
