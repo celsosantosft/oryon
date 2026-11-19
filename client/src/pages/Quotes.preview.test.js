@@ -75,3 +75,9 @@ test('opens and copies the authenticated customer portal from quote details', ()
     assert.match(quotesSource, /aria-label="Acessar portal do cliente"/);
     assert.match(quotesSource, /aria-label="Copiar link do portal para o WhatsApp"/);
 });
+
+test('exports the current quote as a client JPG', () => {
+    assert.match(quotesSource, /exportClientJpg/);
+    assert.match(quotesSource, /onExportJpg\(quote\)/);
+    assert.match(quotesSource, /Gerar JPG 1080 por 1350/);
+});

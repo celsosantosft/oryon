@@ -10,6 +10,7 @@
 - Modal forms close only through an intentional backdrop click or the close control, not because the pointer was dragged outside.
 - Operational views must use real database records and show explicit errors when loading fails.
 - A ficha de produção deve usar a grade e a lista nominal atuais do pedido. Na impressão, o layout vem primeiro e os nomes/números ficam compactos abaixo, agrupados por tamanho, priorizando uma única folha A4.
+- Pedidos e orçamentos podem ser compartilhados com o cliente em JPG 1080 × 1350 px (4:5); quando houver vários produtos, o sistema gera uma imagem por produto para preservar layout e grade.
 - Ao abrir um pedido no Kanban de Produção, o modal deve exibir o layout anexado sem ocultar a grade de tamanhos.
 - As rotas oficiais `/portal` usam a experiência mobile aprovada; `/portal-preview` permanece disponível para comparação e é a única que exibe o selo de teste.
 - No portal do cliente, a aba Grade é somente para visualização. Quando a lista estiver liberada, o cliente pode adicionar camisas e alterar tamanhos pela aba Nomes; o envio dessa lista atualiza a grade e os valores do pedido.

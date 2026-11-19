@@ -133,7 +133,7 @@ const parsePrintingTypes = (value) => {
         try {
             const parsed = JSON.parse(value);
             return Array.isArray(parsed) ? parsed.map((item) => String(item || '').trim()).filter(Boolean) : [];
-        } catch (error) {
+        } catch {
             return value.split(',').map((item) => item.trim()).filter(Boolean);
         }
     }
@@ -595,4 +595,249 @@ export const printOrder = (order, apiBaseUrl, printWindow, { autoPrint = true, c
         if (autoPrint) printWindow.print();
     }, { once: true });
     printWindow.document.close();
+};
+
+const CLIENT_JPG_WIDTH = 1080;
+const CLIENT_JPG_HEIGHT = 1350;
+
+const safeFilePart = (value) => String(value || 'documento')
+    .replace(/^#/, '')
+    .replace(/[^a-z0-9_-]+/gi, '-')
+    .replace(/^-+|-+$/g, '') || 'documento';
+
+export const buildClientJpgPages = (order, apiBaseUrl) => {
+    const lines = buildNormalizedLines(order, apiBaseUrl);
+    const isQuote = String(order?.tracking_code || '').startsWith('#ORC-');
+    const total = Number(order?.total_price || lines.reduce((sum, line) => sum + line.total_price, 0));
+    const code = safeFilePart(order?.tracking_code);
+
+    return lines.map((line, index) => ({
+        width: CLIENT_JPG_WIDTH,
+        height: CLIENT_JPG_HEIGHT,
+        documentLabel: isQuote ? 'ORÇAMENTO' : 'PEDIDO',
+        clientName: String(order?.client_name || 'Cliente não informado'),
+        trackingCode: String(order?.tracking_code || ''),
+        deliveryDate: formatDateSafe(order?.delivery_date),
+        status: String(order?.status || ''),
+        total,
+        pageNumber: index + 1,
+        pageCount: lines.length,
+        fileName: `${isQuote ? 'orcamento' : 'pedido'}-${code}${lines.length > 1 ? `-${index + 1}` : ''}.jpg`,
+        line
+    }));
+};
+
+const roundedRect = (ctx, x, y, width, height, radius) => {
+    const safeRadius = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + safeRadius, y);
+    ctx.arcTo(x + width, y, x + width, y + height, safeRadius);
+    ctx.arcTo(x + width, y + height, x, y + height, safeRadius);
+    ctx.arcTo(x, y + height, x, y, safeRadius);
+    ctx.arcTo(x, y, x + width, y, safeRadius);
+    ctx.closePath();
+};
+
+const drawWrappedText = (ctx, value, x, y, maxWidth, lineHeight, maxLines = 2) => {
+    const words = String(value || '').split(/\s+/).filter(Boolean);
+    const lines = [];
+    let current = '';
+
+    words.forEach((word) => {
+        const candidate = current ? `${current} ${word}` : word;
+        if (ctx.measureText(candidate).width <= maxWidth || !current) {
+            current = candidate;
+        } else {
+            lines.push(current);
+            current = word;
+        }
+    });
+    if (current) lines.push(current);
+
+    const visible = lines.slice(0, maxLines);
+    if (lines.length > maxLines && visible.length) {
+        let last = visible.at(-1);
+        while (last && ctx.measureText(`${last}…`).width > maxWidth) last = last.slice(0, -1);
+        visible[visible.length - 1] = `${last}…`;
+    }
+    visible.forEach((line, index) => ctx.fillText(line, x, y + (index * lineHeight)));
+    return visible.length;
+};
+
+const loadCanvasImage = async (url) => {
+    if (!url) return null;
+    try {
+        const response = await fetch(url, { credentials: 'include' });
+        if (!response.ok) return null;
+        const objectUrl = URL.createObjectURL(await response.blob());
+        const image = new Image();
+        image.decoding = 'async';
+        try {
+            await new Promise((resolve, reject) => {
+                image.onload = resolve;
+                image.onerror = reject;
+                image.src = objectUrl;
+            });
+            return image;
+        } finally {
+            URL.revokeObjectURL(objectUrl);
+        }
+    } catch {
+        return null;
+    }
+};
+
+const drawContainedImage = (ctx, image, x, y, width, height) => {
+    const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight);
+    const drawWidth = image.naturalWidth * scale;
+    const drawHeight = image.naturalHeight * scale;
+    ctx.drawImage(image, x + ((width - drawWidth) / 2), y + ((height - drawHeight) / 2), drawWidth, drawHeight);
+};
+
+const canvasToJpeg = (canvas) => new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Falha ao gerar o JPG.')), 'image/jpeg', 0.92);
+});
+
+const renderClientJpgPage = async (page) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = page.width;
+    canvas.height = page.height;
+    const ctx = canvas.getContext('2d');
+    const accent = appConfig.theme === 'monochrome' ? '#111827' : '#2563EB';
+    const accentSoft = appConfig.theme === 'monochrome' ? '#F3F4F6' : '#EFF6FF';
+    const [logo, layout] = await Promise.all([
+        loadCanvasImage(resolvePublicAssetUrl(appConfig.logoUrl)),
+        loadCanvasImage(page.line.layoutUrl)
+    ]);
+
+    ctx.fillStyle = '#F1F5F9';
+    ctx.fillRect(0, 0, page.width, page.height);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(28, 28, page.width - 56, page.height - 56);
+
+    ctx.fillStyle = accent;
+    ctx.fillRect(28, 28, page.width - 56, 12);
+    if (logo) drawContainedImage(ctx, logo, 64, 68, 150, 100);
+
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#64748B';
+    ctx.font = '700 24px Arial, sans-serif';
+    ctx.fillText(appConfig.brandName.toUpperCase(), 238, 74);
+    ctx.fillStyle = '#0F172A';
+    ctx.font = '800 44px Arial, sans-serif';
+    ctx.fillText(page.documentLabel, 238, 108);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = accent;
+    ctx.font = '800 28px Arial, sans-serif';
+    ctx.fillText(page.trackingCode, 1010, 82);
+    ctx.fillStyle = '#64748B';
+    ctx.font = '700 20px Arial, sans-serif';
+    ctx.fillText(`${page.pageNumber}/${page.pageCount}`, 1010, 124);
+    ctx.textAlign = 'left';
+
+    roundedRect(ctx, 64, 194, 952, 142, 20);
+    ctx.fillStyle = accentSoft;
+    ctx.fill();
+    ctx.fillStyle = '#64748B';
+    ctx.font = '700 20px Arial, sans-serif';
+    ctx.fillText('CLIENTE', 92, 220);
+    ctx.fillStyle = '#0F172A';
+    ctx.font = '800 32px Arial, sans-serif';
+    drawWrappedText(ctx, page.clientName.toUpperCase(), 92, 252, 600, 38, 2);
+    ctx.fillStyle = '#64748B';
+    ctx.font = '700 18px Arial, sans-serif';
+    ctx.fillText('PREVISÃO', 780, 220);
+    ctx.fillStyle = '#0F172A';
+    ctx.font = '800 25px Arial, sans-serif';
+    ctx.fillText(page.deliveryDate || 'Não informada', 780, 252);
+    if (page.status) {
+        ctx.fillStyle = '#475569';
+        ctx.font = '700 18px Arial, sans-serif';
+        ctx.fillText(page.status, 780, 292);
+    }
+
+    roundedRect(ctx, 64, 370, 952, 550, 22);
+    ctx.fillStyle = '#F8FAFC';
+    ctx.fill();
+    ctx.strokeStyle = '#E2E8F0';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    if (layout) {
+        drawContainedImage(ctx, layout, 88, 394, 904, 502);
+    } else {
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#94A3B8';
+        ctx.font = '700 28px Arial, sans-serif';
+        ctx.fillText('Layout não anexado', 540, 630);
+        ctx.textAlign = 'left';
+    }
+
+    roundedRect(ctx, 64, 946, 952, 258, 22);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
+    ctx.strokeStyle = '#E2E8F0';
+    ctx.stroke();
+    ctx.fillStyle = accent;
+    ctx.font = '800 20px Arial, sans-serif';
+    ctx.fillText(`ITEM ${page.pageNumber}`, 92, 974);
+    ctx.fillStyle = '#0F172A';
+    ctx.font = '800 32px Arial, sans-serif';
+    drawWrappedText(ctx, page.line.product_type, 92, 1006, 620, 38, 2);
+    ctx.fillStyle = '#64748B';
+    ctx.font = '600 23px Arial, sans-serif';
+    ctx.fillText(page.line.fabric_type || 'Malha não informada', 92, 1086);
+    ctx.fillStyle = '#334155';
+    ctx.font = '700 22px Arial, sans-serif';
+    drawWrappedText(ctx, formatQuoteSizesInline(page.line.sizes), 92, 1130, 850, 30, 2);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#64748B';
+    ctx.font = '700 19px Arial, sans-serif';
+    ctx.fillText(`${page.line.totalPieces} peça(s)`, 984, 982);
+    ctx.fillStyle = '#0F172A';
+    ctx.font = '800 28px Arial, sans-serif';
+    ctx.fillText(formatMoney(page.line.total_price), 984, 1018);
+    ctx.textAlign = 'left';
+
+    ctx.fillStyle = '#64748B';
+    ctx.font = '700 20px Arial, sans-serif';
+    ctx.fillText('TOTAL DO DOCUMENTO', 64, 1246);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = accent;
+    ctx.font = '800 38px Arial, sans-serif';
+    ctx.fillText(formatMoney(page.total), 1016, 1234);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = '600 16px Arial, sans-serif';
+    ctx.fillText('Imagem 1080 × 1350 px • pronta para celular', 64, 1300);
+
+    return canvasToJpeg(canvas);
+};
+
+export const exportClientJpg = async (order, apiBaseUrl) => {
+    const pages = buildClientJpgPages(order, apiBaseUrl);
+    const files = [];
+    for (const page of pages) {
+        files.push(new File([await renderClientJpgPage(page)], page.fileName, { type: 'image/jpeg' }));
+    }
+
+    if (navigator.share && navigator.canShare?.({ files })) {
+        try {
+            await navigator.share({ files, title: `${pages[0].documentLabel} ${pages[0].trackingCode}` });
+            return { mode: 'shared', count: files.length };
+        } catch (error) {
+            if (error?.name === 'AbortError') return { mode: 'cancelled', count: files.length };
+        }
+    }
+
+    files.forEach((file) => {
+        const url = URL.createObjectURL(file);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = file.name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+    return { mode: 'downloaded', count: files.length };
 };

@@ -6,7 +6,7 @@ import Swal from 'sweetalert2';
 import { useAuth } from '../context/AuthContext';
 import { appConfig } from '../config/appConfig';
 import Modal from '../components/Modal';
-import { printOrder as printQuote } from '../utils/printUtils';
+import { exportClientJpg, printOrder as printQuote } from '../utils/printUtils';
 import { compressImageSafe } from '../utils/helpers';
 import { getVisibleQuoteStatuses, isQuoteVisibleInBoard } from '../utils/quoteFilters';
 import { normalizeGradeSize, sortGradeItems } from '../utils/cuttingGrouping';
@@ -1145,7 +1145,7 @@ const getQuotePieceCount = (quote) => {
     }, 0);
 };
 
-const QuoteRow = React.memo(({ quote, isSelected, onCheckboxChange, onView, onEdit, onPrint, onStatusClick, onApproveToOrder, userRole, preview, editDisabled }) => {
+const QuoteRow = React.memo(({ quote, isSelected, onCheckboxChange, onView, onEdit, onPrint, onExportJpg, onStatusClick, onApproveToOrder, userRole, preview, editDisabled }) => {
     const [isHovered, setIsHovered] = useState(false);
     const canEdit = userRole === 'admin' || userRole === 'gerente';
     const selection = <label className={preview ? 'orders-select-target' : undefined}><input type="checkbox" aria-label={`Selecionar orçamento ${quote.tracking_code}`} checked={isSelected} onChange={() => onCheckboxChange(quote.id)} style={styles.checkbox} /></label>;
@@ -1190,6 +1190,7 @@ const QuoteRow = React.memo(({ quote, isSelected, onCheckboxChange, onView, onEd
                         {canConvertQuoteToOrder(quote) && <button type="button" className="quotes-card-convert" onClick={() => onApproveToOrder(quote)}><span aria-hidden="true">{Icons.Check}</span>{quote.status === 'Aprovado' ? 'Gerar pedido' : 'Aprovar'}</button>}
                         {canEdit && <button type="button" disabled={editDisabled} onClick={() => onEdit(quote)}><span aria-hidden="true">{Icons.Edit}</span>Editar</button>}
                         <button type="button" onClick={() => onPrint(quote)}><span aria-hidden="true">{Icons.Printer}</span>Imprimir</button>
+                        <button type="button" onClick={() => onExportJpg(quote)}><span aria-hidden="true">{Icons.Image}</span>JPG</button>
                     </div>
                 </td>
             </tr>
@@ -1225,13 +1226,14 @@ const QuoteRow = React.memo(({ quote, isSelected, onCheckboxChange, onView, onEd
                     <button onClick={viewQuote} aria-label="Ver Detalhes" style={styles.iconButton} title="Detalhes">{Icons.Eye}</button>
                     {canEdit && <button onClick={() => onEdit(quote)} aria-label="Editar" style={styles.iconButton} title="Editar">{Icons.Edit}</button>}
                     <button onClick={() => onPrint(quote)} aria-label="Imprimir" style={styles.iconButton} title="Imprimir Orçamento">{Icons.Printer}</button>
+                    <button onClick={() => onExportJpg(quote)} aria-label="Gerar JPG 1080 por 1350" style={styles.iconButton} title="Gerar JPG para o cliente">{Icons.Image}</button>
                 </div>
             </td>
         </tr>
     );
 });
 
-const QuotesTable = React.memo(({ quotes, selectedIds, onCheckboxChange, onView, onEdit, onPrint, onStatusClick, onApproveToOrder, userRole, preview, editDisabled }) => {
+const QuotesTable = React.memo(({ quotes, selectedIds, onCheckboxChange, onView, onEdit, onPrint, onExportJpg, onStatusClick, onApproveToOrder, userRole, preview, editDisabled }) => {
     if (quotes.length === 0) return <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', border: '1px solid #e2e8f0', borderRadius: '12px', backgroundColor: 'white' }}>Nenhum orçamento encontrado.</div>;
 
     return (
@@ -1258,6 +1260,7 @@ const QuotesTable = React.memo(({ quotes, selectedIds, onCheckboxChange, onView,
                             onView={onView}
                             onEdit={onEdit}
                             onPrint={onPrint}
+                            onExportJpg={onExportJpg}
                             onStatusClick={onStatusClick}
                             onApproveToOrder={onApproveToOrder}
                             userRole={userRole}
@@ -1397,6 +1400,20 @@ const Quotes = ({ preview: forcePreview = false }) => {
         } catch (error) {
             if (!printWindow.closed) printWindow.document.body.textContent = 'Não foi possível preparar o orçamento. Volte a Orçamentos e tente novamente.';
             Swal.fire('Falha ao imprimir', 'Não foi possível carregar o orçamento completo para impressão.', 'error');
+        }
+    }, [API_BASE_URL, fetchQuoteSnapshot]);
+
+    const handleExportClientJpg = useCallback(async (quote) => {
+        Swal.fire({ title: 'Gerando JPG…', text: 'Preparando a imagem para o cliente.', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        try {
+            const detailedQuote = await fetchQuoteSnapshot(quote.tracking_code);
+            const result = await exportClientJpg(detailedQuote, API_BASE_URL);
+            Swal.close();
+            if (result.mode === 'downloaded') {
+                Swal.fire({ title: result.count > 1 ? `${result.count} imagens geradas!` : 'JPG gerado!', text: 'O arquivo está pronto para enviar ao cliente.', icon: 'success', showConfirmButton: false, timer: 1800 });
+            }
+        } catch {
+            Swal.fire('Falha ao gerar JPG', 'Não foi possível preparar a imagem deste orçamento.', 'error');
         }
     }, [API_BASE_URL, fetchQuoteSnapshot]);
 
@@ -1648,7 +1665,7 @@ const handleApproveToOrder = useCallback(async (quote) => {
             {preview && (error || auxiliaryError) && !loading && <button className="orders-retry" type="button" onClick={retry}>Tentar novamente</button>}
             {preview && loading && <p role="status">Carregando painel de orçamentos…</p>}
             
-            {(!preview || (!loading && (!error || filteredQuotes.length > 0))) && <QuotesTable preview={preview} editDisabled={preview && auxiliaryError} quotes={filteredQuotes} selectedIds={selectedQuoteIds} onCheckboxChange={handleCheckboxChange} onView={loadQuoteDetails} onEdit={openEditModal} onPrint={handlePrint} onStatusClick={(o) => { setQuoteToUpdateStatus(o); toggleModal('status', true); }} onApproveToOrder={handleApproveToOrder} userRole={user?.role} />}
+            {(!preview || (!loading && (!error || filteredQuotes.length > 0))) && <QuotesTable preview={preview} editDisabled={preview && auxiliaryError} quotes={filteredQuotes} selectedIds={selectedQuoteIds} onCheckboxChange={handleCheckboxChange} onView={loadQuoteDetails} onEdit={openEditModal} onPrint={handlePrint} onExportJpg={handleExportClientJpg} onStatusClick={(o) => { setQuoteToUpdateStatus(o); toggleModal('status', true); }} onApproveToOrder={handleApproveToOrder} userRole={user?.role} />}
             
             {/* MODAL UNIFICADO */}
             <QuoteFormModal preview={preview} mobile={isMobile} isOpen={modals.form} onClose={() => toggleModal('form', false)} quoteToEdit={quoteToEdit} API_BASE_URL={API_BASE_URL} token={token} auxData={{dbProducts, dbFabrics, dbClients}} onQuickClientAdd={quickAddClient} onRefresh={refreshQuotes} />

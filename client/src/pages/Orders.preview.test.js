@@ -54,3 +54,9 @@ test('copies the branded share link instead of the redirected portal address', (
     assert.match(ordersSource, /aria-label="Copiar link do portal para o WhatsApp"/);
     assert.match(ordersSource, /Icons\.Link\}\<\/span\> Link/);
 });
+
+test('exports the current order as a client JPG', () => {
+    assert.match(ordersSource, /exportClientJpg/);
+    assert.match(ordersSource, /onExportJpg\(order\)/);
+    assert.match(ordersSource, /Gerar JPG 1080 por 1350/);
+});

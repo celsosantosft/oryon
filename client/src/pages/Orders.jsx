@@ -6,7 +6,7 @@ import Swal from 'sweetalert2';
 import { useAuth } from '../context/AuthContext';
 import { appConfig } from '../config/appConfig';
 import Modal from '../components/Modal';
-import { printOrder } from '../utils/printUtils';
+import { exportClientJpg, printOrder } from '../utils/printUtils';
 import { normalizeGradeSize, sortGradeItems } from '../utils/cuttingGrouping';
 
 // ============================================================================
@@ -1276,7 +1276,7 @@ const getPreviewDeadline = (order) => {
     return { label };
 };
 
-const OrderRow = React.memo(({ order, isSelected, onCheckboxChange, onView, onEdit, onPrint, onStatusClick, userRole, preview, editDisabled }) => {
+const OrderRow = React.memo(({ order, isSelected, onCheckboxChange, onView, onEdit, onPrint, onExportJpg, onStatusClick, userRole, preview, editDisabled }) => {
     const [isHovered, setIsHovered] = useState(false);
     const paid = getOrderAmountPaid(order);
     const total = normalizeMoneyValue(order.total_price);
@@ -1324,6 +1324,7 @@ const OrderRow = React.memo(({ order, isSelected, onCheckboxChange, onView, onEd
                         <button type="button" onClick={viewOrder}><span aria-hidden="true">{Icons.Eye}</span>Visualizar</button>
                         {canEdit && <button type="button" disabled={editDisabled} onClick={() => onEdit(order)}><span aria-hidden="true">{Icons.Edit}</span>Editar</button>}
                         <button type="button" onClick={() => onPrint(order)}><span aria-hidden="true">{Icons.Printer}</span>Imprimir</button>
+                        <button type="button" onClick={() => onExportJpg(order)}><span aria-hidden="true">{Icons.Image}</span>JPG</button>
                     </div>
                 </td>
             </tr>
@@ -1351,13 +1352,14 @@ const OrderRow = React.memo(({ order, isSelected, onCheckboxChange, onView, onEd
                     <button onClick={viewOrder} aria-label="Ver Detalhes" style={styles.iconButton} title="Detalhes">{Icons.Eye}</button>
                     {canEdit && <button disabled={editDisabled} onClick={() => onEdit(order)} aria-label="Editar e Aprovar" style={styles.iconButton} title="Editar e Aprovar">{Icons.Edit}</button>}
                     <button onClick={() => onPrint(order)} aria-label="Imprimir" style={styles.iconButton} title="Imprimir O.S.">{Icons.Printer}</button>
+                    <button onClick={() => onExportJpg(order)} aria-label="Gerar JPG 1080 por 1350" style={styles.iconButton} title="Gerar JPG para o cliente">{Icons.Image}</button>
                 </div>
             </td>
         </tr>
     );
 });
 
-const OrdersTable = React.memo(({ orders, selectedIds, onCheckboxChange, onView, onEdit, onPrint, onStatusClick, userRole, preview, editDisabled }) => {
+const OrdersTable = React.memo(({ orders, selectedIds, onCheckboxChange, onView, onEdit, onPrint, onExportJpg, onStatusClick, userRole, preview, editDisabled }) => {
     if (orders.length === 0) return <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', border: '1px solid #e2e8f0', borderRadius: '12px', backgroundColor: 'white' }}>Nenhum pedido encontrado.</div>;
 
     return (
@@ -1376,7 +1378,7 @@ const OrdersTable = React.memo(({ orders, selectedIds, onCheckboxChange, onView,
                 </thead>
                 <tbody role={preview ? "rowgroup" : undefined}>
                     {orders.map((order) => (
-                        <OrderRow key={order.id} order={order} isSelected={selectedIds.includes(order.id)} onCheckboxChange={onCheckboxChange} onView={onView} onEdit={onEdit} onPrint={onPrint} onStatusClick={onStatusClick} userRole={userRole} preview={preview} editDisabled={editDisabled} />
+                        <OrderRow key={order.id} order={order} isSelected={selectedIds.includes(order.id)} onCheckboxChange={onCheckboxChange} onView={onView} onEdit={onEdit} onPrint={onPrint} onExportJpg={onExportJpg} onStatusClick={onStatusClick} userRole={userRole} preview={preview} editDisabled={editDisabled} />
                     ))}
                 </tbody>
             </table>
@@ -1469,6 +1471,28 @@ const Orders = ({ preview: forcePreview = false }) => {
             if (!printWindow.closed) {
                 printWindow.document.body.textContent = 'Não foi possível preparar a ficha de produção. Volte a Pedidos e tente novamente.';
             }
+        }
+    }, [API_BASE_URL, token]);
+
+    const handleExportClientJpg = useCallback(async (order) => {
+        Swal.fire({ title: 'Gerando JPG…', text: 'Preparando a imagem para o cliente.', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        try {
+            const res = await OrderService.getOrderHistory(API_BASE_URL, token, order.tracking_code);
+            const detailedOrder = {
+                ...res.data,
+                sizes_json: { ...ORDER_CONSTANTS.DEFAULT_SIZES, ...(res.data.sizes_json || {}) },
+                product_lines: Array.isArray(res.data.product_lines) ? res.data.product_lines.map((line) => ({
+                    ...line,
+                    sizes_json: { ...ORDER_CONSTANTS.DEFAULT_SIZES, ...(line.sizes_json || {}) }
+                })) : []
+            };
+            const result = await exportClientJpg(detailedOrder, API_BASE_URL);
+            Swal.close();
+            if (result.mode === 'downloaded') {
+                Swal.fire({ title: result.count > 1 ? `${result.count} imagens geradas!` : 'JPG gerado!', text: 'O arquivo está pronto para enviar ao cliente.', icon: 'success', showConfirmButton: false, timer: 1800 });
+            }
+        } catch {
+            Swal.fire('Falha ao gerar JPG', 'Não foi possível preparar a imagem deste pedido.', 'error');
         }
     }, [API_BASE_URL, token]);
 
@@ -1744,7 +1768,7 @@ const Orders = ({ preview: forcePreview = false }) => {
             {(!preview || (!loading && (!error || filteredOrders.length > 0))) && <OrdersTable preview={preview} editDisabled={preview && auxiliaryError}
                 orders={filteredOrders} selectedIds={selectedOrderIds} 
                 onCheckboxChange={handleCheckboxChange} onView={loadOrderDetails} 
-                onEdit={openEditModal} onPrint={handlePrintOrder} 
+                onEdit={openEditModal} onPrint={handlePrintOrder} onExportJpg={handleExportClientJpg}
                 onStatusClick={(o) => { setOrderToUpdateStatus(o); toggleModal('status', true); }} 
                 userRole={user?.role}
             />}

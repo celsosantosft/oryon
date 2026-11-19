@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { printOrder } from './printUtils.js';
+import { buildClientJpgPages, printOrder } from './printUtils.js';
 
 const renderPrintDocument = (order, options) => {
     let html = '';
@@ -107,4 +107,29 @@ test('places the compact customer list below the layout and groups entries by si
     assert.match(gGroup, />16</);
     assert.match(gGroup, />10</);
     assert.doesNotMatch(gGroup, /PROF CLECIO/);
+});
+
+test('builds one 1080 by 1350 client image per product', () => {
+    const pages = buildClientJpgPages({
+        ...changedOrder,
+        total_price: 980,
+        product_lines: [
+            { ...changedOrder.product_lines[0], total_price: 700 },
+            { product_type: 'Bandeirão', fabric_type: 'Oxford', sizes_json: { ESP: 1 }, total_price: 280 }
+        ]
+    }, 'https://atosfardamentos.com.br/api');
+
+    assert.equal(pages.length, 2);
+    assert.deepEqual(pages.map(({ width, height }) => [width, height]), [[1080, 1350], [1080, 1350]]);
+    assert.equal(pages[0].documentLabel, 'PEDIDO');
+    assert.equal(pages[0].total, 980);
+    assert.match(pages[0].fileName, /^pedido-ATOS-9762-1\.jpg$/);
+    assert.equal(pages[1].line.product_type, 'Bandeirão');
+});
+
+test('labels quote images and filenames as orçamento', () => {
+    const [page] = buildClientJpgPages({ ...changedOrder, tracking_code: '#ORC-6435' }, 'https://atosfardamentos.com.br/api');
+
+    assert.equal(page.documentLabel, 'ORÇAMENTO');
+    assert.equal(page.fileName, 'orcamento-ORC-6435.jpg');
 });
