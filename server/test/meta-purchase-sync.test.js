@@ -64,6 +64,18 @@ test('messaging purchase uses only an order-linked incoming conversation before 
     assert.equal(f.calls[0][1].data[0].action_source, 'business_messaging');
     assert.match(f.calls[1][0], /\/test-pixel\/events$/);
     assert.equal(f.calls[1][1].data[0].action_source, 'chat');
+    await f.exec(`INSERT INTO whatsapp_conversation_orders VALUES(3,1);
+        INSERT INTO orders(id,client_id,total_price,amount_paid) VALUES(3,1,200,50);`);
+    let attempts = 0;
+    const uncertain = createMetaPurchaseSync({ ...f.options, post: async () => {
+        attempts += 1;
+        throw new Error('timeout');
+    } });
+    await uncertain.processDue();
+    f.advance(3600);
+    await uncertain.processDue();
+    assert.equal(attempts, 1);
+    assert.equal((await f.all('SELECT status FROM meta_purchase_events WHERE order_id=3'))[0].status, 'review');
 });
 
 test('order created with deposit sends once, installments and finance reconciliation do not duplicate', async t => {

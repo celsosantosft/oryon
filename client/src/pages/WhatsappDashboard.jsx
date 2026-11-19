@@ -178,6 +178,7 @@ function getMetaCapiFeedback(metaCapi) {
     if (metaCapi.reason === 'missing_config') return ' Meta sem Pixel ID ou token.';
     if (metaCapi.reason === 'missing_user_data') return ' Meta sem telefone ou e-mail válido.';
     if (metaCapi.reason === 'expired_event_requires_review') return ' O evento antigo precisa de revisão; a data não será alterada para reenviar.';
+    if (metaCapi.reason === 'uncertain_delivery_requires_review') return ' Recebimento incerto: confira o Gerenciador de Eventos antes de reenviar.';
     if (metaCapi.reason === 'label_not_qualified') return '';
     if (metaCapi.skipped) return ' Meta não enviada.';
     return ' Meta falhou; confira os logs do servidor.';

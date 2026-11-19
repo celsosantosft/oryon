@@ -124,6 +124,7 @@ function createMetaPurchaseSync({ db, config, tenantKey, post, now = () => Math.
                     WHERE order_id=? AND status IN ('pending','retry','sending') AND next_attempt<=?`,
                 [now() + 120, job.order_id, now()]);
                 if (!claim.changes) continue;
+                let messagingRequestStarted = false;
                 try {
                     // Keep original time and ID on retries, including ambiguous HTTP timeouts.
                     if (now() - job.event_time >= 7 * 86400) throw new Error('expired_event_requires_review');
@@ -158,8 +159,10 @@ function createMetaPurchaseSync({ db, config, tenantKey, post, now = () => Math.
                     }
                     // Freeze payload before HTTP: retry cannot become a different conversion.
                     await run('UPDATE meta_purchase_events SET payload=? WHERE order_id=?', [JSON.stringify(payload), job.order_id]);
+                    const datasetId = datasetFor(payload, config);
+                    messagingRequestStarted = payload.data[0].action_source === 'business_messaging';
                     const response = await post(
-                        `https://graph.facebook.com/${config.graphVersion}/${datasetFor(payload, config)}/events`, payload,
+                        `https://graph.facebook.com/${config.graphVersion}/${datasetId}/events`, payload,
                         { timeout: 12000, params: { access_token: config.accessToken } }
                     );
                     if (Number(response.data?.events_received) !== 1) throw new Error('meta_did_not_confirm_receipt');
@@ -173,9 +176,10 @@ function createMetaPurchaseSync({ db, config, tenantKey, post, now = () => Math.
                         ['missing_customer_phone_or_email','invalid_purchase_value','expired_event_requires_review','meta_did_not_confirm_receipt','missing_messaging_config']
                             .includes(error.message) ? error.message : 'meta_request_failed';
                     const expired = now() - job.event_time >= 7 * 86400;
+                    const uncertain = messagingRequestStarted && (!error.response || error.response.status >= 500);
                     await run(`UPDATE meta_purchase_events SET status=?,last_error=?,next_attempt=?,
                         updated_at=CURRENT_TIMESTAMP WHERE order_id=?`,
-                    [expired ? 'expired' : 'retry', reason, now() + Math.min(3600, 30 * 2 ** Math.min(job.attempts, 7)), job.order_id]);
+                    [expired ? 'expired' : uncertain ? 'review' : 'retry', reason, now() + Math.min(3600, 30 * 2 ** Math.min(job.attempts, 7)), job.order_id]);
                 }
             }
         } finally { busy = false; }

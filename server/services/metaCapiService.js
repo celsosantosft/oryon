@@ -193,9 +193,9 @@ async function findEventAttempt(source, eventName, sourceId, conversationId) {
     return dbGet(
         `SELECT id, event_id, event_time, request_payload, status, response_payload
          FROM meta_capi_events
-         WHERE event_name = ? AND ((source = ? AND source_id = ?)
+         WHERE event_name IN (?, 'Lead', 'QualifiedLead') AND ((source = ? AND source_id = ?)
            OR (conversation_id = ? AND source IN ('whatsapp', 'whatsapp_manual')))
-         ORDER BY (status = 'sent') DESC, (request_payload IS NOT NULL) DESC, id ASC
+         ORDER BY (status = 'sent') DESC, (status = 'review') DESC, (request_payload IS NOT NULL) DESC, id ASC
          LIMIT 1`,
         [eventName, source, sourceId, conversationId || null]
     );
@@ -291,6 +291,7 @@ async function sendQualifiedLeadAttempt(leadData = {}, options = {}) {
     if (previous?.status === 'sent' && options.skipDuplicates !== false) {
         return { ...buildSkippedResult('already_sent'), event_id: previous.event_id };
     }
+    if (previous?.status === 'review') return buildSkippedResult('uncertain_delivery_requires_review');
     // Preserve the exact event across retries, including older payloads that used a timestamp ID.
     const savedPayload = previous?.request_payload ? JSON.parse(previous.request_payload) : null;
     const eventTime = savedPayload?.data?.[0]?.event_time || previous?.event_time || Math.floor(Date.now() / 1000);
@@ -385,8 +386,10 @@ async function sendQualifiedLeadAttempt(leadData = {}, options = {}) {
         status: 'pending'
     });
 
+    let requestStarted = false;
     try {
         const url = `https://graph.facebook.com/${metaCapiConfig.graphVersion}/${datasetFor(payload, metaCapiConfig)}/events`;
+        requestStarted = true;
         const response = await axios.post(url, payload, {
             timeout: META_CAPI_TIMEOUT_MS,
             params: {
@@ -413,7 +416,10 @@ async function sendQualifiedLeadAttempt(leadData = {}, options = {}) {
         };
     } catch (error) {
         const metaError = summarizeMetaError(error);
-        await updateEventResult(source, eventName, sourceId, 'failed', null, stringifyPayload(metaError));
+        // Messaging CAPI does not guarantee deduplication: an ambiguous send needs review, not a blind retry.
+        const uncertain = requestStarted && payload.data[0].action_source === 'business_messaging'
+            && (!error.response || error.response.status >= 500);
+        await updateEventResult(source, eventName, sourceId, uncertain ? 'review' : 'failed', null, stringifyPayload(metaError));
         console.error(`Meta CAPI: erro ao enviar evento "${eventName}".`, metaError);
 
         const wrappedError = new Error('Falha ao enviar evento para Meta CAPI.');

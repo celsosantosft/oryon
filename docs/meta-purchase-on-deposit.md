@@ -72,5 +72,10 @@ Leads agora exigem `events_received=1`, preservam ID, horário e payload em
 tentativas seguintes e suprimem duplicação entre etiqueta e envio manual da
 mesma conversa. Eventos antigos não recebem uma data falsa para reenvio.
 Erros não retornam o payload bruto da Meta nem credenciais.
+Em conversões de mensagens, timeout, erro de servidor ou resposta sem confirmação
+de recebimento deixam o envio em revisão; não são repetidos automaticamente,
+pois a API de mensagens não garante deduplicação. Confira o Gerenciador de
+Eventos antes de liberar qualquer reenvio. A troca de Lead para QualifiedLead
+não libera automaticamente contatos já qualificados para novo envio.
 
 Referência: https://developers.facebook.com/documentation/ads-commerce/conversions-api/business-messaging

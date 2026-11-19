@@ -3,7 +3,7 @@ import axios from 'axios';
 
 const LABELS = {
     pending: 'Aguardando envio', sending: 'Enviando', retry: 'Aguardando nova tentativa',
-    sent: 'Recebida pela Meta', cancelled: 'Envio cancelado', expired: 'Requer revisão'
+    sent: 'Recebida pela Meta', cancelled: 'Envio cancelado', expired: 'Requer revisão', review: 'Recebimento incerto — revisar antes de reenviar'
 };
 
 export default function MetaPurchasesPanel({ apiBaseUrl, authConfig }) {

@@ -30,6 +30,7 @@ const options = { source: 'whatsapp', sourceId: '1', conversationId: 1, eventId:
 test('confirmed receipt is required and success suppresses manual/label duplicates', async () => {
     assert.equal((await send(lead, options)).sent, true);
     assert.equal((await send(lead, { ...options, source: 'whatsapp_manual', sourceId: lead.phone })).reason, 'already_sent');
+    assert.equal((await send(lead, { ...options, eventName: 'QualifiedLead' })).reason, 'already_sent');
     assert.equal(calls.length, 1);
     assert.match(calls[0].data[0].event_id, /:whatsapp:1:lead$/);
     assert.doesNotMatch(calls[0].data[0].event_id, /81999990000/);
@@ -80,4 +81,23 @@ test('invalid identifiers are not sent and Brazilian DDD 55 receives a country p
     assert.equal(calls.length, 0);
     assert.equal(normalizePhone('55999990000'), '5555999990000');
     assert.equal(normalizePhone('+55 81 99999-0000'), '5581999990000');
+});
+
+test('ambiguous messaging delivery requires review instead of sending the event again', async t => {
+    const config = require('../config/metaCapi').metaCapiConfig;
+    Object.assign(config, { messagingDatasetId: 'messages', pageId: 'page', whatsappBusinessAccountId: 'waba' });
+    t.after(() => { delete config.messagingDatasetId; delete config.pageId; delete config.whatsappBusinessAccountId; });
+    let attempts = 0;
+    axios.post = async (url, payload) => {
+        attempts += 1;
+        assert.match(url, /\/messages\/events$/);
+        assert.equal(payload.data[0].action_source, 'business_messaging');
+        assert.equal(payload.data[0].user_data.page_id, 'page');
+        throw new Error('timeout');
+    };
+    const manual = { source: 'whatsapp_manual', sourceId: lead.phone, eventName: 'QualifiedLead' };
+    await assert.rejects(send(lead, manual));
+    assert.equal((await send(lead, manual)).reason, 'uncertain_delivery_requires_review');
+    assert.equal(attempts, 1);
+    assert.equal((await all('SELECT status FROM meta_capi_events'))[0].status, 'review');
 });
