@@ -151,6 +151,12 @@ function formatDateTime(value) {
 }
 
 function getLeadHistoryStatus(status) {
+    if (status === 'review') {
+        return {
+            label: 'Recebimento incerto — revisar',
+            className: 'bg-amber-50 text-amber-700 ring-amber-100'
+        };
+    }
     if (status === 'sent') {
         return {
             label: 'Enviado',
