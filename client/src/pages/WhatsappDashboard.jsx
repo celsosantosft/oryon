@@ -6,6 +6,9 @@ import { compressImageSafe } from '../utils/helpers';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { appConfig } from '../config/appConfig';
+import { filterMetaLeads, formatMetaDate } from '../utils/metaDashboard';
+
+const IS_ATOS = appConfig.orderPrefix === 'ATOS';
 
 const Icons = {
     Tag: (
@@ -131,7 +134,7 @@ function getManualLeadPhone(value) {
     if (!digits) return '';
 
     if (digits.startsWith('55') && digits.length >= 12 && digits.length <= 13) return digits;
-    if (!digits.startsWith('55') && digits.length >= 10 && digits.length <= 11) return `55${digits}`;
+    if (digits.length >= 10 && digits.length <= 11) return `55${digits}`;
 
     return '';
 }
@@ -151,6 +154,7 @@ function formatDateTime(value) {
 }
 
 function getLeadHistoryStatus(status) {
+    if (status === 'skipped') return { label: 'Não enviado', className: 'bg-amber-50 text-amber-700 ring-amber-100' };
     if (status === 'review') {
         return {
             label: 'Recebimento incerto — revisar',
@@ -194,7 +198,10 @@ const WhatsappDashboard = () => {
     const { token, API_BASE_URL } = useAuth();
     const navigate = useNavigate();
 
-    const [activeView, setActiveView] = useState('labels');
+    const [activeView, setActiveView] = useState(IS_ATOS ? 'history' : 'labels');
+    const [historyQuery, setHistoryQuery] = useState('');
+    const [historyFilter, setHistoryFilter] = useState('all');
+    const [historyError, setHistoryError] = useState('');
     const [status, setStatus] = useState('close');
     const [qrcode, setQrcode] = useState('');
     const [statusLoading, setStatusLoading] = useState(true);
@@ -227,7 +234,12 @@ const WhatsappDashboard = () => {
         Boolean(manualLeadPhone) && leadHistory.some(item => onlyDigits(item.phone || item.source_id) === manualLeadPhone && item.status === 'sent')
     ), [leadHistory, manualLeadPhone]);
 
-    const navigationItems = useMemo(() => ([
+    const navigationItems = useMemo(() => (IS_ATOS ? [
+        { id: 'history', label: 'Histórico de leads', icon: Icons.List },
+        { id: 'labels', label: 'Enviar lead', icon: Icons.Tag },
+        { id: 'purchases', label: 'Compras automáticas', icon: Icons.Check },
+        { id: 'settings', label: 'Conexão', icon: Icons.Settings }
+    ] : [
         { id: 'labels', label: 'Novo Envio', icon: Icons.Tag },
         { id: 'history', label: 'Histórico', icon: Icons.List },
         { id: 'auto_reply', label: 'Robô de Áudio', icon: Icons.Audio },
@@ -264,14 +276,14 @@ const WhatsappDashboard = () => {
         try {
             const response = await axios.get(`${API_BASE_URL}/whatsapp/meta/qualified-leads/history`, {
                 ...authConfig,
-                params: { limit: 20 }
+                params: { limit: IS_ATOS ? 50 : 20 }
             });
 
             setLeadHistory(Array.isArray(response.data?.history) ? response.data.history : []);
             setLeadHistorySummary(response.data?.summary || { total: 0, sent: 0, failed: 0 });
+            setHistoryError('');
         } catch (requestError) {
-            console.error('Erro ao carregar histórico de leads Meta:', requestError.response?.data || requestError);
-            setLeadHistory([]);
+            setHistoryError('Não foi possível atualizar o histórico. Tente novamente.');
         } finally {
             if (!silent) setLoadingLeadHistory(false);
         }
@@ -315,8 +327,7 @@ const WhatsappDashboard = () => {
         const initialLoad = window.setTimeout(() => {
             fetchStatus();
             fetchLeadHistory();
-            fetchAutoReplies();
-            fetchTypebotConfig();
+            if (!IS_ATOS) { fetchAutoReplies(); fetchTypebotConfig(); }
         }, 0);
 
         const statusInterval = window.setInterval(fetchStatus, 30000);
@@ -388,7 +399,13 @@ const WhatsappDashboard = () => {
         );
         const metaCapi = response.data?.meta_capi;
 
-        setSuccess(`${response.data?.message || 'Lead qualificado processado.'}${getMetaCapiFeedback(metaCapi)}`);
+        if (IS_ATOS && !metaCapi?.sent && metaCapi?.reason !== 'already_sent') {
+            setError(`O lead não foi enviado.${getMetaCapiFeedback(metaCapi)}`);
+        } else {
+            setSuccess(IS_ATOS
+                ? `${formatPhone(leadData.phone)}: ${metaCapi?.sent ? 'lead recebido pela Meta.' : 'lead já enviado anteriormente.'}`
+                : `${response.data?.message || 'Lead qualificado processado.'}${getMetaCapiFeedback(metaCapi)}`);
+        }
         await fetchLeadHistory(true);
 
         return response.data;
@@ -795,17 +812,19 @@ const WhatsappDashboard = () => {
         </section>
     );
 
-    const renderHistoryView = () => (
+    const renderHistoryView = () => {
+        const visible = IS_ATOS ? filterMetaLeads(leadHistory, historyQuery, historyFilter) : leadHistory;
+        return (
         <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="shrink-0 flex flex-col gap-2 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h2 className="text-xl font-semibold text-slate-950">Histórico de envios Meta</h2>
+                    <h2 className="text-xl font-semibold text-slate-950">{IS_ATOS ? 'Histórico de leads' : 'Histórico de envios Meta'}</h2>
                     <p className="mt-1 text-sm font-bold text-slate-500">
-                        {leadHistorySummary.sent || 0} lead(s) processado(s)
+                        {IS_ATOS ? 'Últimos 50 registros de envio da ATOS.' : `${leadHistorySummary.sent || 0} lead(s) processado(s)`}
                     </p>
                 </div>
                 <div className="flex gap-2">
-                    <button
+                    {!IS_ATOS && <button
                         type="button"
                         onClick={handleClearHistory}
                         disabled={actionLoading === 'clear_history'}
@@ -813,7 +832,7 @@ const WhatsappDashboard = () => {
                     >
                         {actionLoading === 'clear_history' ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200 border-t-red-700" /> : Icons.Trash}
                         Limpar Histórico
-                    </button>
+                    </button>}
                     <button
                         type="button"
                         onClick={() => fetchLeadHistory()}
@@ -826,12 +845,21 @@ const WhatsappDashboard = () => {
                 </div>
             </div>
 
+            {IS_ATOS && <div className="grid shrink-0 gap-3 border-b border-slate-100 p-4 sm:grid-cols-[1fr_200px]">
+                <label className="flex h-11 items-center gap-2 rounded-lg border border-slate-200 px-3 text-slate-500 focus-within:ring-2 focus-within:ring-blue-200">
+                    {Icons.Search}<input type="search" aria-label="Buscar lead por nome ou telefone" value={historyQuery} onChange={event => setHistoryQuery(event.target.value)} placeholder="Buscar por nome ou telefone" className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none" />
+                </label>
+                <select aria-label="Filtrar status dos leads" value={historyFilter} onChange={event => setHistoryFilter(event.target.value)} className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
+                    <option value="all">Todos os status</option><option value="sent">Recebidos pela Meta</option><option value="attention">Precisam de atenção</option><option value="pending">Aguardando envio</option>
+                </select>
+            </div>}
+            {historyError && <p role="alert" className="m-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{historyError}</p>}
             <div className="min-h-0 flex-1 overflow-y-auto">
                 {loadingLeadHistory ? (
                     <div className="flex h-40 items-center justify-center text-sm font-bold text-slate-500">Carregando histórico...</div>
-                ) : leadHistory.length ? (
+                ) : visible.length ? (
                     <div className="divide-y divide-slate-100 p-2">
-                        {leadHistory.map(item => {
+                        {visible.map(item => {
                             const statusMeta = getLeadHistoryStatus(item.status);
 
                             return (
@@ -839,27 +867,51 @@ const WhatsappDashboard = () => {
                                     <div className="min-w-0">
                                         <p className="truncate text-base font-semibold text-slate-950">{item.display_name || formatPhone(item.phone)}</p>
                                         <p className="mt-1 text-sm font-bold text-slate-500">
-                                            {formatPhone(item.phone)}{item.updated_at ? ` - ${formatDateTime(item.updated_at)}` : ''}
+                                            {formatPhone(item.phone)}{item.updated_at ? ` · ${IS_ATOS ? formatMetaDate(item.updated_at) : formatDateTime(item.updated_at)}` : ''}
                                         </p>
                                     </div>
                                     <span className={`inline-flex w-fit items-center rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ${statusMeta.className}`}>
-                                        {statusMeta.label}
+                                        {IS_ATOS && item.status === 'sent' ? 'Recebido pela Meta' : statusMeta.label}
                                     </span>
                                 </div>
                             );
                         })}
                     </div>
-                ) : (
+                ) : !historyError ? (
                     <div className="p-10 text-center text-base font-semibold text-slate-500">
-                        Nenhum lead enviado para a Meta ainda.
+                        {IS_ATOS && leadHistory.length ? 'Nenhum registro corresponde aos filtros.' : 'Nenhum lead enviado para a Meta ainda.'}
                     </div>
-                )}
+                ) : null}
             </div>
         </section>
     );
+    };
 
     const renderLabelsView = () => {
         const lastLead = leadHistory.length > 0 ? leadHistory[0] : null;
+
+        if (IS_ATOS) return <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+                <h2 className="text-xl font-semibold text-slate-950">Enviar lead qualificado</h2>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">Use para contatos que vieram dos anúncios da ATOS e demonstraram interesse. O envio registra um lead, não uma venda.</p>
+                <form className="mt-7 max-w-xl space-y-5" onSubmit={event => { event.preventDefault(); handleSendSearchQualifiedLead(); }}>
+                    <label className="block text-sm font-semibold text-slate-800" htmlFor="atos-meta-phone">WhatsApp do contato
+                        <input id="atos-meta-phone" type="tel" autoComplete="tel" inputMode="tel" disabled={Boolean(conversationLeadLoading)} value={conversationSearch} onChange={event => { setConversationSearch(event.target.value); setError(''); setSuccess(''); }} placeholder="DDD e número, por exemplo 81 99999-9999" className="mt-2 block h-12 w-full rounded-lg border border-slate-300 px-4 text-base font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                    </label>
+                    {manualLeadPhone && <p className="text-sm text-slate-600">Contato: <strong className="text-slate-950">{formatPhone(manualLeadPhone)}</strong></p>}
+                    <button type="submit" disabled={!manualLeadPhone || manualLeadSent || Boolean(conversationLeadLoading) || !metaInfo?.hasAccessToken || !(metaInfo?.hasPixelId || metaInfo?.hasMessagingDatasetId)} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
+                        {manualLeadSent ? Icons.Check : Icons.Tag}{manualLeadSent ? 'Lead já recebido pela Meta' : conversationLeadLoading ? 'Enviando…' : 'Enviar lead à Meta'}
+                    </button>
+                    <p className="text-xs leading-5 text-slate-500">O resultado do envio aparece no Histórico de leads.</p>
+                </form>
+            </section>
+            <aside className="self-start rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="font-semibold text-slate-950">Fechou uma venda?</h3>
+                <p className="mt-3 text-sm leading-6 text-slate-600">No pedido, escolha a origem “Anúncio Facebook/Instagram” e registre o sinal pago. O sistema cuida do envio da compra.</p>
+                <button type="button" onClick={() => navigate('/orders')} className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-blue-700 hover:underline">Abrir pedidos →</button>
+                <button type="button" onClick={() => setActiveView('purchases')} className="block min-h-11 text-sm font-semibold text-blue-700 hover:underline">Acompanhar compras →</button>
+            </aside>
+        </div>;
 
         return (
         <div className="flex h-full min-h-0 flex-col gap-4">
@@ -1141,11 +1193,30 @@ const WhatsappDashboard = () => {
         </div>
     );
 
+    const renderAtosSettings = () => <div className="grid gap-5 xl:grid-cols-2">
+        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-950">WhatsApp da ATOS</h2>
+            <span className={`mt-4 inline-flex rounded-full px-3 py-1.5 text-sm font-semibold ring-1 ${currentStatus.badge}`}>{statusLoading ? 'Consultando…' : currentStatus.label}</span>
+            <p className="mt-4 text-sm leading-6 text-slate-600">{isConnected ? 'A conexão está ativa. Os sinais de contato e de anúncio podem ser recebidos pelo sistema.' : 'Conecte o WhatsApp para receber os sinais de contato e anúncio.'}</p>
+            <button type="button" onClick={isConnected ? fetchStatus : handleConnect} disabled={statusLoading || Boolean(actionLoading)} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{Icons.Refresh}{isConnected ? 'Atualizar conexão' : actionLoading ? 'Conectando…' : 'Conectar WhatsApp'}</button>
+            {qrcode && !isConnected && <img src={qrcode} alt="QR Code para conectar o WhatsApp da ATOS" className="mt-5 h-56 w-56 max-w-full" />}
+            {isConnected && <details className="mt-6 border-t border-slate-100 pt-4 text-sm text-slate-500"><summary className="cursor-pointer py-2">Opções da conexão</summary><button type="button" onClick={handleLogout} disabled={Boolean(actionLoading)} className="mt-2 min-h-11 rounded-lg border border-red-200 px-4 text-red-700 disabled:opacity-50">Desconectar WhatsApp</button></details>}
+        </section>
+        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-950">Envio para a Meta</h2>
+            <p className="mt-4 text-sm font-semibold text-slate-800">{!metaInfo ? 'Consultando configuração…' : metaInfo.hasAccessToken && (metaInfo.hasPixelId || metaInfo.hasMessagingDatasetId) ? 'Credenciais de envio carregadas' : 'Configuração de envio pendente'}</p>
+            <p className="mt-3 text-sm leading-6 text-slate-600">{metaInfo?.messagingConfigured ? 'Configuração de conversões do WhatsApp carregada. Confira o recebimento dos eventos na Meta.' : 'A conexão específica de conversões do WhatsApp ainda precisa ser concluída na Meta.'}</p>
+            <a href="https://business.facebook.com/events_manager2" target="_blank" rel="noreferrer" className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-blue-700 hover:underline">Abrir Gerenciador de Eventos ↗</a>
+            <p className="mt-4 border-t border-slate-100 pt-4 text-xs leading-5 text-slate-500">Credenciais carregadas não comprovam recebimento ou atribuição. Consulte os resultados em Histórico de leads e Compras automáticas.</p>
+        </section>
+    </div>;
+
     const renderMainContent = () => {
+        if (IS_ATOS && activeView === 'purchases') return <MetaPurchasesPanel apiBaseUrl={API_BASE_URL} authConfig={authConfig} expanded onSettings={() => setActiveView('settings')} onOrders={() => navigate('/orders')} />;
         if (activeView === 'settings') {
             return (
                 <div className="h-full overflow-y-auto">
-                    {renderSettingsView()}
+                    {IS_ATOS ? renderAtosSettings() : renderSettingsView()}
                 </div>
             );
         }
@@ -1174,11 +1245,11 @@ const WhatsappDashboard = () => {
             );
         }
 
-        return renderLabelsView();
+        return IS_ATOS ? <div className="h-full overflow-y-auto">{renderLabelsView()}</div> : renderLabelsView();
     };
 
     return (
-        <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-50 lg:w-screen lg:flex-row">
+        <div className={`flex ${IS_ATOS ? 'h-dvh' : 'h-screen'} w-full flex-col overflow-hidden bg-slate-50 lg:w-screen lg:flex-row`}>
             <aside className="flex shrink-0 flex-col bg-[#091A2D] px-3 py-3 text-slate-100 lg:h-full lg:w-64 lg:px-5 lg:py-6">
                 <div className="hidden shrink-0 border-b border-slate-800 pb-5 text-center lg:block">
                     <img
@@ -1193,7 +1264,7 @@ const WhatsappDashboard = () => {
                     />
                     <h1 id="whatsapp-sidebar-logo-text" className="mt-3 hidden text-lg font-semibold tracking-wide text-white">{appConfig.orderPrefix}</h1>
                     <span className="mt-2 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                        MÓDULO WHATSAPP
+                        {IS_ATOS ? 'LEADS E VENDAS' : 'MÓDULO WHATSAPP'}
                     </span>
                     <div className={`mt-4 inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${currentStatus.badge}`}>
                         <span className={`h-2 w-2 rounded-full ${currentStatus.dot}`} />
@@ -1210,6 +1281,7 @@ const WhatsappDashboard = () => {
                                 key={item.id}
                                 type="button"
                                 onClick={() => setActiveView(item.id)}
+                                aria-current={active ? 'page' : undefined}
                                 className={`inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition lg:w-full lg:gap-3 lg:px-4 lg:py-3 lg:text-sm ${active ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
                             >
                                 {item.icon}
@@ -1231,7 +1303,15 @@ const WhatsappDashboard = () => {
                 </div>
             </aside>
 
-            <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50 lg:h-screen">
+            <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-slate-50 lg:h-screen">
+                {IS_ATOS && <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div><p className="text-xs font-semibold uppercase tracking-wider text-blue-700">ATOS Fardamentos</p><h1 className="mt-1 text-xl font-semibold text-slate-950 sm:text-2xl">Leads e vendas dos anúncios</h1></div>
+                        <div className="flex items-center gap-3"><span className="text-sm text-slate-600"><strong className="text-slate-950">{loadingLeadHistory ? '…' : sentLeadsTotal}</strong> leads recebidos pela Meta</span><button type="button" onClick={() => navigate('/')} aria-label="Voltar ao ERP" className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 text-slate-600 lg:hidden">{Icons.Back}</button></div>
+                    </div>
+                </header>}
+                {IS_ATOS && error && <p role="alert" className="mx-4 mt-3 shrink-0 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+                {IS_ATOS && success && <p role="status" className="mx-4 mt-3 shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{success}</p>}
                 <div className="min-h-0 flex-1 overflow-hidden p-3 lg:p-5">
                     {renderMainContent()}
                 </div>

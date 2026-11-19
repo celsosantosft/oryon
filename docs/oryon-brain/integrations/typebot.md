@@ -32,3 +32,4 @@
 - A purchase needs an explicit, unambiguous order/conversation link and incoming message before payment to use messaging attribution. API receipt does not prove ad attribution or purchase optimization.
 - Creating/editing an order links its WhatsApp phone automatically; ambiguous phone matches are not guessed. Webhook contact/click signals retain minimal metadata without importing full message content or sending messages to the customer.
 - Setup and validation: `docs/meta-purchase-on-deposit.md`.
+- The ATOS WhatsApp page focuses on lead history, manual qualification, automatic purchases and connection. Audio/Typebot integrations remain available to the existing PD screen and are not changed or disconnected by the ATOS page simplification. Branding-specific UI is not a substitute for isolated Meta credentials.

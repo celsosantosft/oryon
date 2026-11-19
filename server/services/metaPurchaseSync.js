@@ -207,8 +207,10 @@ function createMetaPurchaseSync({ db, config, tenantKey, post, now = () => Math.
             messaging_configured: Boolean(config.messagingDatasetId && config.whatsappBusinessAccountId && config.pageId),
             event: 'Purchase', trigger: 'first_deposit', currency: 'BRL',
             counts: await all('SELECT status,COUNT(*) total FROM meta_purchase_events GROUP BY status'),
-            recent: await all(`SELECT order_id,status,purchase_value,event_time,attempts,last_error,updated_at
-                FROM meta_purchase_events WHERE status <> 'historical' ORDER BY event_time DESC LIMIT 20`)
+            recent: await all(`SELECT e.order_id,e.status,e.purchase_value,e.event_time,e.attempts,e.last_error,e.updated_at,
+                    o.tracking_code,o.client_name,o.acquisition_source
+                FROM meta_purchase_events e LEFT JOIN orders o ON o.id=e.order_id
+                WHERE e.status <> 'historical' ORDER BY e.event_time DESC LIMIT 20`)
         };
     }
     return { initialize, processDue, diagnostics };

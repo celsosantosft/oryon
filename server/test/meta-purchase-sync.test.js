@@ -9,7 +9,7 @@ async function fixture(t, { seed, post } = {}) {
     const all = sql => new Promise((resolve, reject) => db.all(sql, (error, rows) => error ? reject(error) : resolve(rows)));
     t.after(() => new Promise(resolve => db.close(resolve)));
     await exec(`CREATE TABLE clients(id INTEGER PRIMARY KEY,phone TEXT,email TEXT);
-        CREATE TABLE orders(id INTEGER PRIMARY KEY,client_id INTEGER,client_phone TEXT,client_name TEXT,
+        CREATE TABLE orders(id INTEGER PRIMARY KEY,client_id INTEGER,client_phone TEXT,client_name TEXT,tracking_code TEXT,
             acquisition_source TEXT DEFAULT 'meta_ads',
             status TEXT DEFAULT 'Criação de Arte',total_price REAL,amount_paid REAL DEFAULT 0);
         CREATE TABLE transactions(id INTEGER PRIMARY KEY,order_id INTEGER,type TEXT,status TEXT,amount REAL);
@@ -43,6 +43,9 @@ test('first deposit sends full order value as Purchase, not Lead or deposit amou
     assert.equal(event.user_data.ph[0].length, 64);
     assert.equal(event.user_data.em[0].length, 64);
     assert.equal((await f.all('SELECT status FROM meta_purchase_events'))[0].status, 'sent');
+    const dashboard = await f.sync.diagnostics();
+    assert.equal(dashboard.recent[0].order_id, 1);
+    assert.equal(dashboard.recent[0].acquisition_source, 'meta_ads');
 });
 
 test('only ad-origin purchases send; unknown waits for classification without changing payment time', async t => {
