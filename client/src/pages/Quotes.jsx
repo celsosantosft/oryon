@@ -37,6 +37,7 @@ const Icons = {
     Image: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>,
     Printer: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>,
     Filter: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>,
+    Link: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>,
     User: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>,
     Unlock: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0m-8 4h14v10H5z" /></svg>
 };
@@ -141,6 +142,7 @@ export const QuoteService = {
     deleteQuote: (api, token, id) => axios.delete(`${api}/api/quotes/${id}`, QuoteService.getHeaders(token)),
     resetQuote: (api, token, trackingCode) => axios.post(`${api}/api/quotes/${encodeURIComponent(trackingCode)}/reset`, {}, QuoteService.getHeaders(token)),
     getQuoteHistory: (api, token, trackingCode) => axios.get(`${api}/api/quotes/${encodeURIComponent(trackingCode)}/history`, QuoteService.getHeaders(token)),
+    getPortalLink: (api, token, trackingCode) => axios.get(`${api}/api/portal-link/${encodeURIComponent(trackingCode)}`, QuoteService.getHeaders(token)),
     unlockQuote: (api, token, id) => axios.post(`${api}/api/quotes/${id}/unlock`, {}, QuoteService.getHeaders(token)),
     convertToOrder: (api, token, id) => axios.post(`${api}/api/quotes/${id}/convert`, {}, QuoteService.getHeaders(token)) 
 };
@@ -279,7 +281,7 @@ const ClientAutocomplete = ({ value, onChange, onAddNew, clients }) => {
     );
 };
 
-const QuoteSizeInputs = React.memo(({ sizes, onChange }) => {
+const QuoteSizeInputs = React.memo(({ sizes, onChange, inputIdPrefix = 'quote' }) => {
     const { totalQty } = calculateTotals(sizes, 0, 0);
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -288,8 +290,8 @@ const QuoteSizeInputs = React.memo(({ sizes, onChange }) => {
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                     {['2', '4', '6', '8', '10', '12', '14'].map(s => (
                         <div key={s} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            <label htmlFor={`size-${s}`} style={{ fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>{s}</label>
-                            <input id={`size-${s}`} type="number" className="premium-input no-spin" name={s} value={sizes[s] > 0 ? sizes[s] : ''} onChange={onChange} style={{ ...styles.input, width: '64px', textAlign: 'center', padding: '10px', fontSize: '1rem', fontWeight: '600' }} min="0" />
+                            <label htmlFor={`${inputIdPrefix}-size-${s}`} style={{ fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>{s}</label>
+                            <input id={`${inputIdPrefix}-size-${s}`} type="number" inputMode="numeric" className="premium-input no-spin" name={s} value={sizes[s] > 0 ? sizes[s] : ''} onChange={onChange} style={{ ...styles.input, width: '64px', textAlign: 'center', padding: '10px', fontSize: '1rem', fontWeight: '600' }} min="0" />
                         </div>
                     ))}
                 </div>
@@ -299,8 +301,8 @@ const QuoteSizeInputs = React.memo(({ sizes, onChange }) => {
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                     {['PP', 'P', 'M', 'G', 'GG', 'XG', 'XXG', 'XXXG', 'ESP'].map(s => (
                         <div key={s} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            <label htmlFor={`size-${s}`} style={{ fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>{s}</label>
-                            <input id={`size-${s}`} type="number" className="premium-input no-spin" name={s} value={sizes[s] > 0 ? sizes[s] : ''} onChange={onChange} style={{ ...styles.input, width: '64px', textAlign: 'center', padding: '10px', fontSize: '1rem', fontWeight: '600' }} min="0" />
+                            <label htmlFor={`${inputIdPrefix}-size-${s}`} style={{ fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>{s}</label>
+                            <input id={`${inputIdPrefix}-size-${s}`} type="number" inputMode="numeric" className="premium-input no-spin" name={s} value={sizes[s] > 0 ? sizes[s] : ''} onChange={onChange} style={{ ...styles.input, width: '64px', textAlign: 'center', padding: '10px', fontSize: '1rem', fontWeight: '600' }} min="0" />
                         </div>
                     ))}
                 </div>
@@ -347,10 +349,10 @@ const FinancialSummary = ({ subtotal, totalCost, discount, onDiscountChange }) =
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '6px', padding: '8px 12px', width: '110px', boxSizing: 'border-box' }}>
                         <span style={{ color: '#EF4444', fontWeight: '700', fontSize: '0.85rem', marginRight: '4px' }}>R$</span>
-                        <input type="number" className="no-spin premium-input" value={discount === 0 ? '' : discount} onChange={(e) => onDiscountChange(e.target.value)} style={{ border: 'none', background: 'transparent', outline: 'none', color: '#EF4444', fontWeight: '700', width: '100%', textAlign: 'right', fontSize: '0.95rem', minWidth: '0', padding: 0 }} min="0" step="0.01" placeholder="0.00" />
+                        <input type="number" inputMode="decimal" className="no-spin premium-input" value={discount === 0 ? '' : discount} onChange={(e) => onDiscountChange(e.target.value)} style={{ border: 'none', background: 'transparent', outline: 'none', color: '#EF4444', fontWeight: '700', width: '100%', textAlign: 'right', fontSize: '0.95rem', minWidth: '0', padding: 0 }} min="0" step="0.01" placeholder="0.00" />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '8px', width: '60px', boxSizing: 'border-box' }}>
-                        <input type="number" aria-label="Porcentagem de desconto" className="no-spin premium-input" value={percentDisplay} onChange={(e) => onDiscountChange(((subtotal * (parseFloat(e.target.value) || 0)) / 100).toFixed(2))} style={{ border: 'none', background: 'transparent', outline: 'none', color: '#475569', fontWeight: '700', width: '100%', textAlign: 'center', fontSize: '0.95rem', minWidth: '0', padding: 0 }} min="0" step="0.1" placeholder="0" />
+                        <input type="number" inputMode="decimal" aria-label="Porcentagem de desconto" className="no-spin premium-input" value={percentDisplay} onChange={(e) => onDiscountChange(((subtotal * (parseFloat(e.target.value) || 0)) / 100).toFixed(2))} style={{ border: 'none', background: 'transparent', outline: 'none', color: '#475569', fontWeight: '700', width: '100%', textAlign: 'center', fontSize: '0.95rem', minWidth: '0', padding: 0 }} min="0" step="0.1" placeholder="0" />
                         <span style={{ color: '#94A3B8', fontWeight: '700', fontSize: '0.8rem', marginLeft: '2px' }}>%</span>
                     </div>
                 </div>
@@ -370,6 +372,7 @@ const ProductLineEditor = ({
     line,
     index,
     auxData,
+    compact,
     canRemove,
     onFieldChange,
     onProductSelect,
@@ -384,6 +387,7 @@ const ProductLineEditor = ({
     const lineTotals = calculateTotals(line.sizes_json, parseFloat(line.unit_price) || 0, parseFloat(line.unit_cost) || 0);
     const selectedPrintingTypes = normalizePrintingTypes(line.printing_types_json);
     const productionPreview = buildProductionLabel(line, auxData.dbProducts, auxData.dbFabrics);
+    const hasEnhancements = selectedPrintingTypes.length > 0 || Boolean(line.production_notes?.trim());
 
     const handleTogglePrintingType = (printingType) => {
         const nextTypes = selectedPrintingTypes.includes(printingType)
@@ -431,13 +435,13 @@ const ProductLineEditor = ({
             <div className="orders-product-fields" style={styles.productLineFields}>
                 <div style={styles.formGroup}>
                     <label style={styles.label}>Produto</label>
-                    <select className="premium-input" value={line.product_type} onChange={(event) => onProductSelect(line.line_key, event.target.value)} style={styles.select}>
+                    <select data-quote-product-select className="premium-input" value={line.product_type} onChange={(event) => onProductSelect(line.line_key, event.target.value)} style={styles.select} required>
                         <option value="">-- Selecione --</option>
                         {auxData.dbProducts.map((product) => <option key={product.id} value={product.name}>{product.name}</option>)}
                         <option value="Outro">Outro (Digitar)</option>
                     </select>
                     {line.product_type === 'Outro' && (
-                        <input type="text" className="premium-input" value={line.custom_product_type} onChange={(event) => onFieldChange(line.line_key, 'custom_product_type', event.target.value)} placeholder="Digite o nome do produto" style={styles.input} />
+                        <input type="text" className="premium-input" value={line.custom_product_type} onChange={(event) => onFieldChange(line.line_key, 'custom_product_type', event.target.value)} placeholder="Digite o nome do produto" style={styles.input} required />
                     )}
                 </div>
 
@@ -455,17 +459,22 @@ const ProductLineEditor = ({
 
                 <div style={styles.formGroup}>
                     <label style={styles.label}>Preço Unit. (R$)</label>
-                    <input type="number" step="0.01" className="premium-input" value={line.unit_price} onChange={(event) => onFieldChange(line.line_key, 'unit_price', event.target.value)} style={{ ...styles.input, fontWeight: '700' }} placeholder="0.00" />
+                    <input type="number" inputMode="decimal" step="0.01" className="premium-input" value={line.unit_price} onChange={(event) => onFieldChange(line.line_key, 'unit_price', event.target.value)} style={{ ...styles.input, fontWeight: '700' }} placeholder="0,00" />
                 </div>
 
                 <div style={styles.formGroup}>
                     <label style={styles.label}>Custo Unit. (R$)</label>
-                    <input type="number" step="0.01" className="premium-input" value={line.unit_cost} onChange={(event) => onFieldChange(line.line_key, 'unit_cost', event.target.value)} style={styles.input} placeholder="0.00" />
+                    <input type="number" inputMode="decimal" step="0.01" className="premium-input" value={line.unit_cost} onChange={(event) => onFieldChange(line.line_key, 'unit_cost', event.target.value)} style={styles.input} placeholder="0,00" />
                 </div>
             </div>
 
-            <div style={styles.productLineEnhancementsCard}>
-                <div style={styles.productLineEnhancementsHeader}>
+            <details className="quote-product-options" style={styles.productLineEnhancementsCard} defaultOpen={!compact || hasEnhancements}>
+                <summary className="quote-product-options-summary">
+                    <span>Impressão e acabamentos</span>
+                    <small>{hasEnhancements ? `${selectedPrintingTypes.length} selecionado(s)` : 'Opcional'}</small>
+                </summary>
+                <div className="quote-product-options-content">
+                <div className="quote-product-options-header" style={styles.productLineEnhancementsHeader}>
                     <h5 style={styles.productLineSectionTitle}>Impressão e acabamentos do item</h5>
                     <span style={styles.productLineEnhancementsHint}>Essas informações saem no orçamento e na ficha.</span>
                 </div>
@@ -502,12 +511,13 @@ const ProductLineEditor = ({
                     <label style={styles.label}>Observações do item</label>
                     <textarea className="premium-input" value={line.production_notes || ''} onChange={(event) => onFieldChange(line.line_key, 'production_notes', event.target.value)} placeholder="Ex: Aplicar bordado na manga esquerda, revisar tom do friso, numerar costas." style={{ ...styles.input, minHeight: '92px', resize: 'vertical' }} />
                 </div>
-            </div>
+                </div>
+            </details>
 
             <div className="order-line-content" style={styles.productLineContent}>
                 <div style={styles.productLineSizesWrap}>
                     <h5 style={styles.productLineSectionTitle}>Grade do produto</h5>
-                    <QuoteSizeInputs sizes={line.sizes_json} onChange={(event) => onSizeChange(line.line_key, event)} />
+                    <QuoteSizeInputs inputIdPrefix={line.line_key} sizes={line.sizes_json} onChange={(event) => onSizeChange(line.line_key, event)} />
                 </div>
 
                 <div style={styles.productLineLayoutWrap}>
@@ -551,7 +561,7 @@ const ProductLineEditor = ({
     );
 };
 
-const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, auxData, onQuickClientAdd, onRefresh, preview }) => {
+const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, auxData, onQuickClientAdd, onRefresh, preview, mobile }) => {
     const isEditMode = !!quoteToEdit;
     const initialState = {
         client_name: '',
@@ -569,6 +579,9 @@ const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, aux
     const [productLines, setProductLines] = useState([createProductLineDraft()]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const submitLockRef = useRef(false);
+    const basicSectionRef = useRef(null);
+    const productsSectionRef = useRef(null);
+    const summarySectionRef = useRef(null);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -612,6 +625,20 @@ const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, aux
 
     const subtotal = useMemo(() => lineSummaries.reduce((sum, line) => sum + line.total, 0), [lineSummaries]);
     const totalCost = useMemo(() => lineSummaries.reduce((sum, line) => sum + line.cost, 0), [lineSummaries]);
+    const totalPieces = useMemo(() => lineSummaries.reduce((sum, line) => sum + line.totalQty, 0), [lineSummaries]);
+    const finalTotal = Math.max(0, subtotal - normalizeMoneyValue(quoteData.discount));
+    const completedFields = [
+        Boolean(String(quoteData.client_name || '').trim()),
+        Boolean(quoteData.delivery_date),
+        productLines.every((line) => line.product_type && (line.product_type !== 'Outro' || String(line.custom_product_type || '').trim())),
+        totalPieces > 0
+    ].filter(Boolean).length;
+
+    const scrollToFormSection = useCallback((sectionRef) => {
+        if (!sectionRef.current) return;
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        sectionRef.current.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    }, []);
 
     const handleInputChange = useCallback((e) => setQuoteData((prev) => ({ ...prev, [e.target.name]: e.target.value })), []);
 
@@ -698,7 +725,9 @@ const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, aux
         const hasInvalidLine = serializedLines.some((line) => !String(line.product_type || '').trim());
 
         if (hasInvalidLine) {
-            Swal.fire('Produto incompleto', 'Cada produto precisa ter pelo menos o nome/tipo preenchido.', 'warning');
+            await Swal.fire('Produto incompleto', 'Cada produto precisa ter pelo menos o nome/tipo preenchido.', 'warning');
+            scrollToFormSection(productsSectionRef);
+            productsSectionRef.current?.querySelector('[data-quote-product-select]:invalid')?.focus({ preventScroll: true });
             return;
         }
 
@@ -750,9 +779,26 @@ const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, aux
 
     return (
         <Modal manageFocus={preview} isOpen={isOpen} onClose={onClose} title={isEditMode ? 'Editar Orçamento' : 'Novo Orçamento'}>
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px' }}>Informações Básicas</h4>
+            <form className="quote-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+                <nav className="quote-form-mobile-nav" aria-label="Seções do orçamento">
+                    <button type="button" onClick={() => scrollToFormSection(basicSectionRef)}>1. Cliente</button>
+                    <button type="button" onClick={() => scrollToFormSection(productsSectionRef)}>2. Produtos</button>
+                    <button type="button" onClick={() => scrollToFormSection(summarySectionRef)}>3. Resumo</button>
+                </nav>
+
+                <div className="quote-form-progress" aria-live="polite">
+                    <div>
+                        <span>Preenchimento</span>
+                        <strong>{completedFields} de 4 itens</strong>
+                    </div>
+                    <div className="quote-form-progress-track" aria-hidden="true">
+                        <span style={{ width: `${completedFields * 25}%` }} />
+                    </div>
+                    <small>Cliente, prazo, produto e grade.</small>
+                </div>
+
+                <section ref={basicSectionRef} className="quote-form-section quote-form-basic" aria-labelledby="quote-basic-title" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <h4 id="quote-basic-title" style={{ margin: 0, fontSize: '0.85rem', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px' }}>Informações Básicas</h4>
                     <div style={styles.row}>
                         <div style={styles.formGroup}>
                             <label htmlFor="client_name" style={styles.label}>Cliente</label>
@@ -766,7 +812,7 @@ const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, aux
                         </div>
                         <div style={styles.formGroup}>
                             <label htmlFor="delivery_date" style={styles.label}>Data de Entrega / Validade</label>
-                            <input id="delivery_date" type="date" name="delivery_date" className="premium-input" value={quoteData.delivery_date} onChange={handleInputChange} onClick={(e) => e.target.showPicker()} style={{ ...styles.input, cursor: 'pointer', backgroundColor: '#fff' }} required />
+                            <input id="delivery_date" type="date" name="delivery_date" className="premium-input" value={quoteData.delivery_date} onChange={handleInputChange} onClick={(event) => { if (typeof event.currentTarget.showPicker === 'function') event.currentTarget.showPicker(); }} style={{ ...styles.input, cursor: 'pointer', backgroundColor: '#fff' }} required />
                         </div>
                     </div>
                     <div style={styles.row}>
@@ -780,18 +826,19 @@ const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, aux
                         </div>
                         <div style={styles.formGroup}>
                             <label htmlFor="url_referencia" style={styles.label}>URL de referência</label>
-                            <input id="url_referencia" type="text" name="url_referencia" className="premium-input" value={quoteData.url_referencia || ''} onChange={handleInputChange} placeholder="https://..." style={styles.input} />
+                            <input id="url_referencia" type="url" inputMode="url" autoCapitalize="none" autoCorrect="off" name="url_referencia" className="premium-input" value={quoteData.url_referencia || ''} onChange={handleInputChange} placeholder="https://..." style={styles.input} />
                         </div>
                     </div>
                     <div style={styles.formGroup}>
                         <label htmlFor="observacao" style={styles.label}>Observações gerais do orçamento</label>
                         <textarea id="observacao" name="observacao" className="premium-input" value={quoteData.observacao || ''} onChange={handleInputChange} placeholder="Ex: Cliente quer comparar duas opções, bordado só no peito, revisar gola antes da aprovação final." style={{ ...styles.input, minHeight: '90px', resize: 'vertical' }} />
                     </div>
-                </div>
+                </section>
 
+                <section ref={productsSectionRef} className="quote-form-section quote-form-products" aria-labelledby="quote-products-title">
                 <div style={styles.multiProductSectionHeader}>
                     <div>
-                        <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Produtos do orçamento</h4>
+                        <h4 id="quote-products-title" style={{ margin: 0, fontSize: '0.85rem', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Produtos do orçamento</h4>
                         <p style={{ margin: '6px 0 0 0', color: '#64748B', fontSize: '0.92rem' }}>Monte o orçamento com vários produtos, grades, subtotais e layouts separados.</p>
                     </div>
                     <button type="button" className="premium-btn" onClick={handleAddProductLine} style={styles.addLineButton}>
@@ -806,6 +853,7 @@ const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, aux
                             line={line}
                             index={index}
                             auxData={{ ...auxData, API_BASE_URL }}
+                            compact={mobile}
                             canRemove={productLines.length > 1}
                             onFieldChange={handleLineFieldChange}
                             onProductSelect={handleLineProductSelect}
@@ -816,19 +864,33 @@ const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, aux
                         />
                     ))}
                 </div>
+                </section>
 
                 <div style={{ borderTop: '2px dashed #E2E8F0', margin: '4px 0' }}></div>
 
+                <section ref={summarySectionRef} className="quote-form-section quote-form-summary" aria-labelledby="quote-summary-title">
+                    <h4 id="quote-summary-title" className="quote-form-summary-title">Resumo do orçamento</h4>
                 <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: '32px' }}>
                     <div style={{ flex: 1, minWidth: '320px', maxWidth: '400px' }}>
                         <FinancialSummary subtotal={subtotal} totalCost={totalCost} discount={quoteData.discount} onDiscountChange={handleDiscountChange} />
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minHeight: '175px', flex: 1, minWidth: '250px', maxWidth: '350px' }}>
+                    <div className="quote-form-desktop-submit" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minHeight: '175px', flex: 1, minWidth: '250px', maxWidth: '350px' }}>
                         <button type="submit" className="premium-btn" disabled={isSubmitting} style={{ ...styles.submitButton, width: '100%', padding: '16px', fontSize: '1.05rem', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', opacity: isSubmitting ? 0.75 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
                             {isSubmitting ? 'Salvando...' : (isEditMode ? 'Salvar Alterações' : 'Salvar Orçamento')}
                         </button>
                     </div>
+                </div>
+                </section>
+
+                <div className="quote-form-mobile-submit">
+                    <div>
+                        <span>{totalPieces} peça(s)</span>
+                        <strong>{formatMoney(finalTotal)}</strong>
+                    </div>
+                    <button type="submit" className="premium-btn" disabled={isSubmitting}>
+                        {isSubmitting ? 'Salvando…' : (isEditMode ? 'Salvar' : 'Criar orçamento')}
+                    </button>
                 </div>
             </form>
         </Modal>
@@ -906,11 +968,21 @@ const QuoteSizeGroups = ({ sizes, itemIndex }) => {
     );
 };
 
-const QuoteDetailsModal = ({ isOpen, onClose, quote, onReset, onUnlockClient, onApproveToOrder, API_BASE_URL, userRole, preview }) => (
+const QuoteDetailsModal = ({ isOpen, onClose, quote, onReset, onUnlockClient, onApproveToOrder, onOpenPortal, onCopyPortal, API_BASE_URL, userRole, preview }) => (
     <Modal manageFocus={preview} isOpen={isOpen} onClose={onClose} title="Detalhes do Orçamento">
         {quote ? (
             <div style={styles.detailsContainer}>
-                <h4 style={{fontSize:'1.1rem', fontWeight:'700', marginBottom:'15px'}}>{quote.client_name} - {quote.tracking_code}</h4>
+                <div className={`quote-details-heading${appConfig.theme === 'monochrome' ? ' quote-details-heading--monochrome' : ''}`}>
+                    <h4>{quote.client_name} - {quote.tracking_code}</h4>
+                    <div className="quote-details-portal-actions">
+                        <button type="button" onClick={() => onOpenPortal(quote)} aria-label="Acessar portal do cliente" title="Acessar portal do cliente">
+                            <span aria-hidden="true">{Icons.Eye}</span> Portal
+                        </button>
+                        <button type="button" onClick={() => onCopyPortal(quote)} aria-label="Copiar link do portal para o WhatsApp" title="Copiar link para o WhatsApp">
+                            <span aria-hidden="true">{Icons.Link}</span> Link
+                        </button>
+                    </div>
+                </div>
 
                 {Array.isArray(quote.product_lines) && quote.product_lines.length > 0 ? (
                     <div style={{ marginBottom: '20px', display: 'grid', gap: '14px' }}>
@@ -1328,6 +1400,41 @@ const Quotes = ({ preview: forcePreview = false }) => {
         }
     }, [API_BASE_URL, fetchQuoteSnapshot]);
 
+    const handleOpenClientPortal = useCallback(async (quote) => {
+        if (!quote?.tracking_code) return;
+
+        const portalWindow = window.open('', '_blank');
+        if (!portalWindow) {
+            Swal.fire('Janela bloqueada', 'Permita a abertura de novas abas para acessar o portal do cliente.', 'warning');
+            return;
+        }
+
+        portalWindow.document.title = 'Portal do Cliente';
+        portalWindow.document.body.textContent = 'Abrindo portal do cliente…';
+
+        try {
+            const response = await QuoteService.getPortalLink(API_BASE_URL, token, quote.tracking_code);
+            const portalPath = response.data.portal_direct_path || response.data.portal_path;
+            portalWindow.location.replace(new URL(portalPath, window.location.origin).toString());
+        } catch {
+            portalWindow.close();
+            Swal.fire('Portal não encontrado', 'Não foi possível abrir o portal deste orçamento.', 'error');
+        }
+    }, [API_BASE_URL, token]);
+
+    const handleCopyClientPortalLink = useCallback(async (quote) => {
+        if (!quote?.tracking_code) return;
+
+        try {
+            const response = await QuoteService.getPortalLink(API_BASE_URL, token, quote.tracking_code);
+            const portalUrl = new URL(response.data.portal_path, window.location.origin).toString();
+            await navigator.clipboard.writeText(portalUrl);
+            Swal.fire({ title: 'Link copiado!', text: 'Agora é só colar no WhatsApp.', icon: 'success', showConfirmButton: false, timer: 1800 });
+        } catch {
+            Swal.fire('Não foi possível copiar', 'Tente novamente ou verifique a permissão da área de transferência.', 'error');
+        }
+    }, [API_BASE_URL, token]);
+
     const handleUpdateStatus = useCallback(async (newStatus, code) => {
         if(!code) return;
         try {
@@ -1544,10 +1651,10 @@ const handleApproveToOrder = useCallback(async (quote) => {
             {(!preview || (!loading && (!error || filteredQuotes.length > 0))) && <QuotesTable preview={preview} editDisabled={preview && auxiliaryError} quotes={filteredQuotes} selectedIds={selectedQuoteIds} onCheckboxChange={handleCheckboxChange} onView={loadQuoteDetails} onEdit={openEditModal} onPrint={handlePrint} onStatusClick={(o) => { setQuoteToUpdateStatus(o); toggleModal('status', true); }} onApproveToOrder={handleApproveToOrder} userRole={user?.role} />}
             
             {/* MODAL UNIFICADO */}
-            <QuoteFormModal preview={preview} isOpen={modals.form} onClose={() => toggleModal('form', false)} quoteToEdit={quoteToEdit} API_BASE_URL={API_BASE_URL} token={token} auxData={{dbProducts, dbFabrics, dbClients}} onQuickClientAdd={quickAddClient} onRefresh={refreshQuotes} />
+            <QuoteFormModal preview={preview} mobile={isMobile} isOpen={modals.form} onClose={() => toggleModal('form', false)} quoteToEdit={quoteToEdit} API_BASE_URL={API_BASE_URL} token={token} auxData={{dbProducts, dbFabrics, dbClients}} onQuickClientAdd={quickAddClient} onRefresh={refreshQuotes} />
             
             <StatusModal preview={preview} isOpen={modals.status} onClose={() => toggleModal('status', false)} quoteToUpdate={quoteToUpdateStatus} onUpdateStatus={handleUpdateStatus} />
-            <QuoteDetailsModal preview={preview} isOpen={modals.details} onClose={() => toggleModal('details', false)} quote={selectedQuoteDetails} onReset={handleResetQuote} onUnlockClient={handleUnlockQuote} onApproveToOrder={handleApproveToOrder} API_BASE_URL={API_BASE_URL} userRole={user?.role} />
+            <QuoteDetailsModal preview={preview} isOpen={modals.details} onClose={() => toggleModal('details', false)} quote={selectedQuoteDetails} onReset={handleResetQuote} onUnlockClient={handleUnlockQuote} onApproveToOrder={handleApproveToOrder} onOpenPortal={handleOpenClientPortal} onCopyPortal={handleCopyClientPortalLink} API_BASE_URL={API_BASE_URL} userRole={user?.role} />
         </div>
     );
 };

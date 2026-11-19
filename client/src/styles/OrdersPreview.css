@@ -407,3 +407,354 @@
         grid-template-columns: 1fr;
     }
 }
+
+.quote-form-mobile-nav,
+.quote-form-progress,
+.quote-form-mobile-submit {
+    display: none;
+}
+
+.quote-form-section {
+    scroll-margin-top: 72px;
+}
+
+.quote-form-products {
+    display: grid;
+    gap: 18px;
+}
+
+.quote-form-summary-title {
+    margin: 0 0 14px;
+    color: #64748B;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.quote-product-options > summary {
+    display: none;
+}
+
+.quote-product-options-content {
+    display: grid;
+    gap: 12px;
+}
+
+.quote-details-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+}
+
+.quote-details-heading h4 {
+    flex: 1 1 220px;
+    margin: 0;
+    color: #0F172A;
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.quote-details-portal-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.quote-details-portal-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 32px;
+    padding: 5px 10px;
+    border: 1px solid #CBD5E1;
+    border-radius: 7px;
+    background: #F8FAFC;
+    color: #334155;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 800;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.quote-details-portal-actions button:first-child {
+    border-color: #BFDBFE;
+    background: #EFF6FF;
+    color: #2563EB;
+}
+
+.quote-details-heading--monochrome .quote-details-portal-actions button:first-child {
+    border-color: #D1D5DB;
+    background: #F3F4F6;
+    color: #111827;
+}
+
+.quote-details-portal-actions button span {
+    display: inline-flex;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .quote-details-portal-actions button:hover {
+        border-color: currentColor;
+    }
+}
+
+.quote-details-portal-actions button:active {
+    transform: scale(0.97);
+}
+
+@media (pointer: coarse) {
+    .quote-details-portal-actions button {
+        min-height: 44px;
+    }
+}
+
+@container (max-width: 640px) {
+    .quotes-preview .quote-form {
+        gap: 20px !important;
+        padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .quotes-preview .quote-form-mobile-nav {
+        position: sticky;
+        z-index: 4;
+        top: -16px;
+        display: flex;
+        gap: 6px;
+        margin: -16px -16px 0;
+        padding: 10px 16px;
+        overflow-x: auto;
+        border-bottom: 1px solid #E2E8F0;
+        background: rgba(255, 255, 255, 0.96);
+        box-shadow: 0 6px 18px -16px rgba(15, 23, 42, 0.55);
+        scrollbar-width: none;
+        overscroll-behavior-inline: contain;
+        touch-action: pan-x;
+    }
+
+    .quotes-preview .quote-form-mobile-nav::-webkit-scrollbar {
+        display: none;
+    }
+
+    .quotes-preview .quote-form-mobile-nav button {
+        flex: 0 0 auto;
+        min-height: 44px;
+        padding: 8px 12px;
+        border: 1px solid #CBD5E1;
+        border-radius: 999px;
+        background: #FFFFFF;
+        color: #334155;
+        font-size: 0.82rem;
+        font-weight: 800;
+    }
+
+    .quotes-preview .quote-form-mobile-nav button:active {
+        border-color: var(--orders-accent);
+        background: var(--orders-accent-soft);
+        color: var(--orders-accent-strong);
+    }
+
+    .quotes-preview .quote-form-progress {
+        display: grid;
+        gap: 8px;
+        padding: 14px;
+        border: 1px solid #DBEAFE;
+        border-radius: 14px;
+        background: #F8FBFF;
+    }
+
+    .quotes-preview--monochrome .quote-form-progress {
+        border-color: #D1D5DB;
+        background: #F9FAFB;
+    }
+
+    .quotes-preview .quote-form-progress > div:first-child {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        color: #475569;
+        font-size: 0.82rem;
+        font-weight: 700;
+    }
+
+    .quotes-preview .quote-form-progress strong {
+        color: var(--orders-accent-strong);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .quotes-preview .quote-form-progress-track {
+        height: 6px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #E2E8F0;
+    }
+
+    .quotes-preview .quote-form-progress-track span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--orders-accent);
+        transition: width 180ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .quotes-preview .quote-form-progress small {
+        color: #64748B;
+        font-size: 0.76rem;
+    }
+
+    .quotes-preview .quote-form-section {
+        min-width: 0;
+    }
+
+    .quotes-preview .quote-form-products > div:first-child {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .quotes-preview .quote-form-products > div:first-child button {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .quotes-preview .orders-product {
+        gap: 14px !important;
+        padding: 14px !important;
+        border-radius: 14px !important;
+    }
+
+    .quotes-preview .quote-product-options {
+        display: block !important;
+        padding: 0 !important;
+        overflow: hidden;
+    }
+
+    .quotes-preview .quote-product-options > summary {
+        display: flex;
+        min-height: 44px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        color: #334155;
+        cursor: pointer;
+        font-size: 0.84rem;
+        font-weight: 800;
+        list-style: none;
+        touch-action: manipulation;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+
+    .quotes-preview .quote-product-options > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .quotes-preview .quote-product-options > summary::after {
+        content: '+';
+        color: var(--orders-accent);
+        font-size: 1.15rem;
+        line-height: 1;
+    }
+
+    .quotes-preview .quote-product-options[open] > summary::after {
+        content: '−';
+    }
+
+    .quotes-preview .quote-product-options > summary small {
+        margin-inline-start: auto;
+        color: #64748B;
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+
+    .quotes-preview .quote-product-options-content {
+        padding: 0 14px 14px;
+    }
+
+    .quotes-preview .quote-product-options-header {
+        display: none !important;
+    }
+
+    .quotes-preview .quote-form-summary > div {
+        gap: 16px !important;
+    }
+
+    .quotes-preview .quote-form-summary > div > div:first-child {
+        min-width: 0 !important;
+        max-width: none !important;
+    }
+
+    .quotes-preview .quote-form-summary > div > div:first-child > div {
+        max-width: none !important;
+        padding: 18px !important;
+    }
+
+    .quotes-preview .quote-form-desktop-submit {
+        display: none !important;
+    }
+
+    .quotes-preview .quote-form-mobile-submit {
+        position: sticky;
+        z-index: 5;
+        bottom: -16px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        margin: 0 -16px calc(-16px - env(safe-area-inset-bottom, 0px));
+        padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+        border-top: 1px solid #E2E8F0;
+        background: rgba(255, 255, 255, 0.97);
+        box-shadow: 0 -10px 24px -20px rgba(15, 23, 42, 0.75);
+    }
+
+    .quotes-preview .quote-form-mobile-submit > div {
+        min-width: 0;
+    }
+
+    .quotes-preview .quote-form-mobile-submit span,
+    .quotes-preview .quote-form-mobile-submit strong {
+        display: block;
+    }
+
+    .quotes-preview .quote-form-mobile-submit span {
+        color: #64748B;
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+
+    .quotes-preview .quote-form-mobile-submit strong {
+        overflow: hidden;
+        color: #0F172A;
+        font-size: 1rem;
+        font-variant-numeric: tabular-nums;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .quotes-preview .quote-form-mobile-submit button {
+        min-width: 146px;
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 14px;
+        background: var(--orders-accent) !important;
+        color: #FFFFFF;
+        font-size: 0.88rem;
+        font-weight: 800;
+    }
+
+    .quotes-preview .quote-form-mobile-submit button:active:not(:disabled) {
+        transform: scale(0.97);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .quotes-preview .quote-form-progress-track span {
+        transition: none;
+    }
+}

@@ -54,3 +54,24 @@ test('avoids broad transitions and gates quote hover effects to precise pointers
     assert.match(quotesSource, /@media \(hover: hover\) and \(pointer: fine\)/);
     assert.match(previewStyles, /@media \(prefers-reduced-motion: reduce\)/);
 });
+
+test('guides quote creation on mobile without hiding the desktop form', () => {
+    assert.match(quotesSource, /className="quote-form-mobile-nav"/);
+    assert.match(quotesSource, /1\. Cliente/);
+    assert.match(quotesSource, /2\. Produtos/);
+    assert.match(quotesSource, /3\. Resumo/);
+    assert.match(quotesSource, /className="quote-form-progress"/);
+    assert.match(quotesSource, /className="quote-form-mobile-submit"/);
+    assert.match(quotesSource, /defaultOpen=\{!compact \|\| hasEnhancements\}/);
+    assert.match(previewStyles, /@container \(max-width: 640px\)[\s\S]*\.quotes-preview \.quote-form-mobile-submit/);
+});
+
+test('opens and copies the authenticated customer portal from quote details', () => {
+    assert.match(quotesSource, /getPortalLink: \(api, token, trackingCode\)/);
+    assert.match(quotesSource, /response\.data\.portal_direct_path \|\| response\.data\.portal_path/);
+    assert.match(quotesSource, /navigator\.clipboard\.writeText\(portalUrl\)/);
+    assert.match(quotesSource, /onOpenPortal\(quote\)/);
+    assert.match(quotesSource, /onCopyPortal\(quote\)/);
+    assert.match(quotesSource, /aria-label="Acessar portal do cliente"/);
+    assert.match(quotesSource, /aria-label="Copiar link do portal para o WhatsApp"/);
+});
