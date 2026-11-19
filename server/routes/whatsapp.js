@@ -23,6 +23,7 @@ const {
 } = require('../services/metaCapiService');
 
 const { saveTypebotConfig } = require('../services/typebotConfig');
+const { recordContactSignal } = require('../services/metaMessaging');
 
 const router = express.Router();
 let QRCode = null;
@@ -1514,7 +1515,9 @@ async function processMessageContactWebhook(payload, eventName) {
         if (seenMessages.has(messageKey)) continue;
         seenMessages.add(messageKey);
 
-        results.push(await persistMessageContactActivity(incoming));
+        const activity = await persistMessageContactActivity(incoming);
+        await recordContactSignal(db, incoming, activity.conversation_id, messagePayload);
+        results.push(activity);
 
         // Disparar resposta automática em áudio, se houver
         if (!incoming.fromMe) {

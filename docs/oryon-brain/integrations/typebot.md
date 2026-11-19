@@ -29,4 +29,5 @@
 - Manual and label qualification for the same conversation share duplicate protection. Success requires Meta's event receipt; retries preserve the original payload and time.
 - WhatsApp messaging conversions require an explicitly configured WABA-linked dataset, Page and permissions. Use real click metadata from stored incoming messages when available; never manufacture ad identifiers.
 - A purchase needs an explicit, unambiguous order/conversation link and incoming message before payment to use messaging attribution. API receipt does not prove ad attribution or purchase optimization.
+- Creating/editing an order links its WhatsApp phone automatically; ambiguous phone matches are not guessed. Webhook contact/click signals retain minimal metadata without importing full message content or sending messages to the customer.
 - Setup and validation: `docs/meta-purchase-on-deposit.md`.

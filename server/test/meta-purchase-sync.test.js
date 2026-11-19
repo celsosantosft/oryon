@@ -9,7 +9,7 @@ async function fixture(t, { seed, post } = {}) {
     const all = sql => new Promise((resolve, reject) => db.all(sql, (error, rows) => error ? reject(error) : resolve(rows)));
     t.after(() => new Promise(resolve => db.close(resolve)));
     await exec(`CREATE TABLE clients(id INTEGER PRIMARY KEY,phone TEXT,email TEXT);
-        CREATE TABLE orders(id INTEGER PRIMARY KEY,client_id INTEGER,client_phone TEXT,
+        CREATE TABLE orders(id INTEGER PRIMARY KEY,client_id INTEGER,client_phone TEXT,client_name TEXT,
             status TEXT DEFAULT 'Criação de Arte',total_price REAL,amount_paid REAL DEFAULT 0);
         CREATE TABLE transactions(id INTEGER PRIMARY KEY,order_id INTEGER,type TEXT,status TEXT,amount REAL);
         INSERT INTO clients VALUES(1,'85999999999','comprador@example.com');`);
@@ -47,16 +47,16 @@ test('first deposit sends full order value as Purchase, not Lead or deposit amou
 test('messaging purchase uses only an order-linked incoming conversation before payment', async t => {
     const f = await fixture(t);
     Object.assign(f.config, { messagingDatasetId: 'messages', pageId: 'page', whatsappBusinessAccountId: 'waba' });
-    await f.exec(`CREATE TABLE whatsapp_conversations(id INTEGER PRIMARY KEY,phone TEXT);
-        CREATE TABLE whatsapp_conversation_orders(order_id INTEGER,conversation_id INTEGER);
+    await f.exec(`CREATE TABLE whatsapp_conversations(id INTEGER PRIMARY KEY,phone TEXT UNIQUE,client_id INTEGER,client_name TEXT);
+        CREATE TABLE whatsapp_conversation_orders(order_id INTEGER,conversation_id INTEGER,UNIQUE(order_id,conversation_id));
         CREATE TABLE whatsapp_messages(id INTEGER PRIMARY KEY,conversation_id INTEGER,direction TEXT,created_at TEXT,raw_payload TEXT);
-        INSERT INTO whatsapp_conversations VALUES(1,'5581999990000');
+        INSERT INTO whatsapp_conversations(id,phone) VALUES(1,'5581999990000');
         INSERT INTO whatsapp_conversation_orders VALUES(1,1);
         INSERT INTO whatsapp_messages VALUES(1,1,'incoming',strftime('%Y-%m-%dT%H:%M:%SZ','now','-1 minute'),
             '{"data":{"key":{"remoteJid":"5581999990000@s.whatsapp.net"},"message":{"contextInfo":{"externalAdReply":{"ctwaClid":"real-click-12345"}}}}}');
         INSERT INTO whatsapp_messages VALUES(2,1,'incoming',datetime('now','+1 day'),
             '{"data":{"key":{"remoteJid":"5581999990000@s.whatsapp.net"},"message":{"contextInfo":{"externalAdReply":{"ctwaClid":"future-click-12345"}}}}}');
-        INSERT INTO orders(id,client_id,total_price,amount_paid) VALUES(1,1,1000,200),(2,1,500,100);`);
+        INSERT INTO orders(id,client_id,client_phone,total_price,amount_paid) VALUES(1,1,'81999990000',1000,200),(2,1,NULL,500,100);`);
     await f.sync.processDue();
     assert.equal(f.calls.length, 2);
     assert.match(f.calls[0][0], /\/messages\/events$/);
@@ -65,7 +65,7 @@ test('messaging purchase uses only an order-linked incoming conversation before 
     assert.match(f.calls[1][0], /\/test-pixel\/events$/);
     assert.equal(f.calls[1][1].data[0].action_source, 'chat');
     await f.exec(`INSERT INTO whatsapp_conversation_orders VALUES(3,1);
-        INSERT INTO orders(id,client_id,total_price,amount_paid) VALUES(3,1,200,50);`);
+        INSERT INTO orders(id,client_id,client_phone,total_price,amount_paid) VALUES(3,1,'81999990000',200,50);`);
     let attempts = 0;
     const uncertain = createMetaPurchaseSync({ ...f.options, post: async () => {
         attempts += 1;

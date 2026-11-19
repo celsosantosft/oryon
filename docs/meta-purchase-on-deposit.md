@@ -54,6 +54,17 @@ Não substitua esses IDs pelo número de telefone nem reutilize um pixel sem
 validar sua vinculação no Gerenciador de Eventos. Mantenha `META_PIXEL_ID` para
 compras do ERP sem origem de mensagens comprovada.
 
+Pedidos criados ou editados localizam a conversa pelo WhatsApp informado,
+considerando a convenção de número com/sem nono dígito já usada no Oryon.
+Dois contatos candidatos tornam o vínculo ambíguo: o sistema não escolhe um
+cliente arbitrariamente. A fila verifica o vínculo novamente antes do envio.
+Nenhuma mensagem é enviada ao cliente por essa vinculação.
+
+O webhook leve preserva somente metadados de contato/clique em registros
+`conversion_signal`, sem copiar texto, mídia, chave da Evolution ou webhook
+inteiro para esses registros. A captura é idempotente por conversa/clique.
+Não é necessário carregar o histórico completo de conversas.
+
 Leads usam a conversa identificada. Compras só usam `business_messaging` quando
 o pedido está vinculado a uma única conversa com mensagem recebida antes do
 pagamento. Sem esse vínculo, preservam o envio anterior de compras do ERP.

@@ -1013,7 +1013,7 @@ const WhatsappDashboard = () => {
                             </div>
                             <h3 className="text-xl font-semibold text-slate-950">Sessão ativa</h3>
                             <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-                                Pronta para envio manual de leads.
+                                Leads manuais e compras automáticas após o sinal.
                             </p>
                         </div>
                     ) : (
@@ -1135,7 +1135,7 @@ const WhatsappDashboard = () => {
                 )}
 
                 <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-800">
-                    O modo atual envia leads manualmente para a Meta, sem importar conversas ou carregar histórico de mensagens.
+                    Qualifique leads em Novo Envio. Pedidos com WhatsApp são vinculados automaticamente ao contato; o primeiro sinal pago confirma a compra. O rastreamento guarda apenas metadados de contato e anúncio, sem importar o conteúdo completo das conversas.
                 </div>
             </section>
         </div>

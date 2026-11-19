@@ -17,6 +17,7 @@ const { appPaths } = require('../config/paths');
 const { normalizePlayerNumber } = require('../utils/playerNumber');
 const { chooseEffectiveOrderItems } = require('../utils/effectiveOrderItems');
 const { syncConvertedOrdersFromQuote } = require('../utils/convertedOrderSync');
+const { linkOrderConversation } = require('../services/metaMessaging');
 const {
     buildPortalDirectPath,
     buildPortalShareHtml,
@@ -1254,6 +1255,7 @@ router.post('/api/orders', authenticateToken, authorizeRole(['admin', 'gerente',
                     if (linesErr) return res.status(500).json({ error: linesErr.message });
                     db.run(`INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`, [orderId, status || 'Criação de Arte', req.user.id]);
                     enqueueCalendarUpsert(orderId).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
+                    linkOrderConversation(db, orderId).catch(() => console.error('Falha ao vincular pedido ao WhatsApp.'));
                     res.json({ message: "Pedido criado!", tracking_code: trackingCode, portal_path: buildPortalPath({ tracking_code: trackingCode, portal_token: portalToken }) });
                     syncFinanceAfterResponse(orderId);
                 });
@@ -1357,6 +1359,7 @@ router.put('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerent
             saveOrderProductLines(req.params.id, productLines, (linesErr) => {
                 if (linesErr) return res.status(500).json({ error: linesErr.message });
                 enqueueCalendarUpsert(req.params.id).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
+                linkOrderConversation(db, req.params.id).catch(() => console.error('Falha ao vincular pedido ao WhatsApp.'));
                 res.json({ message: "Pedido atualizado." });
                 syncFinanceAfterResponse(req.params.id);
             });

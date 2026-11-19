@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { findConversationClick, applyMessaging, datasetFor } = require('./metaMessaging');
+const { findConversationClick, applyMessaging, datasetFor, linkOrderConversation } = require('./metaMessaging');
 
 // Durable outbox: payment and queue entry commit (or roll back) together.
 // One purchase per order, never one purchase per installment or per phone.
@@ -145,6 +145,7 @@ function createMetaPurchaseSync({ db, config, tenantKey, post, now = () => Math.
                     }
                     const payload = job.payload ? JSON.parse(job.payload) : buildPayload(job, order);
                     if (!job.payload && config.messagingDatasetId) {
+                        await linkOrderConversation(db, job.order_id);
                         // Use an explicit order/conversation link, never infer an ad sale from a phone alone.
                         const conversations = await all(`SELECT c.id,c.phone FROM whatsapp_conversations c
                             JOIN whatsapp_conversation_orders co ON co.conversation_id=c.id
