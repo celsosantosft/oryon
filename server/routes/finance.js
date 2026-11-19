@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
+const {
+    ACTIVE_RECEIVABLE_FILTER_SQL,
+    normalizeBatchTransactionIds
+} = require('../utils/financeTransactions');
 
 const FINANCE_ROLES = ['admin', 'gerente', 'gerente_operacoes'];
 
@@ -581,7 +585,9 @@ router.get('/api/finance/transactions', authenticateToken, authorizeRole(FINANCE
         FROM transactions t
         LEFT JOIN cost_centers c ON t.cost_center_id = c.id
         LEFT JOIN chart_of_accounts a ON t.chart_of_account_id = a.id
+        LEFT JOIN orders o ON t.order_id = o.id
         WHERE 1=1
+        ${ACTIVE_RECEIVABLE_FILTER_SQL}
     `;
     const params = [];
 
@@ -594,6 +600,82 @@ router.get('/api/finance/transactions', authenticateToken, authorizeRole(FINANCE
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
+    });
+});
+
+router.put('/api/finance/transactions/pay-batch', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
+    const rawIds = req.body?.ids;
+    const paymentDate = typeof req.body?.payment_date === 'string' ? req.body.payment_date.trim() : '';
+    const paymentMethod = typeof req.body?.payment_method === 'string' ? req.body.payment_method.trim() : '';
+
+    if (!Array.isArray(rawIds) || rawIds.length === 0 || rawIds.length > 500) {
+        return res.status(400).json({ error: 'Selecione de 1 a 500 contas para dar baixa.' });
+    }
+
+    if (rawIds.some((id) => !Number.isInteger(Number(id)) || Number(id) <= 0)) {
+        return res.status(400).json({ error: 'A seleção contém uma conta inválida.' });
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) {
+        return res.status(400).json({ error: 'Informe uma data válida para a baixa.' });
+    }
+
+    const ids = normalizeBatchTransactionIds(rawIds);
+    const placeholders = ids.map(() => '?').join(', ');
+
+    db.serialize(() => {
+        let completed = false;
+
+        const rollback = (statusCode, error) => {
+            if (completed) return;
+            completed = true;
+            db.run('ROLLBACK', () => res.status(statusCode).json({ error }));
+        };
+
+        db.run('BEGIN IMMEDIATE TRANSACTION', (beginErr) => {
+            if (beginErr) return res.status(500).json({ error: beginErr.message });
+
+            db.all(
+                `SELECT t.id, t.order_id
+                 FROM transactions t
+                 LEFT JOIN orders o ON t.order_id = o.id
+                 WHERE t.id IN (${placeholders})
+                   AND t.status <> 'Pago'
+                   ${ACTIVE_RECEIVABLE_FILTER_SQL}`,
+                ids,
+                (fetchErr, rows) => {
+                    if (fetchErr) return rollback(500, fetchErr.message);
+                    if (rows.length !== ids.length) {
+                        return rollback(409, 'Uma das contas já foi baixada, não existe ou pertence a um pedido cancelado. Atualize a página e tente novamente.');
+                    }
+
+                    db.run(
+                        `UPDATE transactions
+                         SET status = 'Pago', payment_date = ?, payment_method = ?
+                         WHERE id IN (${placeholders}) AND status <> 'Pago'`,
+                        [paymentDate, paymentMethod || null, ...ids],
+                        function(updateErr) {
+                            if (updateErr) return rollback(500, updateErr.message);
+                            if (this.changes !== ids.length) {
+                                return rollback(409, 'Alguma conta mudou durante a baixa. Atualize a página e tente novamente.');
+                            }
+
+                            db.run('COMMIT', (commitErr) => {
+                                if (commitErr) return rollback(500, commitErr.message);
+                                completed = true;
+                                syncOrderAmounts(rows.map((row) => row.order_id), (syncErr) => {
+                                    if (syncErr) return res.status(500).json({ error: syncErr.message });
+                                    res.json({
+                                        message: `${ids.length} conta(s) baixada(s) com sucesso!`,
+                                        count: ids.length
+                                    });
+                                });
+                            });
+                        }
+                    );
+                }
+            );
+        });
     });
 });
 

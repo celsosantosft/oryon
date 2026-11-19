@@ -37,6 +37,7 @@ const FinanceTransactions = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7)); 
     const [expandedOrders, setExpandedOrders] = useState({});
+    const [selectedTransactionIds, setSelectedTransactionIds] = useState([]);
 
     // Centro de custo removido do estado inicial visível (mantido como vazio por segurança de banco)
     const initialFormState = {
@@ -60,7 +61,12 @@ const FinanceTransactions = () => {
 
     const fetchTransactions = () => {
         axios.get(`${API_BASE_URL}/api/finance/transactions`, { headers: { Authorization: `Bearer ${token}` } })
-            .then(res => setTransactions(res.data))
+            .then(res => {
+                setTransactions(res.data);
+                setSelectedTransactionIds((current) => current.filter((id) =>
+                    res.data.some((transaction) => transaction.id === id && transaction.status !== 'Pago')
+                ));
+            })
             .catch(err => console.error("Erro", err));
     };
 
@@ -336,6 +342,105 @@ const FinanceTransactions = () => {
         }
     }, [transactions, activeTab, searchQuery, monthFilter, orders, historyType]);
 
+    const selectableTransactionIds = useMemo(() => {
+        if (activeTab === 'A Receber') {
+            return [
+                ...processedData.groups.flatMap((group) => group.transactions
+                    .filter((transaction) => transaction.status !== 'Pago')
+                    .map((transaction) => transaction.id)),
+                ...processedData.avulsas.map((transaction) => transaction.id)
+            ];
+        }
+
+        if (activeTab === 'A Pagar') {
+            return processedData.items.map((transaction) => transaction.id);
+        }
+
+        return [];
+    }, [activeTab, processedData]);
+
+    const selectedTransactions = useMemo(() => transactions.filter((transaction) =>
+        selectedTransactionIds.includes(transaction.id) && transaction.status !== 'Pago'
+    ), [transactions, selectedTransactionIds]);
+
+    const selectedTotal = useMemo(() => selectedTransactions.reduce(
+        (total, transaction) => total + Number(transaction.amount || 0),
+        0
+    ), [selectedTransactions]);
+
+    const allVisibleSelected = selectableTransactionIds.length > 0
+        && selectableTransactionIds.every((id) => selectedTransactionIds.includes(id));
+
+    const toggleSelection = (ids) => {
+        const safeIds = [...new Set(ids)];
+        setSelectedTransactionIds((current) => {
+            const allSelected = safeIds.every((id) => current.includes(id));
+            if (allSelected) return current.filter((id) => !safeIds.includes(id));
+            return [...new Set([...current, ...safeIds])];
+        });
+    };
+
+    const handleBatchPay = async () => {
+        if (selectedTransactions.length === 0) return;
+
+        const today = new Date().toISOString().split('T')[0];
+        const isReceivable = activeTab === 'A Receber';
+        const result = await Swal.fire({
+            title: isReceivable ? 'Dar baixa nos recebimentos?' : 'Pagar contas selecionadas?',
+            html: `
+                <div style="text-align:left; display:flex; flex-direction:column; gap:12px;">
+                    <div style="font-size:0.9rem; color:#475569;">
+                        <strong>${selectedTransactions.length}</strong> conta(s) selecionada(s), total de
+                        <strong> ${formatMoney(selectedTotal)}</strong>.
+                    </div>
+                    <div style="font-size:0.82rem; color:#64748B;">A baixa em lote será integral. Para baixa parcial, use o botão individual da conta.</div>
+                    <input id="swal-batch-payment-date" class="swal2-input" type="date" value="${today}">
+                    <input id="swal-batch-payment-method" class="swal2-input" type="text" value="Dinheiro/PIX" placeholder="Forma de pagamento">
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: isReceivable ? 'Confirmar baixa' : 'Confirmar pagamento',
+            cancelButtonText: 'Cancelar',
+            focusConfirm: false,
+            preConfirm: () => {
+                const paymentDate = document.getElementById('swal-batch-payment-date')?.value || '';
+                const paymentMethod = (document.getElementById('swal-batch-payment-method')?.value || '').trim();
+                if (!paymentDate) {
+                    Swal.showValidationMessage('Informe a data da baixa.');
+                    return false;
+                }
+                return {
+                    payment_date: paymentDate,
+                    payment_method: paymentMethod || 'Dinheiro/PIX'
+                };
+            }
+        });
+
+        if (!result.isConfirmed || !result.value) return;
+
+        try {
+            const response = await axios.put(
+                `${API_BASE_URL}/api/finance/transactions/pay-batch`,
+                {
+                    ids: selectedTransactions.map((transaction) => transaction.id),
+                    ...result.value
+                },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            setSelectedTransactionIds([]);
+            fetchTransactions();
+            Swal.fire({
+                title: 'Baixa concluída!',
+                text: response.data?.message || 'Contas baixadas com sucesso.',
+                icon: 'success',
+                timer: 1800,
+                showConfirmButton: false
+            });
+        } catch (error) {
+            Swal.fire('Erro', error.response?.data?.error || 'Falha ao baixar as contas selecionadas.', 'error');
+        }
+    };
+
     const openNewTransactionModal = () => {
         setFormData({ 
             ...initialFormState, 
@@ -396,13 +501,13 @@ const FinanceTransactions = () => {
 
             <div style={styles.controlsCard}>
                 <div style={styles.tabsContainer}>
-                    <button className={`tab-btn ${activeTab === 'A Receber' ? 'tab-active' : 'tab-inactive'}`} onClick={() => setActiveTab('A Receber')} style={styles.tabButton}>
+                    <button className={`tab-btn ${activeTab === 'A Receber' ? 'tab-active' : 'tab-inactive'}`} onClick={() => { setActiveTab('A Receber'); setSelectedTransactionIds([]); }} style={styles.tabButton}>
                         <span style={{color: activeTab === 'A Receber' ? '#3B82F6' : '#94A3B8'}}>{Icons.ArrowUp}</span> A Receber
                     </button>
-                    <button className={`tab-btn ${activeTab === 'A Pagar' ? 'tab-active' : 'tab-inactive'}`} onClick={() => setActiveTab('A Pagar')} style={styles.tabButton}>
+                    <button className={`tab-btn ${activeTab === 'A Pagar' ? 'tab-active' : 'tab-inactive'}`} onClick={() => { setActiveTab('A Pagar'); setSelectedTransactionIds([]); }} style={styles.tabButton}>
                         <span style={{color: activeTab === 'A Pagar' ? '#EF4444' : '#94A3B8'}}>{Icons.ArrowDown}</span> A Pagar
                     </button>
-                    <button className={`tab-btn ${activeTab === 'Histórico' ? 'tab-active' : 'tab-inactive'}`} onClick={() => {setActiveTab('Histórico'); setHistoryType('Todas');}} style={styles.tabButton}>
+                    <button className={`tab-btn ${activeTab === 'Histórico' ? 'tab-active' : 'tab-inactive'}`} onClick={() => { setActiveTab('Histórico'); setHistoryType('Todas'); setSelectedTransactionIds([]); }} style={styles.tabButton}>
                         <span style={{color: activeTab === 'Histórico' ? '#8B5CF6' : '#94A3B8'}}>{Icons.History}</span> Histórico (Concluídos)
                     </button>
                 </div>
@@ -431,11 +536,33 @@ const FinanceTransactions = () => {
             </div>
 
             <div style={styles.tableCard}>
+                {activeTab !== 'Histórico' && selectedTransactions.length > 0 && (
+                    <div style={styles.batchBar}>
+                        <div>
+                            <strong>{selectedTransactions.length} selecionada(s)</strong>
+                            <span style={styles.batchTotal}>Total: {formatMoney(selectedTotal)}</span>
+                        </div>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+                            <button type="button" onClick={() => setSelectedTransactionIds([])} style={styles.batchClearButton}>Limpar</button>
+                            <button type="button" onClick={handleBatchPay} style={styles.batchPayButton}>
+                                {Icons.Check} {activeTab === 'A Receber' ? 'Dar baixa' : 'Pagar selecionadas'}
+                            </button>
+                        </div>
+                    </div>
+                )}
                 <table style={styles.table}>
                     <thead>
                         {activeTab === 'A Receber' && (
                             <tr>
-                                <th style={{...styles.th, width: '40px'}}></th>
+                                <th style={{...styles.th, width: '68px'}}>
+                                    <input
+                                        type="checkbox"
+                                        aria-label="Selecionar todos os recebimentos visíveis"
+                                        checked={allVisibleSelected}
+                                        onChange={() => toggleSelection(selectableTransactionIds)}
+                                        style={styles.checkbox}
+                                    />
+                                </th>
                                 <th style={styles.th}>Cliente / Origem</th>
                                 <th style={styles.th}>Nº Pedido</th>
                                 <th style={styles.th}>Situação</th>
@@ -445,6 +572,15 @@ const FinanceTransactions = () => {
                         )}
                         {activeTab === 'A Pagar' && (
                             <tr>
+                                <th style={{...styles.th, width: '44px'}}>
+                                    <input
+                                        type="checkbox"
+                                        aria-label="Selecionar todas as contas a pagar visíveis"
+                                        checked={allVisibleSelected}
+                                        onChange={() => toggleSelection(selectableTransactionIds)}
+                                        style={styles.checkbox}
+                                    />
+                                </th>
                                 <th style={styles.th}>Descrição (A Pagar)</th>
                                 <th style={styles.th}>Situação</th>
                                 <th style={styles.th}>Categoria</th>
@@ -469,10 +605,27 @@ const FinanceTransactions = () => {
                         {activeTab === 'A Receber' && processedData.groups.map(group => {
                             const isExpanded = expandedOrders[group.orderId];
                             const percent = (group.paid / group.total) * 100;
+                            const pendingIds = group.transactions
+                                .filter((transaction) => transaction.status !== 'Pago')
+                                .map((transaction) => transaction.id);
+                            const groupSelected = pendingIds.length > 0
+                                && pendingIds.every((id) => selectedTransactionIds.includes(id));
                             return (
                                 <React.Fragment key={group.orderId}>
                                     <tr className="row-hover" onClick={() => toggleAccordion(group.orderId)} style={{...styles.tr, backgroundColor: isExpanded ? '#F8FAFC' : 'white'}}>
-                                        <td style={{...styles.td, color: '#94A3B8'}}>{isExpanded ? Icons.ChevronUp : Icons.ChevronDown}</td>
+                                        <td style={{...styles.td, color: '#94A3B8'}}>
+                                            <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+                                                <input
+                                                    type="checkbox"
+                                                    aria-label={`Selecionar pendências do pedido ${group.orderId}`}
+                                                    checked={groupSelected}
+                                                    onClick={(event) => event.stopPropagation()}
+                                                    onChange={() => toggleSelection(pendingIds)}
+                                                    style={styles.checkbox}
+                                                />
+                                                {isExpanded ? Icons.ChevronUp : Icons.ChevronDown}
+                                            </div>
+                                        </td>
                                         <td style={{...styles.td, fontWeight: '600', color: '#334155', display:'flex', alignItems:'center', gap:'10px'}}>
                                             <span style={{color: '#94A3B8', display: 'flex'}}>{Icons.User}</span> {group.clientName.toUpperCase()}
                                         </td>
@@ -489,7 +642,17 @@ const FinanceTransactions = () => {
 
                                     {isExpanded && group.transactions.map(t => (
                                         <tr key={t.id} className="sub-row" style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                                            <td></td>
+                                            <td style={{...styles.td, textAlign: 'center'}}>
+                                                {t.status !== 'Pago' && (
+                                                    <input
+                                                        type="checkbox"
+                                                        aria-label={`Selecionar ${t.description}`}
+                                                        checked={selectedTransactionIds.includes(t.id)}
+                                                        onChange={() => toggleSelection([t.id])}
+                                                        style={styles.checkbox}
+                                                    />
+                                                )}
+                                            </td>
                                             <td colSpan="2" style={{padding: '12px 24px', fontSize: '0.85rem', color: '#475569', display:'flex', alignItems:'center'}}>
                                                 <div style={{width:'2px', height:'20px', backgroundColor:'#CBD5E1', marginRight:'12px'}}></div>
                                                 {t.description.split('- Pedido')[0].trim()}
@@ -512,23 +675,39 @@ const FinanceTransactions = () => {
                         {/* Receitas Avulsas */}
                         {activeTab === 'A Receber' && processedData.avulsas.map(t => (
                             <tr key={t.id} style={styles.tr}>
-                                <td style={styles.td}></td>
+                                <td style={{...styles.td, textAlign: 'center'}}>
+                                    <input
+                                        type="checkbox"
+                                        aria-label={`Selecionar ${t.description}`}
+                                        checked={selectedTransactionIds.includes(t.id)}
+                                        onChange={() => toggleSelection([t.id])}
+                                        style={styles.checkbox}
+                                    />
+                                </td>
                                 <td colSpan="2" style={{...styles.td, fontWeight: '600', color: '#334155'}}>{t.description} <span style={{fontSize:'0.75rem', color:'#64748B', fontWeight:'500', marginLeft:'8px'}}>{formatDate(t.due_date)}</span></td>
                                 <td style={styles.td}><StatusBadge status={t.status} /></td>
-                                <td style={styles.td}><span style={{fontSize:'0.75rem', color:'#94A3B8', fontStyle:'italic'}}>Lançamento Avulso</span></td>
-                                <td style={{...styles.td, textAlign: 'right', fontWeight: '700', color: '#10B981'}}>{formatMoney(t.amount)}</td>
                                 <td style={{...styles.td, textAlign: 'center'}}>
                                     <div style={{display:'flex', gap:'8px', justifyContent:'flex-end'}}>
                                         {t.status === 'Pendente' && <button onClick={() => handlePay(t)} style={{...styles.iconButton, color: '#10B981', backgroundColor: '#ECFDF5'}}><span style={{marginRight: '4px', display: 'flex'}}>{Icons.Check}</span> Baixar</button>}
                                         <button onClick={() => handleDelete(t.id)} style={{...styles.iconButton, color: '#94A3B8'}} onMouseEnter={e=>e.currentTarget.style.color='#EF4444'} onMouseLeave={e=>e.currentTarget.style.color='#94A3B8'}>{Icons.Trash}</button>
                                     </div>
                                 </td>
+                                <td style={{...styles.td, textAlign: 'right', fontWeight: '700', color: '#10B981'}}>{formatMoney(t.amount)}</td>
                             </tr>
                         ))}
 
                         {/* ================= ABA 2: A PAGAR ================= */}
                         {activeTab === 'A Pagar' && processedData.items.map(t => (
                             <tr key={t.id} style={styles.tr}>
+                                <td style={{...styles.td, textAlign: 'center'}}>
+                                    <input
+                                        type="checkbox"
+                                        aria-label={`Selecionar ${t.description}`}
+                                        checked={selectedTransactionIds.includes(t.id)}
+                                        onChange={() => toggleSelection([t.id])}
+                                        style={styles.checkbox}
+                                    />
+                                </td>
                                 <td style={{...styles.td, fontWeight: '600', color: '#334155'}}>{t.description} <br/><span style={{fontSize:'0.75rem', color:'#DC2626', fontWeight:'600'}}>Vence: {formatDate(t.due_date)}</span></td>
                                 <td style={styles.td}><StatusBadge status={t.status} /></td>
                                 <td style={styles.td}><span style={{fontSize:'0.85rem', color:'#64748B'}}>{t.account_name || 'Geral'}</span></td>
@@ -692,6 +871,11 @@ const styles = {
     monthFilterBox: { display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#F8FAFC', padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', maxWidth: '100%' },
 
     tableCard: { backgroundColor: 'white', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #E2E8F0', overflowX: 'auto', WebkitOverflowScrolling: 'touch' },
+    batchBar: { minWidth: '760px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '12px 18px', backgroundColor: '#EFF6FF', borderBottom: '1px solid #BFDBFE', color: '#1E3A8A', fontSize: '0.9rem' },
+    batchTotal: { marginLeft: '12px', color: '#475569', fontWeight: '600' },
+    batchClearButton: { border: 'none', backgroundColor: 'transparent', color: '#64748B', fontWeight: '700', cursor: 'pointer', padding: '8px 10px' },
+    batchPayButton: { display: 'flex', alignItems: 'center', gap: '6px', border: 'none', borderRadius: '8px', backgroundColor: '#10B981', color: 'white', fontWeight: '800', cursor: 'pointer', padding: '9px 14px' },
+    checkbox: { width: '18px', height: '18px', accentColor: '#2563EB', cursor: 'pointer' },
     table: { width: '100%', borderCollapse: 'collapse', minWidth: '800px' },
     th: { backgroundColor: '#F8FAFC', padding: '16px 24px', textAlign: 'left', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' },
     td: { padding: '16px 24px', borderBottom: '1px solid #F1F5F9', color: '#334155', fontSize: '0.95rem' },

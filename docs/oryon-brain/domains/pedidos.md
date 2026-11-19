@@ -17,6 +17,7 @@
 - Links do portal gerados pelo sistema usam uma página segura de compartilhamento para o WhatsApp: a prévia identifica o cliente e o pedido, mostra o layout com a logo pequena da instalação e redireciona ao portal autenticado; sem imagem raster, usa a marca como fallback.
 - A rota oficial `/orders` usa a experiência aprovada em telas abaixo de 1000 px e mantém a tabela clássica no desktop. `/orders-preview` continua acessível para conferir a experiência aprovada em qualquer largura. O tema segue a empresa (Atos azul e PD monocromático).
 - O Google Agenda é opcional e configurado por instalação em `Entregas da Semana`. Somente pedidos gerados criam eventos; orçamentos não criam.
+- Contas a Receber não exibe saldos pendentes de pedidos cancelados ou com arte arquivada, mas preserva recebimentos já pagos no histórico. A baixa em lote é sempre integral; baixas parciais continuam sendo feitas individualmente.
 - Administradores podem cadastrar as credenciais OAuth do Google no próprio painel; o Client Secret fica criptografado no servidor e nunca volta ao navegador.
 - O OAuth usa somente `calendar.app.created`: o Oryon cria e administra a agenda secundária `Entregas Oryon`, sem acesso às demais agendas da conta.
 - Cada pedido ativo possui no máximo um evento entre 07:00 e 08:00 na data de entrega, com o cliente antes do número no título e link direto para seu portal. Alterações atualizam esse evento, enquanto entrega, cancelamento, exclusão ou reversão para orçamento o removem.
