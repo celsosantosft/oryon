@@ -10,6 +10,7 @@ async function fixture(t, { seed, post } = {}) {
     t.after(() => new Promise(resolve => db.close(resolve)));
     await exec(`CREATE TABLE clients(id INTEGER PRIMARY KEY,phone TEXT,email TEXT);
         CREATE TABLE orders(id INTEGER PRIMARY KEY,client_id INTEGER,client_phone TEXT,client_name TEXT,
+            acquisition_source TEXT DEFAULT 'meta_ads',
             status TEXT DEFAULT 'Criação de Arte',total_price REAL,amount_paid REAL DEFAULT 0);
         CREATE TABLE transactions(id INTEGER PRIMARY KEY,order_id INTEGER,type TEXT,status TEXT,amount REAL);
         INSERT INTO clients VALUES(1,'85999999999','comprador@example.com');`);
@@ -42,6 +43,34 @@ test('first deposit sends full order value as Purchase, not Lead or deposit amou
     assert.equal(event.user_data.ph[0].length, 64);
     assert.equal(event.user_data.em[0].length, 64);
     assert.equal((await f.all('SELECT status FROM meta_purchase_events'))[0].status, 'sent');
+});
+
+test('only ad-origin purchases send; unknown waits for classification without changing payment time', async t => {
+    const f = await fixture(t);
+    await f.exec(`INSERT INTO orders(id,client_id,total_price,amount_paid,acquisition_source) VALUES
+        (1,1,1000,200,'unknown'),(2,1,500,100,'referral'),(3,1,500,100,'returning_customer'),
+        (4,1,500,100,'social_organic'),(5,1,500,100,'store_other');`);
+    await f.sync.processDue();
+    assert.equal(f.calls.length, 0);
+    assert.deepEqual(await f.all('SELECT status FROM meta_purchase_events ORDER BY order_id'),
+        [{ status: 'awaiting_source' }, ...Array.from({ length: 4 }, () => ({ status: 'not_meta' }))]);
+    const [before] = await f.all('SELECT event_time FROM meta_purchase_events WHERE order_id=1');
+    f.advance(3600);
+    await f.exec("UPDATE orders SET acquisition_source='meta_ads' WHERE id=1");
+    await f.sync.processDue();
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.calls[0][1].data[0].event_time, before.event_time);
+    await f.exec("UPDATE orders SET acquisition_source='referral' WHERE id=1; UPDATE orders SET acquisition_source='meta_ads' WHERE id=1;");
+    await f.sync.processDue();
+    assert.equal(f.calls.length, 1);
+});
+
+test('changing origin on historical paid orders does not resend the past', async t => {
+    const f = await fixture(t, { seed: "INSERT INTO orders(id,client_id,total_price,amount_paid,acquisition_source) VALUES(1,1,1000,200,'unknown')" });
+    await f.exec("UPDATE orders SET acquisition_source='meta_ads' WHERE id=1");
+    await f.sync.processDue();
+    assert.equal(f.calls.length, 0);
+    assert.equal((await f.all('SELECT status FROM meta_purchase_events'))[0].status, 'historical');
 });
 
 test('messaging purchase uses only an order-linked incoming conversation before payment', async t => {

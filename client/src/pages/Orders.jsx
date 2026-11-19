@@ -533,7 +533,7 @@ const FinancialSummary = ({ subtotal, totalCost, discount, onDiscountChange, amo
 
 const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, auxData, onQuickClientAdd, onRefresh, preview }) => {
     const isEditMode = !!orderToEdit;
-    const initialState = { client_id: '', client_name: '', client_phone: '', category: 'Geral', delivery_date: '', amount_paid: 0, status: 'Criação de Arte', discount: 0 };
+    const initialState = { client_id: '', client_name: '', client_phone: '', acquisition_source: 'unknown', category: 'Geral', delivery_date: '', amount_paid: 0, status: 'Criação de Arte', discount: 0 };
 
     const [orderData, setOrderData] = useState(initialState);
     const [productLines, setProductLines] = useState([createProductLineDraft()]);
@@ -761,6 +761,18 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
                         <div className="flex flex-col gap-1 w-full">
                             <label htmlFor="client_phone" style={styles.label}>WhatsApp do Cliente</label>
                             <input id="client_phone" type="tel" name="client_phone" className="premium-input" value={orderData.client_phone || ''} onChange={handleInputChange} placeholder="Ex: 81988074760" style={styles.input} />
+                        </div>
+                        <div className="flex flex-col gap-1 w-full md:col-span-2">
+                            <label htmlFor="acquisition_source" style={styles.label}>Como o cliente chegou?</label>
+                            <select id="acquisition_source" name="acquisition_source" className="premium-input" value={orderData.acquisition_source || 'unknown'} onChange={handleInputChange} style={styles.select} aria-describedby="acquisition_source_help">
+                                <option value="unknown">Não identificado</option>
+                                <option value="meta_ads">Anúncio Facebook/Instagram</option>
+                                <option value="social_organic">Instagram/Facebook — contato orgânico</option>
+                                <option value="referral">Indicação</option>
+                                <option value="returning_customer">Cliente antigo</option>
+                                <option value="store_other">Loja/outros</option>
+                            </select>
+                            <p id="acquisition_source_help" style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#64748B' }}>Só pedidos de anúncio com sinal pago enviam a compra à Meta. Se não souber a origem, deixe “Não identificado”; um clique recente identificado pode preencher a origem ao salvar.</p>
                         </div>
                         <div className="flex flex-col gap-1 w-full">
                             <label htmlFor="status" style={styles.label}>Status Inicial</label>

@@ -1,9 +1,25 @@
 # Compras na Meta após o primeiro sinal
 
 O primeiro sinal pago confirma a venda. Enviar um `Purchase` por pedido, com
-o valor total calculado pelo ERP em BRL. Parcelas seguintes não geram outra
+origem `meta_ads` e o valor total calculado pelo ERP em BRL. Parcelas seguintes não geram outra
 compra. Outro pedido do mesmo cliente gera outra compra. `Lead` continua
 reservado à qualificação do contato.
+
+## Origem do pedido
+
+Na criação/edição, `Como o cliente chegou?` oferece anúncio (`meta_ads`),
+orgânico (`social_organic`), indicação (`referral`), cliente antigo
+(`returning_customer`), loja/outros (`store_other`) e não identificado (`unknown`,
+padrão inclusive para registros antigos). O backend valida a seleção.
+Telefone sozinho não define origem. Um clique CTWA real nos últimos sete dias
+pode preencher uma origem desconhecida ao salvar, somente com conversa única;
+uma escolha explícita diferente de anúncio nunca é sobrescrita.
+
+A fila confere a origem antes de qualquer POST, incluindo tentativas antigas:
+`unknown` fica `awaiting_source`; demais origens ficam `not_meta`. Selecionar
+anúncio em pedido pago ainda pendente libera a tentativa original, preservando
+o horário do pagamento. Registros históricos, já enviados ou com recebimento
+incerto não são liberados para reenvio por mudar a origem.
 
 ## Funcionamento
 

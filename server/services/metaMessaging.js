@@ -87,12 +87,13 @@ async function linkOrderConversation(db, orderId) {
     return { linked: true, conversationId };
 }
 
-async function findConversationClick(db, conversationId, phone, eventTime) {
+async function findConversationClick(db, conversationId, phone, eventTime, since = 0) {
     const rows = await new Promise((resolve, reject) => db.all(
         `SELECT raw_payload FROM whatsapp_messages WHERE conversation_id=? AND direction='incoming'
-            AND datetime(created_at) <= datetime(?, 'unixepoch') AND raw_payload LIKE '%ctwa%'
+            AND datetime(created_at) <= datetime(?, 'unixepoch')
+            AND datetime(created_at) >= datetime(?, 'unixepoch') AND raw_payload LIKE '%ctwa%'
             ORDER BY created_at DESC, id DESC LIMIT 20`,
-        [conversationId, eventTime], (error, rows) => error ? reject(error) : resolve(rows)));
+        [conversationId, eventTime, since], (error, rows) => error ? reject(error) : resolve(rows)));
     return rows.map(row => extractClickId(row.raw_payload, phone)).find(Boolean) || '';
 }
 
@@ -115,4 +116,4 @@ function datasetFor(payload, config) {
     return id;
 }
 
-module.exports = { extractClickId, findConversationClick, applyMessaging, datasetFor, recordContactSignal, linkOrderConversation };
+module.exports = { extractClickId, findConversationClick, applyMessaging, datasetFor, recordContactSignal, linkOrderConversation, phoneVariants };

@@ -1135,7 +1135,7 @@ const WhatsappDashboard = () => {
                 )}
 
                 <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-800">
-                    Qualifique leads em Novo Envio. Pedidos com WhatsApp são vinculados automaticamente ao contato; o primeiro sinal pago confirma a compra. O rastreamento guarda apenas metadados de contato e anúncio, sem importar o conteúdo completo das conversas.
+                    Qualifique leads em Novo Envio. Pedidos com WhatsApp são vinculados automaticamente ao contato; somente a origem “Anúncio Facebook/Instagram” com sinal pago envia a compra à Meta. O rastreamento guarda apenas metadados de contato e anúncio, sem importar o conteúdo completo das conversas.
                 </div>
             </section>
         </div>

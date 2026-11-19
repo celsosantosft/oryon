@@ -3,7 +3,8 @@ import axios from 'axios';
 
 const LABELS = {
     pending: 'Aguardando envio', sending: 'Enviando', retry: 'Aguardando nova tentativa',
-    sent: 'Recebida pela Meta', cancelled: 'Envio cancelado', expired: 'Requer revisão', review: 'Recebimento incerto — revisar antes de reenviar'
+    sent: 'Recebida pela Meta', cancelled: 'Envio cancelado', expired: 'Requer revisão', review: 'Recebimento incerto — revisar antes de reenviar',
+    awaiting_source: 'Informe a origem no pedido', not_meta: 'Não enviado — origem fora de anúncios'
 };
 
 export default function MetaPurchasesPanel({ apiBaseUrl, authConfig }) {
@@ -29,7 +30,7 @@ export default function MetaPurchasesPanel({ apiBaseUrl, authConfig }) {
                 <h2 className="text-lg font-semibold text-slate-950">Compras enviadas à Meta</h2>
                 <button type="button" onClick={refresh} className="text-sm font-semibold text-blue-700">Atualizar</button>
             </div>
-            <p className="mt-2 text-sm text-slate-600">O primeiro sinal pago confirma a compra. O envio usa o valor total do pedido, uma vez por pedido. Pedidos já pagos antes da ativação não são reenviados.</p>
+            <p className="mt-2 text-sm text-slate-600">Somente pedidos com origem “Anúncio Facebook/Instagram” e sinal pago enviam a compra. O envio usa o valor total, uma vez por pedido. Pedidos antigos não são reenviados.</p>
             {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
             {data && !data.configured && <p role="alert" className="mt-2 text-sm text-amber-800">Envio aguardando configuração do Pixel e token da Meta.</p>}
             {data?.test_mode && <p role="alert" className="mt-2 text-sm text-amber-800">Modo de teste ativo: os envios usam o código de teste da Meta.</p>}

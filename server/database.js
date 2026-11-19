@@ -128,6 +128,7 @@ function createTables() {
     db.run(`ALTER TABLE orders ADD COLUMN amount_paid REAL DEFAULT 0`, () => {});
     db.run(`ALTER TABLE orders ADD COLUMN client_id INTEGER`, () => {});
     db.run(`ALTER TABLE orders ADD COLUMN client_phone TEXT`, () => {});
+    db.run(`ALTER TABLE orders ADD COLUMN acquisition_source TEXT NOT NULL DEFAULT 'unknown'`, () => {});
     db.run(`ALTER TABLE orders ADD COLUMN portal_token TEXT`, () => {});
     db.run(`ALTER TABLE orders ADD COLUMN legacy_tracking_code TEXT`, () => {});
 

@@ -26,6 +26,7 @@
 ## Meta conversion signals
 
 - Qualification sends a lead; the first paid deposit confirms one Purchase per order, at full order value. Never count an installment as another purchase.
+- Purchases require order acquisition_source=meta_ads. Unknown origins wait for classification; organic, referral, returning-customer and store/other orders never send purchases. The phone alone is not an ad-origin signal.
 - Manual and label qualification for the same conversation share duplicate protection. Success requires Meta's event receipt; retries preserve the original payload and time.
 - WhatsApp messaging conversions require an explicitly configured WABA-linked dataset, Page and permissions. Use real click metadata from stored incoming messages when available; never manufacture ad identifiers.
 - A purchase needs an explicit, unambiguous order/conversation link and incoming message before payment to use messaging attribution. API receipt does not prove ad attribution or purchase optimization.

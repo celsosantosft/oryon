@@ -71,6 +71,13 @@ function createMetaPurchaseSync({ db, config, tenantKey, post, now = () => Math.
                     SELECT id,CAST(strftime('%s','now') AS INTEGER),total_price FROM orders
                     WHERE id = NEW.order_id AND status NOT IN ('Cancelado','Arte Arquivada');
                 END;
+            CREATE TRIGGER IF NOT EXISTS meta_purchase_source_selected AFTER UPDATE OF acquisition_source ON orders
+                WHEN NEW.acquisition_source='meta_ads' AND COALESCE(OLD.acquisition_source,'unknown')<>'meta_ads'
+                    AND NEW.status NOT IN ('Cancelado','Arte Arquivada')
+                BEGIN
+                    UPDATE meta_purchase_events SET status='pending',next_attempt=0,last_error=NULL,updated_at=CURRENT_TIMESTAMP
+                    WHERE order_id=NEW.id AND status IN ('awaiting_source','not_meta');
+                END;
             COMMIT;`).catch(async error => {
                 await exec('ROLLBACK').catch(() => {});
                 throw error;
@@ -136,6 +143,12 @@ function createMetaPurchaseSync({ db, config, tenantKey, post, now = () => Math.
                         || Math.max(Number(order.amount_paid || 0), Number(order.paid_total || 0)) <= 0) {
                         await run(`UPDATE meta_purchase_events SET status='cancelled',last_error='order_not_paid_or_cancelled',
                             updated_at=CURRENT_TIMESTAMP WHERE order_id=?`, [job.order_id]);
+                        continue;
+                    }
+                    if (order.acquisition_source !== 'meta_ads') {
+                        const unknown = !order.acquisition_source || order.acquisition_source === 'unknown';
+                        await run(`UPDATE meta_purchase_events SET status=?,last_error=?,updated_at=CURRENT_TIMESTAMP WHERE order_id=?`,
+                            [unknown ? 'awaiting_source' : 'not_meta', unknown ? 'acquisition_source_required' : 'non_meta_acquisition', job.order_id]);
                         continue;
                     }
                     if (!job.payload && (!Number.isFinite(Number(job.purchase_value)) || Number(job.purchase_value) <= 0)

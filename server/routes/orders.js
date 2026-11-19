@@ -18,6 +18,7 @@ const { normalizePlayerNumber } = require('../utils/playerNumber');
 const { chooseEffectiveOrderItems } = require('../utils/effectiveOrderItems');
 const { syncConvertedOrdersFromQuote } = require('../utils/convertedOrderSync');
 const { linkOrderConversation } = require('../services/metaMessaging');
+const { normalizeSource, resolveOrderSource } = require('../services/orderAcquisition');
 const {
     buildPortalDirectPath,
     buildPortalShareHtml,
@@ -1208,6 +1209,9 @@ router.post('/api/orders/:code/convert-to-quote', authenticateToken, authorizeRo
 });
 
 router.post('/api/orders', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes', 'designer']), upload.any(), (req, res) => {
+    let selectedSource;
+    try { selectedSource = normalizeSource(req.body.acquisition_source); }
+    catch { return res.status(400).json({ error: 'Selecione uma origem válida para o cliente.' }); }
     const { client_name, category, amount_paid, delivery_date, status, discount, allowed_sizes, allowed_models } = req.body;
     const trackingCode = generateTrackingCode();
     const portalToken = generatePortalToken();
@@ -1222,16 +1226,20 @@ router.post('/api/orders', authenticateToken, authorizeRole(['admin', 'gerente',
 
     const summary = summarizeLines(productLines, discount);
 
-    resolveOrderClientInput(req.body, (clientErr, clientInfo) => {
+    resolveOrderClientInput(req.body, async (clientErr, clientInfo) => {
         if (clientErr) return res.status(500).json({ error: clientErr.message });
+        let acquisitionSource;
+        try { acquisitionSource = await resolveOrderSource(db, clientInfo.client_phone, selectedSource); }
+        catch { return res.status(500).json({ error: 'Não foi possível identificar a origem do pedido. Tente novamente.' }); }
 
-        db.run(`INSERT INTO orders (tracking_code, portal_token, client_id, client_name, client_phone, product_type, fabric_type, category, sizes_json, total_price, amount_paid, cost_price, delivery_date, layout_path, status, board_order, discount, allowed_sizes, allowed_models, unit_price, unit_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 999999, ?, ?, ?, ?, ?)`,
+        db.run(`INSERT INTO orders (tracking_code, portal_token, client_id, client_name, client_phone, acquisition_source, product_type, fabric_type, category, sizes_json, total_price, amount_paid, cost_price, delivery_date, layout_path, status, board_order, discount, allowed_sizes, allowed_models, unit_price, unit_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 999999, ?, ?, ?, ?, ?)`,
             [
                 trackingCode,
                 portalToken,
                 clientInfo.client_id,
                 clientInfo.client_name || client_name,
                 clientInfo.client_phone,
+                acquisitionSource,
                 summary.product_type,
                 summary.fabric_type,
                 category || 'Geral',
@@ -1315,6 +1323,9 @@ router.put('/api/orders/reorder', authenticateToken, authorizeRole(['admin', 'ge
 });
 
 router.put('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes', 'designer']), upload.any(), (req, res) => {
+    let selectedSource = null;
+    try { if (req.body.acquisition_source !== undefined) selectedSource = normalizeSource(req.body.acquisition_source); }
+    catch { return res.status(400).json({ error: 'Selecione uma origem válida para o cliente.' }); }
     const { client_name, category, amount_paid, delivery_date, discount, allowed_sizes, allowed_models } = req.body;
     
     const sizesStr = typeof allowed_sizes === 'object' ? JSON.stringify(allowed_sizes) : allowed_sizes;
@@ -1327,14 +1338,18 @@ router.put('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerent
 
     const summary = summarizeLines(productLines, discount);
 
-    resolveOrderClientInput(req.body, (clientErr, clientInfo) => {
+    resolveOrderClientInput(req.body, async (clientErr, clientInfo) => {
         if (clientErr) return res.status(500).json({ error: clientErr.message });
+        let acquisitionSource = null;
+        try { if (selectedSource !== null) acquisitionSource = await resolveOrderSource(db, clientInfo.client_phone, selectedSource); }
+        catch { return res.status(500).json({ error: 'Não foi possível identificar a origem do pedido. Tente novamente.' }); }
 
-        let sql = `UPDATE orders SET client_id=?, client_name=?, client_phone=?, product_type=?, fabric_type=?, category=?, sizes_json=?, total_price=?, amount_paid=?, cost_price=?, delivery_date=?, discount=?, allowed_sizes=?, allowed_models=?, unit_price=?, unit_cost=?, layout_path=?`;
+        let sql = `UPDATE orders SET client_id=?, client_name=?, client_phone=?, acquisition_source=COALESCE(?,acquisition_source), product_type=?, fabric_type=?, category=?, sizes_json=?, total_price=?, amount_paid=?, cost_price=?, delivery_date=?, discount=?, allowed_sizes=?, allowed_models=?, unit_price=?, unit_cost=?, layout_path=?`;
         const params = [
             clientInfo.client_id,
             clientInfo.client_name || client_name,
             clientInfo.client_phone,
+            acquisitionSource,
             summary.product_type,
             summary.fabric_type,
             category || 'Geral',

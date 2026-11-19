@@ -1,6 +1,7 @@
 # Pedidos e Orçamentos
 
-- Meta: o primeiro sinal pago confirma a compra. Enviar `Purchase` com o valor total em BRL uma vez por pedido; parcelas não são novas compras e pedidos já pagos antes da ativação não são reenviados. Ver `docs/meta-purchase-on-deposit.md`.
+- Meta: só pedidos com origem `meta_ads` enviam `Purchase`, após o primeiro sinal pago, com o valor total em BRL uma vez por pedido. Indicação, cliente antigo, orgânico e loja/outros não são enviados; origem desconhecida aguarda classificação. Parcelas e pedidos históricos não geram novos envios. Ver `docs/meta-purchase-on-deposit.md`.
+- `Como o cliente chegou?` fica junto ao WhatsApp na criação/edição de pedidos, com padrão `unknown`. Escolhas explícitas são respeitadas; só um clique real e recente (últimos sete dias), de uma conversa sem ambiguidade, pode preencher a origem desconhecida automaticamente ao salvar. Telefone, sozinho, nunca prova origem de anúncio.
 
 - Preserve the numeric tracking code when an approved quote becomes an order. Never silently substitute another order number.
 - A converted quote must leave operational quote lists and must not appear as ordinary quote history.
