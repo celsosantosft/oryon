@@ -104,15 +104,21 @@ function resolveMetaCapiConfig() {
     const qualifiedLabelIds = readConfigValue(['META_QUALIFIED_LEAD_LABEL_IDS']);
     const defaultCountryCode = readConfigValue(['META_DEFAULT_COUNTRY_CODE']);
     const testEventCode = readConfigValue(['META_TEST_EVENT_CODE']);
+    const messagingDatasetId = readConfigValue(['META_MESSAGING_DATASET_ID']);
+    const whatsappBusinessAccountId = readConfigValue(['META_WHATSAPP_BUSINESS_ACCOUNT_ID']);
+    const pageId = readConfigValue(['META_PAGE_ID']);
 
     return {
         pixelId: pixelId.value,
         pixelIdSource: pixelId.source,
         accessToken: accessToken.value,
         accessTokenSource: accessToken.source,
+        messagingDatasetId: messagingDatasetId.value,
+        whatsappBusinessAccountId: whatsappBusinessAccountId.value,
+        pageId: pageId.value,
         graphVersion: normalizeGraphVersion(graphVersion.value),
         graphVersionSource: graphVersion.source || 'default',
-        qualifiedLeadEventName: eventName.value || DEFAULT_EVENT_NAME,
+        qualifiedLeadEventName: eventName.value || (messagingDatasetId.value ? 'QualifiedLead' : DEFAULT_EVENT_NAME),
         qualifiedLeadEventNameSource: eventName.source || 'default',
         qualifiedLeadLabels: splitConfigList(qualifiedLabels.value, DEFAULT_QUALIFIED_LABELS),
         qualifiedLeadLabelsSource: qualifiedLabels.source || 'default',
@@ -134,6 +140,9 @@ function getMetaCapiDiagnostics() {
         hasPixelId: Boolean(metaCapiConfig.pixelId),
         pixelIdSource: metaCapiConfig.pixelId ? metaCapiConfig.pixelIdSource : '',
         hasAccessToken: Boolean(metaCapiConfig.accessToken),
+        hasMessagingDatasetId: Boolean(metaCapiConfig.messagingDatasetId),
+        messagingConfigured: Boolean(metaCapiConfig.messagingDatasetId && metaCapiConfig.whatsappBusinessAccountId
+            && metaCapiConfig.pageId && metaCapiConfig.accessToken),
         accessTokenSource: metaCapiConfig.accessToken ? metaCapiConfig.accessTokenSource : '',
         qualifiedLeadEventName: metaCapiConfig.qualifiedLeadEventName,
         qualifiedLeadEventNameSource: metaCapiConfig.qualifiedLeadEventNameSource,

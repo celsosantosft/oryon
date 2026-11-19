@@ -22,3 +22,11 @@
 
 - Subscribe only to events consumed by Oryon. High-volume update events that produced no state changes previously saturated the shared Node/SQLite request path and delayed the ERP.
 - Keep new and sent messages, initial chat/contact sets, labels, QR code, startup and connection events enabled.
+
+## Meta conversion signals
+
+- Qualification sends a lead; the first paid deposit confirms one Purchase per order, at full order value. Never count an installment as another purchase.
+- Manual and label qualification for the same conversation share duplicate protection. Success requires Meta's event receipt; retries preserve the original payload and time.
+- WhatsApp messaging conversions require an explicitly configured WABA-linked dataset, Page and permissions. Use real click metadata from stored incoming messages when available; never manufacture ad identifiers.
+- A purchase needs an explicit, unambiguous order/conversation link and incoming message before payment to use messaging attribution. API receipt does not prove ad attribution or purchase optimization.
+- Setup and validation: `docs/meta-purchase-on-deposit.md`.

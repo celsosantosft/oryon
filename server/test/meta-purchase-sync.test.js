@@ -44,6 +44,28 @@ test('first deposit sends full order value as Purchase, not Lead or deposit amou
     assert.equal((await f.all('SELECT status FROM meta_purchase_events'))[0].status, 'sent');
 });
 
+test('messaging purchase uses only an order-linked incoming conversation before payment', async t => {
+    const f = await fixture(t);
+    Object.assign(f.config, { messagingDatasetId: 'messages', pageId: 'page', whatsappBusinessAccountId: 'waba' });
+    await f.exec(`CREATE TABLE whatsapp_conversations(id INTEGER PRIMARY KEY,phone TEXT);
+        CREATE TABLE whatsapp_conversation_orders(order_id INTEGER,conversation_id INTEGER);
+        CREATE TABLE whatsapp_messages(id INTEGER PRIMARY KEY,conversation_id INTEGER,direction TEXT,created_at TEXT,raw_payload TEXT);
+        INSERT INTO whatsapp_conversations VALUES(1,'5581999990000');
+        INSERT INTO whatsapp_conversation_orders VALUES(1,1);
+        INSERT INTO whatsapp_messages VALUES(1,1,'incoming',strftime('%Y-%m-%dT%H:%M:%SZ','now','-1 minute'),
+            '{"data":{"key":{"remoteJid":"5581999990000@s.whatsapp.net"},"message":{"contextInfo":{"externalAdReply":{"ctwaClid":"real-click-12345"}}}}}');
+        INSERT INTO whatsapp_messages VALUES(2,1,'incoming',datetime('now','+1 day'),
+            '{"data":{"key":{"remoteJid":"5581999990000@s.whatsapp.net"},"message":{"contextInfo":{"externalAdReply":{"ctwaClid":"future-click-12345"}}}}}');
+        INSERT INTO orders(id,client_id,total_price,amount_paid) VALUES(1,1,1000,200),(2,1,500,100);`);
+    await f.sync.processDue();
+    assert.equal(f.calls.length, 2);
+    assert.match(f.calls[0][0], /\/messages\/events$/);
+    assert.equal(f.calls[0][1].data[0].user_data.ctwa_clid, 'real-click-12345');
+    assert.equal(f.calls[0][1].data[0].action_source, 'business_messaging');
+    assert.match(f.calls[1][0], /\/test-pixel\/events$/);
+    assert.equal(f.calls[1][1].data[0].action_source, 'chat');
+});
+
 test('order created with deposit sends once, installments and finance reconciliation do not duplicate', async t => {
     const f = await fixture(t);
     await f.exec(`INSERT INTO orders(id,client_id,total_price,amount_paid) VALUES(1,1,1000,200);

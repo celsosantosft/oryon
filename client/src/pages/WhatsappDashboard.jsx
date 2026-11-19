@@ -177,6 +177,7 @@ function getMetaCapiFeedback(metaCapi) {
     if (metaCapi.reason === 'already_sent') return ' Evento da Meta já enviado antes.';
     if (metaCapi.reason === 'missing_config') return ' Meta sem Pixel ID ou token.';
     if (metaCapi.reason === 'missing_user_data') return ' Meta sem telefone ou e-mail válido.';
+    if (metaCapi.reason === 'expired_event_requires_review') return ' O evento antigo precisa de revisão; a data não será alterada para reenviar.';
     if (metaCapi.reason === 'label_not_qualified') return '';
     if (metaCapi.skipped) return ' Meta não enviada.';
     return ' Meta falhou; confira os logs do servidor.';
@@ -1090,6 +1091,11 @@ const WhatsappDashboard = () => {
                             ) : null}
                             <p className={`mt-2 text-xs font-bold ${metaInfo?.hasPixelId && metaInfo?.hasAccessToken ? 'text-emerald-700' : 'text-red-700'}`}>
                                 {metaInfo?.hasPixelId && metaInfo?.hasAccessToken ? 'Pixel e token carregados' : 'Pixel ID ou token ausente'}
+                            </p>
+                            <p className="mt-2 text-xs text-slate-600">
+                                {metaInfo?.messagingConfigured
+                                    ? 'Configuração de conversões do WhatsApp carregada. Valide o recebimento no Gerenciador de Eventos.'
+                                    : 'Conversões específicas do WhatsApp ainda não configuradas. O envio atual não comprova atribuição ao anúncio.'}
                             </p>
                         </div>
                         <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">

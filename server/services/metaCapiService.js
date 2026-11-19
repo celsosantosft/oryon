@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const db = require('../database');
 const { metaCapiConfig, getMetaCapiDiagnostics } = require('../config/metaCapi');
 const { appConfig } = require('../config/appConfig');
+const { findConversationClick, applyMessaging, datasetFor } = require('./metaMessaging');
 
 const META_CAPI_TIMEOUT_MS = 12000;
 
@@ -146,7 +147,7 @@ function normalizePhone(phone) {
     let digits = String(phone || '').replace(/\D/g, '').replace(/^0+/, '');
 
     if (!digits) return '';
-    if (!digits.startsWith(countryCode) && digits.length <= 11) {
+    if ([10, 11].includes(digits.length)) {
         digits = `${countryCode}${digits}`;
     }
 
@@ -180,25 +181,23 @@ function summarizeMetaError(error) {
     return {
         status: error.response?.status || null,
         code: error.code || '',
-        message: error.response?.data?.error?.message || error.message,
-        type: error.response?.data?.error?.type || '',
-        fbtrace_id: error.response?.data?.error?.fbtrace_id || error.response?.data?.fbtrace_id || '',
-        data: error.response?.data || null
+        meta_code: error.response?.data?.error?.code || null,
+        message: ['meta_did_not_confirm_receipt', 'expired_event_requires_review', 'missing_messaging_config'].includes(error.message)
+            ? error.message : 'meta_request_failed'
     };
 }
 
-async function findSuccessfulEvent(source, eventName, sourceId) {
+async function findEventAttempt(source, eventName, sourceId, conversationId) {
     await ensureMetaCapiTables();
 
     return dbGet(
-        `SELECT id, event_id, response_payload
+        `SELECT id, event_id, event_time, request_payload, status, response_payload
          FROM meta_capi_events
-         WHERE source = ?
-           AND event_name = ?
-           AND source_id = ?
-           AND status = 'sent'
+         WHERE event_name = ? AND ((source = ? AND source_id = ?)
+           OR (conversation_id = ? AND source IN ('whatsapp', 'whatsapp_manual')))
+         ORDER BY (status = 'sent') DESC, (request_payload IS NOT NULL) DESC, id ASC
          LIMIT 1`,
-        [source, eventName, sourceId]
+        [eventName, source, sourceId, conversationId || null]
     );
 }
 
@@ -274,20 +273,33 @@ function buildSkippedResult(reason) {
     };
 }
 
-async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
+async function sendQualifiedLeadAttempt(leadData = {}, options = {}) {
     const eventName = options.eventName || metaCapiConfig.qualifiedLeadEventName;
     const source = options.source || 'whatsapp';
     const sourceId = String(options.sourceId || leadData.leadId || leadData.phone || leadData.email || '').trim();
     const normalizedEmail = normalizeEmail(leadData.email);
     const normalizedPhone = normalizePhone(leadData.phone);
-    const emailHash = normalizedEmail ? sha256(normalizedEmail) : '';
-    const phoneHash = normalizedPhone ? sha256(normalizedPhone) : '';
-    const eventTime = Math.floor(Date.now() / 1000);
-    const eventId = options.eventId || `${source}:${sourceId}:${normalizeComparable(eventName)}`;
+    const emailHash = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) ? sha256(normalizedEmail) : '';
+    const phoneHash = /^\d{10,15}$/.test(normalizedPhone) ? sha256(normalizedPhone) : '';
     const testEventCode = String(process.env.META_TEST_EVENT_CODE || metaCapiConfig.testEventCode || '').trim();
 
     if (!sourceId) {
         return buildSkippedResult('missing_source_id');
+    }
+
+    const previous = await findEventAttempt(source, eventName, sourceId, options.conversationId);
+    if (previous?.status === 'sent' && options.skipDuplicates !== false) {
+        return { ...buildSkippedResult('already_sent'), event_id: previous.event_id };
+    }
+    // Preserve the exact event across retries, including older payloads that used a timestamp ID.
+    const savedPayload = previous?.request_payload ? JSON.parse(previous.request_payload) : null;
+    const eventTime = savedPayload?.data?.[0]?.event_time || previous?.event_time || Math.floor(Date.now() / 1000);
+    const eventId = savedPayload?.data?.[0]?.event_id
+        || (['whatsapp', 'whatsapp_manual'].includes(source)
+            ? `${appConfig.tenantKey}:whatsapp:${options.conversationId || sha256(sourceId)}:${normalizeComparable(eventName)}`
+            : options.eventId || `${appConfig.tenantKey}:${source}:${sha256(sourceId)}:${normalizeComparable(eventName)}`);
+    if (previous && Math.floor(Date.now() / 1000) - eventTime >= 7 * 86400) {
+        return buildSkippedResult('expired_event_requires_review');
     }
 
     if (!emailHash && !phoneHash) {
@@ -307,7 +319,7 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
         return buildSkippedResult('missing_user_data');
     }
 
-    if (!metaCapiConfig.pixelId || !metaCapiConfig.accessToken) {
+    if (!(metaCapiConfig.pixelId || metaCapiConfig.messagingDatasetId) || !metaCapiConfig.accessToken) {
         await upsertEventAttempt({
             source,
             sourceId,
@@ -327,30 +339,17 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
         return buildSkippedResult('missing_config');
     }
 
-    if (options.skipDuplicates !== false) {
-        const existingEvent = await findSuccessfulEvent(source, eventName, sourceId);
-        if (existingEvent) {
-            return {
-                sent: false,
-                skipped: true,
-                reason: 'already_sent',
-                event_id: existingEvent.event_id,
-                config: getMetaCapiDiagnostics()
-            };
-        }
-    }
-
     const userData = {};
     if (emailHash) userData.em = [emailHash];
     if (phoneHash) userData.ph = [phoneHash];
 
-    const payload = {
+    const payload = savedPayload || {
         data: [
             {
                 event_name: eventName,
                 event_time: eventTime,
                 action_source: 'system_generated',
-                event_id: `${eventId}:${Date.now()}`,
+                event_id: eventId,
                 custom_data: {
                     event_source: 'crm',
                     lead_event_source: appConfig.metaLeadSource,
@@ -362,8 +361,13 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
         ]
     };
 
-    if (testEventCode) {
+    if (testEventCode && !savedPayload) {
         payload.test_event_code = testEventCode;
+    }
+    if (!savedPayload && metaCapiConfig.messagingDatasetId) {
+        const clickId = options.conversationId
+            ? await findConversationClick(db, options.conversationId, normalizedPhone, eventTime) : '';
+        applyMessaging(payload.data[0], metaCapiConfig, clickId);
     }
 
     await upsertEventAttempt({
@@ -381,9 +385,8 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
         status: 'pending'
     });
 
-    const url = `https://graph.facebook.com/${metaCapiConfig.graphVersion}/${metaCapiConfig.pixelId}/events`;
-
     try {
+        const url = `https://graph.facebook.com/${metaCapiConfig.graphVersion}/${datasetFor(payload, metaCapiConfig)}/events`;
         const response = await axios.post(url, payload, {
             timeout: META_CAPI_TIMEOUT_MS,
             params: {
@@ -395,6 +398,9 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
         });
 
         const metaResponse = summarizeMetaResponse(response.data);
+        if (Number(metaResponse?.events_received) !== 1) {
+            throw new Error('meta_did_not_confirm_receipt');
+        }
         await updateEventResult(source, eventName, sourceId, 'sent', metaResponse);
         console.log(`Meta CAPI: evento "${eventName}" enviado com sucesso.`, metaResponse);
 
@@ -420,6 +426,18 @@ async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
         };
         throw wrappedError;
     }
+}
+
+const leadSends = new Map();
+async function sendQualifiedLeadEvent(leadData = {}, options = {}) {
+    // One Node process owns this SQLite installation; serialize manual/label sends for the same lead.
+    const key = `${options.eventName || metaCapiConfig.qualifiedLeadEventName}:${options.conversationId
+        || normalizePhone(leadData.phone) || normalizeEmail(leadData.email) || options.sourceId || leadData.leadId}`;
+    const preceding = leadSends.get(key) || Promise.resolve();
+    const pending = preceding.catch(() => {}).then(() => sendQualifiedLeadAttempt(leadData, options));
+    leadSends.set(key, pending);
+    try { return await pending; }
+    finally { if (leadSends.get(key) === pending) leadSends.delete(key); }
 }
 
 module.exports = {

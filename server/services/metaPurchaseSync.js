@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { findConversationClick, applyMessaging, datasetFor } = require('./metaMessaging');
 
 // Durable outbox: payment and queue entry commit (or roll back) together.
 // One purchase per order, never one purchase per installment or per phone.
@@ -142,10 +143,23 @@ function createMetaPurchaseSync({ db, config, tenantKey, post, now = () => Math.
                         await run('UPDATE meta_purchase_events SET purchase_value=? WHERE order_id=?', [job.purchase_value, job.order_id]);
                     }
                     const payload = job.payload ? JSON.parse(job.payload) : buildPayload(job, order);
+                    if (!job.payload && config.messagingDatasetId) {
+                        // Use an explicit order/conversation link, never infer an ad sale from a phone alone.
+                        const conversations = await all(`SELECT c.id,c.phone FROM whatsapp_conversations c
+                            JOIN whatsapp_conversation_orders co ON co.conversation_id=c.id
+                            WHERE co.order_id=? AND EXISTS (SELECT 1 FROM whatsapp_messages m
+                                WHERE m.conversation_id=c.id AND m.direction='incoming'
+                                    AND datetime(m.created_at) <= datetime(?, 'unixepoch'))`, [job.order_id, job.event_time]);
+                        if (conversations.length === 1) {
+                            const conversation = conversations[0];
+                            const clickId = await findConversationClick(db, conversation.id, conversation.phone, job.event_time);
+                            applyMessaging(payload.data[0], config, clickId);
+                        }
+                    }
                     // Freeze payload before HTTP: retry cannot become a different conversion.
                     await run('UPDATE meta_purchase_events SET payload=? WHERE order_id=?', [JSON.stringify(payload), job.order_id]);
                     const response = await post(
-                        `https://graph.facebook.com/${config.graphVersion}/${config.pixelId}/events`, payload,
+                        `https://graph.facebook.com/${config.graphVersion}/${datasetFor(payload, config)}/events`, payload,
                         { timeout: 12000, params: { access_token: config.accessToken } }
                     );
                     if (Number(response.data?.events_received) !== 1) throw new Error('meta_did_not_confirm_receipt');
@@ -156,7 +170,7 @@ function createMetaPurchaseSync({ db, config, tenantKey, post, now = () => Math.
                     // Do not persist axios errors: they contain the access token and user data.
                     const code = error.response?.data?.error?.code;
                     const reason = code ? `meta_error_${code}` :
-                        ['missing_customer_phone_or_email','invalid_purchase_value','expired_event_requires_review','meta_did_not_confirm_receipt']
+                        ['missing_customer_phone_or_email','invalid_purchase_value','expired_event_requires_review','meta_did_not_confirm_receipt','missing_messaging_config']
                             .includes(error.message) ? error.message : 'meta_request_failed';
                     const expired = now() - job.event_time >= 7 * 86400;
                     await run(`UPDATE meta_purchase_events SET status=?,last_error=?,next_attempt=?,
@@ -172,6 +186,7 @@ function createMetaPurchaseSync({ db, config, tenantKey, post, now = () => Math.
         return {
             configured: Boolean(config.pixelId && config.accessToken),
             test_mode: Boolean(config.testEventCode),
+            messaging_configured: Boolean(config.messagingDatasetId && config.whatsappBusinessAccountId && config.pageId),
             event: 'Purchase', trigger: 'first_deposit', currency: 'BRL',
             counts: await all('SELECT status,COUNT(*) total FROM meta_purchase_events GROUP BY status'),
             recent: await all(`SELECT order_id,status,purchase_value,event_time,attempts,last_error,updated_at

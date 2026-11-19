@@ -32,8 +32,8 @@ O painel WhatsApp mostra compras e estados de envio. A consulta autenticada
 `GET /api/whatsapp/meta/purchases` usa os cargos autorizados do módulo e não
 expõe token, hashes ou contatos. Excluir o histórico de leads não apaga compras.
 
-O evento usa `action_source: chat`. Não inventa `ctwa_clid`, WABA ou outros
-identificadores de anúncio ausentes na integração atual. Aceitação pela API
+Sem configuração de mensagens, o evento usa `action_source: chat`. Não inventa
+`ctwa_clid`, WABA ou outros identificadores de anúncio. Aceitação pela API
 não comprova atribuição nem habilita, por si só, otimização para compras em
 campanhas de mensagens. É necessário validar separadamente a vinculação do
 conjunto de dados e as opções de otimização disponíveis na conta.
@@ -44,3 +44,33 @@ no Gerenciador de Eventos, sem vendas fictícias nem reenvio de setembro.
 
 Testes: `node --test test/meta-purchase-sync.test.js test/meta-purchase-startup.test.js`
 no diretório `server`; compilação do cliente via Vite.
+
+## Conversões de WhatsApp (ativação explícita)
+
+Configure no servidor `META_MESSAGING_DATASET_ID` (dataset vinculado à WABA),
+`META_WHATSAPP_BUSINESS_ACCOUNT_ID`, `META_PAGE_ID` e um token com as permissões
+de eventos de WhatsApp. Use `META_QUALIFIED_LEAD_EVENT_NAME=QualifiedLead`.
+Não substitua esses IDs pelo número de telefone nem reutilize um pixel sem
+validar sua vinculação no Gerenciador de Eventos. Mantenha `META_PIXEL_ID` para
+compras do ERP sem origem de mensagens comprovada.
+
+Leads usam a conversa identificada. Compras só usam `business_messaging` quando
+o pedido está vinculado a uma única conversa com mensagem recebida antes do
+pagamento. Sem esse vínculo, preservam o envio anterior de compras do ERP.
+O código consulta o payload já armazenado e usa o `ctwa_clid` real quando existir,
+ignorando mensagens de outros contatos, mensagens enviadas e conteúdo citado.
+Sem clique, envia hashes de contato com `page_id` e WABA, conforme o caminho
+de correspondência por contato da Meta. Correspondência não é garantida e tem
+restrições de país e janela; nunca é apresentada como atribuição confirmada.
+
+Eventos congelados antes da ativação não são convertidos para outro tipo de
+evento no reenvio. Não reenvie o histórico para tentar alimentar a campanha.
+Uma credencial carregada não comprova autorização: valide um próximo evento
+real no dataset correto e verifique diagnósticos e atribuição separadamente.
+
+Leads agora exigem `events_received=1`, preservam ID, horário e payload em
+tentativas seguintes e suprimem duplicação entre etiqueta e envio manual da
+mesma conversa. Eventos antigos não recebem uma data falsa para reenvio.
+Erros não retornam o payload bruto da Meta nem credenciais.
+
+Referência: https://developers.facebook.com/documentation/ads-commerce/conversions-api/business-messaging

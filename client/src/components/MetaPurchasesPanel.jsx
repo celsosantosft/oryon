@@ -33,6 +33,7 @@ export default function MetaPurchasesPanel({ apiBaseUrl, authConfig }) {
             {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
             {data && !data.configured && <p role="alert" className="mt-2 text-sm text-amber-800">Envio aguardando configuração do Pixel e token da Meta.</p>}
             {data?.test_mode && <p role="alert" className="mt-2 text-sm text-amber-800">Modo de teste ativo: os envios usam o código de teste da Meta.</p>}
+            {data && !data.messaging_configured && <p className="mt-2 text-sm text-amber-800">A integração de conversões do WhatsApp ainda não foi configurada. Compras do ERP e atribuição ao anúncio são verificações diferentes.</p>}
             {!data && !error && <p className="mt-2 text-sm text-slate-500">Consultando envios…</p>}
             {data && !data.recent.length && <p className="mt-2 text-sm text-slate-500">Nenhuma nova compra registrada para envio.</p>}
             {Boolean(data?.recent.length) && <div className="mt-3 max-h-44 overflow-auto">
