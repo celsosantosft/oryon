@@ -4,6 +4,11 @@ import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 import Swal from 'sweetalert2';
 import { appConfig } from '../config/appConfig';
+import {
+    formatCurrencyInput,
+    formatCurrencyValueInput,
+    parseCurrencyInput
+} from '../utils/currencyInput';
 
 const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const ORDER_CODE_PATTERN = new RegExp(`(#${escapeRegExp(appConfig.orderPrefix)}-\\d+)`, 'i');
@@ -126,7 +131,7 @@ const FinanceTransactions = () => {
                 description: formData.description.trim(),
                 type: formData.type,
                 status: formData.status,
-                amount: formData.amount,
+                amount: parseCurrencyInput(formData.amount),
                 due_date: formData.due_date,
                 chart_of_account_id: formData.chart_of_account_id || '',
                 cost_center_id: formData.cost_center_id || ''
@@ -173,7 +178,7 @@ const FinanceTransactions = () => {
                     <div style="font-size:0.9rem; color:#475569;">
                         Valor pendente: <strong>R$ ${pendingAmount.toFixed(2)}</strong>
                     </div>
-                    <input id="swal-paid-amount" class="swal2-input" type="number" step="0.01" min="0.01" max="${pendingAmount.toFixed(2)}" value="${pendingAmount.toFixed(2)}" placeholder="Valor da baixa">
+                    <input id="swal-paid-amount" class="swal2-input" type="text" inputmode="decimal" value="${formatCurrencyValueInput(pendingAmount)}" placeholder="Valor da baixa">
                     <input id="swal-payment-date" class="swal2-input" type="date" value="${today}">
                     <input id="swal-payment-method" class="swal2-input" type="text" value="Dinheiro/PIX" placeholder="Forma de pagamento">
                 </div>
@@ -182,8 +187,14 @@ const FinanceTransactions = () => {
             confirmButtonText: 'Confirmar baixa',
             cancelButtonText: 'Cancelar',
             focusConfirm: false,
+            didOpen: () => {
+                const amountInput = document.getElementById('swal-paid-amount');
+                amountInput?.addEventListener('input', (event) => {
+                    event.target.value = formatCurrencyInput(event.target.value);
+                });
+            },
             preConfirm: () => {
-                const paidAmount = parseFloat(document.getElementById('swal-paid-amount')?.value || '');
+                const paidAmount = parseCurrencyInput(document.getElementById('swal-paid-amount')?.value || '');
                 const paymentDate = document.getElementById('swal-payment-date')?.value || '';
                 const paymentMethod = (document.getElementById('swal-payment-method')?.value || '').trim();
 
@@ -767,7 +778,16 @@ const FinanceTransactions = () => {
                         </div>
                         <div style={styles.formGroup}>
                             <label style={styles.label}>Valor (R$) *</label>
-                            <input className="premium-input" type="number" step="0.01" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} style={styles.input} required />
+                            <input
+                                className="premium-input"
+                                type="text"
+                                inputMode="decimal"
+                                value={formData.amount}
+                                onChange={e => setFormData({...formData, amount: formatCurrencyInput(e.target.value)})}
+                                style={styles.input}
+                                placeholder="0,00"
+                                required
+                            />
                         </div>
                     </div>
                     
