@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import '../styles/OrdersPreview.css';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useSyncExternalStore } from 'react';
 import axios from 'axios';
 import { useLocation } from 'react-router-dom';
 import Swal from 'sweetalert2'; 
 import { useAuth } from '../context/AuthContext';
+import { appConfig } from '../config/appConfig';
 import Modal from '../components/Modal';
 import { printOrder as printQuote } from '../utils/printUtils';
 import { compressImageSafe } from '../utils/helpers';
 import { getVisibleQuoteStatuses, isQuoteVisibleInBoard } from '../utils/quoteFilters';
+import { normalizeGradeSize, sortGradeItems } from '../utils/cuttingGrouping';
 import {
     PRINTING_TYPE_PRESETS,
     buildProductionLabel,
@@ -145,18 +148,33 @@ export const QuoteService = {
 // ============================================================================
 // --- HOOKS CUSTOMIZADOS ---
 // ============================================================================
-const useQuotes = (API_BASE_URL, token) => {
+const useQuotes = (API_BASE_URL, token, preview) => {
     const [state, setState] = useState({ quotes: [], dbProducts: [], dbFabrics: [], dbClients: [], loading: true, error: null });
 
     const fetchAllData = useCallback(async () => {
         setState(prev => ({ ...prev, loading: true, error: null }));
         try {
-            const [quotesRes, prodRes, fabRes, cliRes] = await Promise.all([
+            const requests = [
                 QuoteService.fetchQuotes(API_BASE_URL, token),
                 QuoteService.fetchProducts(API_BASE_URL, token),
                 QuoteService.fetchFabrics(API_BASE_URL, token),
                 QuoteService.fetchClients(API_BASE_URL, token)
-            ]);
+            ];
+            if (preview) {
+                const [list, products, fabrics, clients] = await Promise.allSettled(requests);
+                setState(prev => ({
+                    ...prev,
+                    quotes: list.status === 'fulfilled' ? list.value.data.quotes || [] : prev.quotes,
+                    dbProducts: products.value?.data.products || prev.dbProducts,
+                    dbFabrics: fabrics.value?.data.fabrics || prev.dbFabrics,
+                    dbClients: clients.value?.data.clients || prev.dbClients,
+                    loading: false,
+                    error: list.status === 'rejected' ? 'Não foi possível carregar os orçamentos.' : null,
+                    auxiliaryError: [products, fabrics, clients].some(result => result.status === 'rejected')
+                }));
+                return;
+            }
+            const [quotesRes, prodRes, fabRes, cliRes] = await Promise.all(requests);
             setState({
                 quotes: quotesRes.data.quotes || [],
                 dbProducts: prodRes.data.products || [],
@@ -167,7 +185,7 @@ const useQuotes = (API_BASE_URL, token) => {
         } catch (err) {
             setState(prev => ({ ...prev, loading: false, error: 'Erro ao carregar dados. Verifique sua conexão.' }));
         }
-    }, [API_BASE_URL, token]);
+    }, [API_BASE_URL, token, preview]);
 
     useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
@@ -190,7 +208,7 @@ const useQuotes = (API_BASE_URL, token) => {
         await refreshQuotes();
     }, [API_BASE_URL, token, refreshQuotes]);
 
-    return { ...state, refreshQuotes, quickAddClient, removeQuotes };
+    return { ...state, retry: fetchAllData, refreshQuotes, quickAddClient, removeQuotes };
 };
 
 // ============================================================================
@@ -390,7 +408,7 @@ const ProductLineEditor = ({
     };
 
     return (
-        <div style={styles.productLineCard}>
+        <div className="orders-product" style={styles.productLineCard}>
             <div style={styles.productLineHeader}>
                 <div>
                     <h4 style={styles.productLineTitle}>Produto {index + 1}</h4>
@@ -410,7 +428,7 @@ const ProductLineEditor = ({
                 )}
             </div>
 
-            <div style={styles.productLineFields}>
+            <div className="orders-product-fields" style={styles.productLineFields}>
                 <div style={styles.formGroup}>
                     <label style={styles.label}>Produto</label>
                     <select className="premium-input" value={line.product_type} onChange={(event) => onProductSelect(line.line_key, event.target.value)} style={styles.select}>
@@ -533,7 +551,7 @@ const ProductLineEditor = ({
     );
 };
 
-const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, auxData, onQuickClientAdd, onRefresh }) => {
+const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, auxData, onQuickClientAdd, onRefresh, preview }) => {
     const isEditMode = !!quoteToEdit;
     const initialState = {
         client_name: '',
@@ -731,7 +749,7 @@ const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, aux
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={isEditMode ? 'Editar Orçamento' : 'Novo Orçamento'}>
+        <Modal manageFocus={preview} isOpen={isOpen} onClose={onClose} title={isEditMode ? 'Editar Orçamento' : 'Novo Orçamento'}>
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px' }}>Informações Básicas</h4>
@@ -820,8 +838,8 @@ const QuoteFormModal = ({ isOpen, onClose, quoteToEdit, API_BASE_URL, token, aux
 // ============================================================================
 // --- OUTROS MODAIS E TABELA ---
 // ============================================================================
-const StatusModal = ({ isOpen, onClose, quoteToUpdate, onUpdateStatus }) => (
-    <Modal isOpen={isOpen} onClose={onClose} title="Atualizar Status">
+const StatusModal = ({ isOpen, onClose, quoteToUpdate, onUpdateStatus, preview }) => (
+    <Modal manageFocus={preview} isOpen={isOpen} onClose={onClose} title="Atualizar Status">
         <div style={{ padding: '8px 0' }}>
             <div style={styles.buttonsGrid}>
                 {QUOTE_CONSTANTS.STATUS_OPTIONS.map(status => { 
@@ -856,8 +874,40 @@ const QuoteItemsSummary = ({ items = [] }) => {
     );
 };
 
-const QuoteDetailsModal = ({ isOpen, onClose, quote, onReset, onUnlockClient, onApproveToOrder, API_BASE_URL, userRole }) => (
-    <Modal isOpen={isOpen} onClose={onClose} title="Detalhes do Orçamento">
+const QuoteSizeGroups = ({ sizes, itemIndex }) => {
+    const mergedSizes = Object.entries(sizes || {}).reduce((totals, [size, quantity]) => {
+        const normalizedSize = normalizeGradeSize(size);
+        totals.set(normalizedSize, (totals.get(normalizedSize) || 0) + (Number(quantity) || 0));
+        return totals;
+    }, new Map());
+    const orderedSizes = sortGradeItems(
+        [...mergedSizes].map(([tamanho, quantidade]) => ({ tamanho, quantidade }))
+    ).filter(({ quantidade }) => quantidade > 0);
+    const groups = [
+        { label: 'Infantil', items: orderedSizes.filter(({ tamanho }) => /^\d{1,2} ANOS$/.test(tamanho)) },
+        { label: 'Adulto', items: orderedSizes.filter(({ tamanho }) => !/^\d{1,2} ANOS$/.test(tamanho)) }
+    ].filter(({ items }) => items.length > 0);
+
+    return (
+        <div style={{ display: 'grid', gap: '10px', marginBottom: '12px' }}>
+            {groups.map(({ label, items }) => (
+                <div key={label}>
+                    <span style={{ display: 'block', marginBottom: '6px', color: '#64748B', fontSize: '0.72rem', fontWeight: '800', textTransform: 'uppercase' }}>{label}</span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {items.map(({ tamanho, quantidade }) => (
+                            <span key={`${itemIndex}-${tamanho}`} style={{ padding: '6px 12px', backgroundColor: '#f1f5f9', borderRadius: '6px', fontSize: '0.85rem', border: '1px solid #e2e8f0', color: '#0F172A' }}>
+                                <b>{tamanho}:</b> {quantidade}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+const QuoteDetailsModal = ({ isOpen, onClose, quote, onReset, onUnlockClient, onApproveToOrder, API_BASE_URL, userRole, preview }) => (
+    <Modal manageFocus={preview} isOpen={isOpen} onClose={onClose} title="Detalhes do Orçamento">
         {quote ? (
             <div style={styles.detailsContainer}>
                 <h4 style={{fontSize:'1.1rem', fontWeight:'700', marginBottom:'15px'}}>{quote.client_name} - {quote.tracking_code}</h4>
@@ -893,9 +943,7 @@ const QuoteDetailsModal = ({ isOpen, onClose, quote, onReset, onUnlockClient, on
                                     </div>
                                 ) : null}
 
-                                <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom: line.layout_path ? '12px' : 0 }}>
-                                    {Object.entries(line.sizes_json || {}).map(([key, val]) => (val > 0 && <span key={`${index}-${key}`} style={{padding:'6px 12px', backgroundColor:'#f1f5f9', borderRadius:'6px', fontSize:'0.85rem', border:'1px solid #e2e8f0', color: '#0F172A'}}><b>{key}:</b> {val}</span>))}
-                                </div>
+                                <QuoteSizeGroups sizes={line.sizes_json} itemIndex={index} />
 
                                 {line.production_notes ? (
                                     <div style={styles.detailNoteBox}>
@@ -931,9 +979,7 @@ const QuoteDetailsModal = ({ isOpen, onClose, quote, onReset, onUnlockClient, on
                 {!Array.isArray(quote.product_lines) || quote.product_lines.length === 0 ? (
                     <div style={{marginBottom:'20px'}}>
                         <p style={{fontWeight:'600', marginBottom:'5px', color: '#475569', fontSize: '0.85rem', textTransform: 'uppercase'}}>Grade de Tamanhos:</p>
-                        <div style={{display:'flex', flexWrap:'wrap', gap:'6px'}}>
-                            {Object.entries(quote.sizes_json).map(([key, val]) => (val > 0 && <span key={key} style={{padding:'6px 12px', backgroundColor:'#f1f5f9', borderRadius:'6px', fontSize:'0.85rem', border:'1px solid #e2e8f0', color: '#0F172A'}}><b>{key}:</b> {val}</span>))}
-                        </div>
+                        <QuoteSizeGroups sizes={quote.sizes_json} itemIndex="quote" />
                     </div>
                 ) : null}
 
@@ -996,18 +1042,96 @@ const QuoteDetailsModal = ({ isOpen, onClose, quote, onReset, onUnlockClient, on
     </Modal>
 );
 
-// ⭐ OTIMIZAÇÃO: Linha Isolada para Prevenir Renderização da Tabela Inteira no Hover ⭐
-const QuoteRow = React.memo(({ quote, isSelected, onCheckboxChange, onView, onEdit, onPrint, onStatusClick, onApproveToOrder, userRole }) => {
+const getQuoteDeadline = (quote) => {
+    const date = parseDateSafe(quote.delivery_date);
+    if (!date || Number.isNaN(date.getTime())) return { label: 'Sem previsão' };
+
+    const label = formatDateSafe(quote.delivery_date);
+    if (['Aprovado', 'Recusado', 'Cancelado'].includes(quote.status)) return { label };
+
+    const today = new Date();
+    date.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    const days = Math.round((date - today) / 86400000);
+    if (days < 0) return { label, note: 'Previsão vencida', tone: 'danger' };
+    if (days === 0) return { label, note: 'Vence hoje', tone: 'danger' };
+    if (days === 1) return { label, note: 'Vence amanhã', tone: 'warning' };
+    return { label };
+};
+
+const getQuotePieceCount = (quote) => {
+    const grades = Array.isArray(quote.product_lines) && quote.product_lines.length > 0
+        ? quote.product_lines.map((line) => line.sizes_json)
+        : [quote.sizes_json];
+    return grades.reduce((total, rawSizes) => {
+        let sizes = rawSizes;
+        if (typeof rawSizes === 'string') {
+            try { sizes = JSON.parse(rawSizes); } catch { sizes = {}; }
+        }
+        return total + Object.values(sizes || {})
+            .reduce((sum, quantity) => sum + (Number(quantity) || 0), 0);
+    }, 0);
+};
+
+const QuoteRow = React.memo(({ quote, isSelected, onCheckboxChange, onView, onEdit, onPrint, onStatusClick, onApproveToOrder, userRole, preview, editDisabled }) => {
     const [isHovered, setIsHovered] = useState(false);
+    const canEdit = userRole === 'admin' || userRole === 'gerente';
+    const selection = <label className={preview ? 'orders-select-target' : undefined}><input type="checkbox" aria-label={`Selecionar orçamento ${quote.tracking_code}`} checked={isSelected} onChange={() => onCheckboxChange(quote.id)} style={styles.checkbox} /></label>;
+    const viewQuote = () => onView(quote.tracking_code);
+
+    if (preview) {
+        const deadline = getQuoteDeadline(quote);
+        const statusStyle = getStatusStyle(quote.status);
+        const pieces = getQuotePieceCount(quote);
+
+        return (
+            <tr role="row" className="orders-preview-row quotes-preview-row">
+                <td role="cell" className="orders-card-select">{selection}</td>
+                <td role="cell" className="orders-card-client">
+                    <strong title={quote.client_name}>{quote.client_name}</strong>
+                    <span>{quote.tracking_code}</span>
+                </td>
+                <td role="cell" className="orders-card-status">
+                    <button type="button" className="orders-status" aria-label={`Alterar status de ${quote.tracking_code}: ${quote.status}`} onClick={() => onStatusClick(quote)}>
+                        <span style={{ backgroundColor: statusStyle.bg, color: statusStyle.color, border: statusStyle.border }}>
+                            {quote.status}
+                        </span>
+                    </button>
+                </td>
+                <td role="cell" className="orders-card-deadline" data-tone={deadline.tone}>
+                    <span>Previsão</span>
+                    <strong>{deadline.label}</strong>
+                    {deadline.note && <span className="orders-card-deadline-note">{deadline.note}</span>}
+                </td>
+                <td role="cell" className="orders-card-financial quotes-card-summary">
+                    <dl>
+                        <div className="orders-card-balance"><dt>Total</dt><dd>{formatMoney(quote.total_price)}</dd></div>
+                        <div><dt>Quantidade</dt><dd>{pieces} peça(s)</dd></div>
+                    </dl>
+                </td>
+                <td role="cell" className="orders-card-art" data-attached={Boolean(quote.layout_path)}>
+                    {quote.layout_path ? <><span aria-hidden="true">{Icons.Image}</span>Arte anexada</> : 'Sem arte anexada'}
+                </td>
+                <td role="cell" className="orders-card-actions quotes-card-actions">
+                    <div>
+                        <button type="button" onClick={viewQuote}><span aria-hidden="true">{Icons.Eye}</span>Visualizar</button>
+                        {canConvertQuoteToOrder(quote) && <button type="button" className="quotes-card-convert" onClick={() => onApproveToOrder(quote)}><span aria-hidden="true">{Icons.Check}</span>{quote.status === 'Aprovado' ? 'Gerar pedido' : 'Aprovar'}</button>}
+                        {canEdit && <button type="button" disabled={editDisabled} onClick={() => onEdit(quote)}><span aria-hidden="true">{Icons.Edit}</span>Editar</button>}
+                        <button type="button" onClick={() => onPrint(quote)}><span aria-hidden="true">{Icons.Printer}</span>Imprimir</button>
+                    </div>
+                </td>
+            </tr>
+        );
+    }
 
     return (
-        <tr 
-            onClick={() => onView(quote.tracking_code)} 
-            onMouseEnter={() => setIsHovered(true)} 
-            onMouseLeave={() => setIsHovered(false)} 
+        <tr
+            onClick={viewQuote}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
             style={{ ...styles.tr, ...(isHovered ? styles.trHover : {}), cursor: 'pointer' }}
         >
-            <td style={styles.td} onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Selecionar orçamento ${quote.tracking_code}`} checked={isSelected} onChange={() => onCheckboxChange(quote.id)} style={styles.checkbox} /></td>
+            <td style={styles.td} onClick={(e) => e.stopPropagation()}>{selection}</td>
             <td style={{ ...styles.td, fontWeight: '600' }}>{quote.client_name}</td>
             <td style={styles.td}>{quote.tracking_code}</td>
             <td style={styles.td}>{quote.layout_path ? <span style={{color:'#2563EB', display:'flex', alignItems:'center', gap:'4px', fontWeight:'600', fontSize:'0.8rem'}}>{Icons.Image} Anexado</span> : <span style={{color:'#94A3B8'}}>-</span>}</td>
@@ -1026,8 +1150,8 @@ const QuoteRow = React.memo(({ quote, isSelected, onCheckboxChange, onView, onEd
                             {Icons.Check}
                         </button>
                     )}
-                    <button onClick={() => onView(quote.tracking_code)} aria-label="Ver Detalhes" style={styles.iconButton} title="Detalhes">{Icons.Eye}</button>
-                    {(userRole === 'admin' || userRole === 'gerente') && <button onClick={() => onEdit(quote)} aria-label="Editar" style={styles.iconButton} title="Editar">{Icons.Edit}</button>}
+                    <button onClick={viewQuote} aria-label="Ver Detalhes" style={styles.iconButton} title="Detalhes">{Icons.Eye}</button>
+                    {canEdit && <button onClick={() => onEdit(quote)} aria-label="Editar" style={styles.iconButton} title="Editar">{Icons.Edit}</button>}
                     <button onClick={() => onPrint(quote)} aria-label="Imprimir" style={styles.iconButton} title="Imprimir Orçamento">{Icons.Printer}</button>
                 </div>
             </td>
@@ -1035,18 +1159,24 @@ const QuoteRow = React.memo(({ quote, isSelected, onCheckboxChange, onView, onEd
     );
 });
 
-const QuotesTable = React.memo(({ quotes, selectedIds, onCheckboxChange, onView, onEdit, onPrint, onStatusClick, onApproveToOrder, userRole }) => {
+const QuotesTable = React.memo(({ quotes, selectedIds, onCheckboxChange, onView, onEdit, onPrint, onStatusClick, onApproveToOrder, userRole, preview, editDisabled }) => {
     if (quotes.length === 0) return <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', border: '1px solid #e2e8f0', borderRadius: '12px', backgroundColor: 'white' }}>Nenhum orçamento encontrado.</div>;
 
     return (
-        <div style={styles.tableContainer}>
-            <table style={styles.table} aria-label="Tabela de Orçamentos">
-                <thead>
-                    <tr>
+        <div className={preview ? 'orders-results' : undefined} style={styles.tableContainer}>
+            <table role={preview ? 'table' : undefined} style={styles.table} aria-label="Tabela de Orçamentos">
+                <thead role={preview ? 'rowgroup' : undefined}>
+                    {preview ? (
+                        <tr role="row">
+                            {['Seleção', 'Cliente e código', 'Status', 'Previsão', 'Resumo', 'Arte', 'Ações'].map((label) => (
+                                <th key={label} role="columnheader" scope="col" style={styles.th}>{label}</th>
+                            ))}
+                        </tr>
+                    ) : <tr>
                         <th scope="col" style={styles.th}></th><th scope="col" style={styles.th}>Cliente</th><th scope="col" style={styles.th}>Código</th><th scope="col" style={styles.th}>Layout</th><th scope="col" style={styles.th}>Status</th><th scope="col" style={styles.th}>Validade / Prev.</th><th scope="col" style={styles.th}>Total (R$)</th><th scope="col" style={{ ...styles.th, textAlign: 'right' }}>Ações</th>
-                    </tr>
+                    </tr>}
                 </thead>
-                <tbody>
+                <tbody role={preview ? 'rowgroup' : undefined}>
                     {quotes.map((quote) => (
                         <QuoteRow 
                             key={quote.id} 
@@ -1059,6 +1189,8 @@ const QuotesTable = React.memo(({ quotes, selectedIds, onCheckboxChange, onView,
                             onStatusClick={onStatusClick}
                             onApproveToOrder={onApproveToOrder}
                             userRole={userRole}
+                            preview={preview}
+                            editDisabled={editDisabled}
                         />
                     ))}
                 </tbody>
@@ -1070,10 +1202,22 @@ const QuotesTable = React.memo(({ quotes, selectedIds, onCheckboxChange, onView,
 // ============================================================================
 // --- MAIN COMPONENT ---
 // ============================================================================
-const Quotes = () => {
+const quotesMobileQuery = '(width < 1000px)';
+
+const subscribeToQuotesViewport = (onChange) => {
+    const viewport = window.matchMedia(quotesMobileQuery);
+    viewport.addEventListener('change', onChange);
+    return () => viewport.removeEventListener('change', onChange);
+};
+
+const isQuotesMobileViewport = () => window.matchMedia(quotesMobileQuery).matches;
+
+const Quotes = ({ preview: forcePreview = false }) => {
+    const isMobile = useSyncExternalStore(subscribeToQuotesViewport, isQuotesMobileViewport);
+    const preview = forcePreview || isMobile;
     const { token, API_BASE_URL, user } = useAuth();
     const location = useLocation();
-    const { quotes, dbProducts, dbFabrics, dbClients, loading, error, refreshQuotes, quickAddClient, removeQuotes } = useQuotes(API_BASE_URL, token);
+    const { quotes, dbProducts, dbFabrics, dbClients, loading, error, auxiliaryError, retry, refreshQuotes, quickAddClient, removeQuotes } = useQuotes(API_BASE_URL, token, preview);
     
     const statusTabs = useMemo(() => getVisibleQuoteStatuses(QUOTE_CONSTANTS.STATUS_OPTIONS), []);
     const [currentTab, setCurrentTab] = useState(statusTabs[0] || 'Em Análise'); 
@@ -1087,12 +1231,25 @@ const Quotes = () => {
     const [quoteToEdit, setQuoteToEdit] = useState(null);
     const [selectedQuoteDetails, setSelectedQuoteDetails] = useState(null);
     const [quoteToUpdateStatus, setQuoteToUpdateStatus] = useState(null);
+    const tabsRef = useRef(null);
+    const previewTheme = appConfig.theme === 'monochrome'
+        ? 'orders-preview--monochrome'
+        : 'orders-preview--default';
 
     useEffect(() => { if (location.state?.filterBy) setFilterStatus(location.state.filterBy); }, [location]);
 
     const toggleModal = useCallback((name, value) => setModals(prev => ({ ...prev, [name]: value })), []);
     const clearFilters = useCallback(() => { setFilterStatus(''); setSearchTerm(''); setStartDate(''); setEndDate(''); setSelectedQuoteIds([]); }, []);
     const handleCheckboxChange = useCallback((id) => setSelectedQuoteIds(p => p.includes(id) ? p.filter(x => x!==id) : [...p, id]), []);
+
+    const selectQuoteTab = useCallback((status, button) => {
+        setCurrentTab(status);
+        clearFilters();
+        if (preview && button) {
+            const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            button.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', inline: 'center', block: 'nearest' });
+        }
+    }, [clearFilters, preview]);
 
     const fetchQuoteSnapshot = useCallback(async (code) => {
         const res = await QuoteService.getQuoteHistory(API_BASE_URL, token, code);
@@ -1121,13 +1278,15 @@ const Quotes = () => {
             if (filterStatus && o.status !== filterStatus) return false;
             const searchLower = searchTerm.toLowerCase();
             if (searchTerm && !o.client_name.toLowerCase().includes(searchLower) && !o.tracking_code.toLowerCase().includes(searchLower)) return false;
-            if (startDate && endDate) {
-                const quoteDate = new Date(o.delivery_date).toISOString().split('T')[0];
+            if (!isMobile && startDate && endDate) {
+                const parsedDate = parseDateSafe(o.delivery_date);
+                if (!parsedDate || Number.isNaN(parsedDate.getTime())) return false;
+                const quoteDate = parsedDate.toISOString().split('T')[0];
                 if (quoteDate < startDate || quoteDate > endDate) return false;
             }
             return true;
         });
-    }, [quotes, currentTab, filterStatus, searchTerm, startDate, endDate]);
+    }, [quotes, currentTab, filterStatus, searchTerm, startDate, endDate, isMobile]);
 
     const handleDeleteSelected = useCallback(async () => {
         if (!selectedQuoteIds.length) return;
@@ -1261,8 +1420,10 @@ const handleApproveToOrder = useCallback(async (quote) => {
         }
     }, [API_BASE_URL, token, refreshQuotes]);
 
+    if (loading && !preview) return <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>Carregando painel de orçamentos...</div>;
+
     return (
-        <div style={{ fontFamily: "'Inter', sans-serif", color: '#0f172a', maxWidth: '1600px', margin: '0 auto', paddingBottom: '40px' }}>
+        <div className={preview ? `orders-preview quotes-preview ${previewTheme}` : undefined} style={{ fontFamily: "'Inter', sans-serif", color: '#0f172a', maxWidth: '1600px', margin: '0 auto', paddingBottom: '40px' }}>
             
  {/* INJEÇÃO DE MICROINTERAÇÕES E ESTILOS PREMIUM */}
             <style>{`
@@ -1270,24 +1431,25 @@ const handleApproveToOrder = useCallback(async (quote) => {
                 .no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
                 .no-spin { -moz-appearance: textfield; }
                 
-                .premium-input { transition: all 0.2s ease-in-out; }
+                .premium-input { transition: border-color 150ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1); }
                 .premium-input:focus { outline: none !important; border-color: #3B82F6 !important; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important; }
                 
-                /* Botão Azul Padrão */
-                .premium-btn { transition: all 0.2s ease; }
-                .premium-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 12px -2px rgba(37, 99, 235, 0.25); background-color: #1D4ED8 !important; }
-                .premium-btn:active { transform: translateY(0); box-shadow: none; }
+                .premium-btn { transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1), background-color 150ms ease, box-shadow 150ms ease; }
+                .premium-btn:active { transform: scale(0.97); box-shadow: none; }
 
-                /* ⭐ NOVO: Botão de Perigo (Vermelho Neon) ⭐ */
-                .premium-btn-danger { transition: all 0.2s ease; }
-                .premium-btn-danger:hover { 
-                    transform: translateY(-1px); 
-                    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4) !important; /* Efeito Neon Vermelho */
-                    background-color: #FEE2E2 !important; 
-                    border-color: #EF4444 !important;
-                    color: #B91C1C !important;
+                .premium-btn-danger { transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1), background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease; }
+                .premium-btn-danger:active { transform: scale(0.97); box-shadow: none; }
+
+                @media (hover: hover) and (pointer: fine) {
+                    .premium-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 12px -2px rgba(37, 99, 235, 0.25); background-color: #1D4ED8 !important; }
+                    .premium-btn-danger:hover {
+                        transform: translateY(-1px);
+                        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.28) !important;
+                        background-color: #FEE2E2 !important;
+                        border-color: #EF4444 !important;
+                        color: #B91C1C !important;
+                    }
                 }
-                .premium-btn-danger:active { transform: translateY(0); box-shadow: none; }
 
                 /* CSS EXCLUSIVO DOS BOTÕES DO SWEETALERT (LINHA ÚNICA) */
                 .premium-swal-actions {
@@ -1309,7 +1471,7 @@ const handleApproveToOrder = useCallback(async (quote) => {
                     font-weight: 600 !important;
                     font-size: 0.85rem !important;
                     background-color: transparent !important;
-                    transition: all 0.2s ease !important;
+                    transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1), background-color 150ms ease, border-color 150ms ease, color 150ms ease !important;
                     flex: 1 !important;
                     white-space: nowrap !important;
                     cursor: pointer !important;
@@ -1317,19 +1479,24 @@ const handleApproveToOrder = useCallback(async (quote) => {
                 }
 
                 .premium-btn-outline-green { border: 1px solid #10B981 !important; color: #10B981 !important; }
-                .premium-btn-outline-green:hover { background-color: #ECFDF5 !important; }
-
                 .premium-btn-outline-blue { border: 1px solid #3B82F6 !important; color: #3B82F6 !important; }
-                .premium-btn-outline-blue:hover { background-color: #EFF6FF !important; }
-
                 .premium-btn-outline-gray { border: 1px solid #CBD5E1 !important; color: #64748B !important; }
-                .premium-btn-outline-gray:hover { background-color: #F8FAFC !important; color: #0F172A !important; border-color: #94A3B8 !important; }
+
+                @media (hover: hover) and (pointer: fine) {
+                    .premium-btn-outline-green:hover { background-color: #ECFDF5 !important; }
+                    .premium-btn-outline-blue:hover { background-color: #EFF6FF !important; }
+                    .premium-btn-outline-gray:hover { background-color: #F8FAFC !important; color: #0F172A !important; border-color: #94A3B8 !important; }
+                }
+
+                @media (max-width: 960px) {
+                    .order-line-content { grid-template-columns: minmax(0, 1fr) !important; }
+                }
             `}</style>
 
-            <header style={styles.header}>
+            <header className="orders-header" style={styles.header}>
                 <div>
                     <h1 style={{ fontSize: '1.75rem', fontWeight: '800', color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.5px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span style={{ backgroundColor: '#EFF6FF', color: '#2563EB', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center' }} aria-hidden="true">
+                        <span className={preview ? 'orders-header-icon' : undefined} style={{ backgroundColor: '#EFF6FF', color: '#2563EB', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center' }} aria-hidden="true">
                             <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                         </span>
                         Painel de Orçamentos
@@ -1338,46 +1505,49 @@ const handleApproveToOrder = useCallback(async (quote) => {
                         Criação e acompanhamento de propostas comerciais
                     </p>
                 </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
+                <div className="orders-actions" style={{ display: 'flex', gap: '12px' }}>
                     {selectedQuoteIds.length > 0 && user?.role === 'admin' && (<button onClick={handleDeleteSelected} style={styles.deleteButton}><span style={{ marginRight: '6px', display: 'flex' }}>{Icons.Trash}</span> Excluir</button>)}
-                    <button onClick={openCreateModal} className="premium-btn" style={styles.addButton}><span style={{ marginRight: '6px', display: 'flex' }}>{Icons.Plus}</span> Novo Orçamento</button>
+                    <button onClick={openCreateModal} disabled={preview && (loading || auxiliaryError)} className={`premium-btn${preview ? ' orders-primary-button' : ''}`} style={styles.addButton}><span style={{ marginRight: '6px', display: 'flex' }}>{Icons.Plus}</span> Novo Orçamento</button>
                 </div>
             </header>
 
-            <div style={styles.controlsContainer}>
-                <div style={styles.tabsContainer}>
+            <div className="orders-controls" style={styles.controlsContainer}>
+                <div ref={tabsRef} className="quotes-tabs" style={styles.tabsContainer}>
                     {statusTabs.map((status) => (
-                        <button key={status} onClick={() => { setCurrentTab(status); clearFilters(); }} style={currentTab === status && !filterStatus ? styles.tabActive : styles.tabInactive}>{status}</button>
+                        <button key={status} className={preview ? 'orders-tab' : undefined} aria-pressed={preview ? currentTab === status && !filterStatus : undefined} onClick={(event) => selectQuoteTab(status, event.currentTarget)} style={currentTab === status && !filterStatus ? styles.tabActive : styles.tabInactive}>{status}</button>
                     ))}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <div style={styles.searchBox}>
+                <div className="orders-filters" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <div style={isMobile ? { ...styles.searchBox, width: '100%' } : styles.searchBox}>
                         <span style={{ color: '#94a3b8' }}>{Icons.Search}</span>
                         <input aria-label="Buscar orçamentos" type="text" placeholder="Buscar cliente ou código..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} />
                     </div>
-                    <div style={styles.selectBox}>
+                    <div className="quotes-status-filter" style={styles.selectBox}>
                         <span style={{ color: '#94a3b8' }}>{Icons.Filter}</span>
                         <select aria-label="Filtrar por status" value={filterStatus || ''} onChange={(e) => { const status = e.target.value || null; setFilterStatus(status); if (status) setCurrentTab(status); }} style={styles.selectInput}><option value="">Todos os Status</option>{statusTabs.map(s => <option key={s} value={s}>{s}</option>)}</select>
                     </div>
-                    <div style={styles.dateBox}>
+                    {!isMobile && <div style={styles.dateBox}>
                         <span style={{ color: '#64748b', fontSize: '0.8rem', marginRight: '5px', fontWeight: '500' }}>Previsão:</span>
                         <input aria-label="Data inicial" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} onClick={(e) => e.target.showPicker()} style={{ ...styles.dateInput, cursor: 'pointer' }} />
                         <span style={{ color: '#94a3b8' }}>-</span>
                         <input aria-label="Data final" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} onClick={(e) => e.target.showPicker()} style={{ ...styles.dateInput, cursor: 'pointer' }} />
-                    </div>
-                    {(filterStatus || searchTerm || (startDate && endDate)) && (<button aria-label="Limpar filtros" onClick={clearFilters} style={styles.clearFilterButton}><span style={{ marginRight: '4px', display: 'flex' }}>{Icons.Close}</span> Limpar</button>)}
+                    </div>}
+                    {(filterStatus || searchTerm || (!isMobile && (startDate || endDate))) && (<button aria-label="Limpar filtros" onClick={clearFilters} style={styles.clearFilterButton}><span style={{ marginRight: '4px', display: 'flex' }}>{Icons.Close}</span> Limpar</button>)}
                 </div>
             </div>
             
             {error && <p style={styles.error} role="alert">{error}</p>}
+            {preview && auxiliaryError && <p style={styles.error} role="alert">Falha ao carregar os cadastros necessários para criar ou editar orçamentos.</p>}
+            {preview && (error || auxiliaryError) && !loading && <button className="orders-retry" type="button" onClick={retry}>Tentar novamente</button>}
+            {preview && loading && <p role="status">Carregando painel de orçamentos…</p>}
             
-            <QuotesTable quotes={filteredQuotes} selectedIds={selectedQuoteIds} onCheckboxChange={handleCheckboxChange} onView={loadQuoteDetails} onEdit={openEditModal} onPrint={handlePrint} onStatusClick={(o) => { setQuoteToUpdateStatus(o); toggleModal('status', true); }} onApproveToOrder={handleApproveToOrder} userRole={user?.role} />
+            {(!preview || (!loading && (!error || filteredQuotes.length > 0))) && <QuotesTable preview={preview} editDisabled={preview && auxiliaryError} quotes={filteredQuotes} selectedIds={selectedQuoteIds} onCheckboxChange={handleCheckboxChange} onView={loadQuoteDetails} onEdit={openEditModal} onPrint={handlePrint} onStatusClick={(o) => { setQuoteToUpdateStatus(o); toggleModal('status', true); }} onApproveToOrder={handleApproveToOrder} userRole={user?.role} />}
             
             {/* MODAL UNIFICADO */}
-            <QuoteFormModal isOpen={modals.form} onClose={() => toggleModal('form', false)} quoteToEdit={quoteToEdit} API_BASE_URL={API_BASE_URL} token={token} auxData={{dbProducts, dbFabrics, dbClients}} onQuickClientAdd={quickAddClient} onRefresh={refreshQuotes} />
+            <QuoteFormModal preview={preview} isOpen={modals.form} onClose={() => toggleModal('form', false)} quoteToEdit={quoteToEdit} API_BASE_URL={API_BASE_URL} token={token} auxData={{dbProducts, dbFabrics, dbClients}} onQuickClientAdd={quickAddClient} onRefresh={refreshQuotes} />
             
-            <StatusModal isOpen={modals.status} onClose={() => toggleModal('status', false)} quoteToUpdate={quoteToUpdateStatus} onUpdateStatus={handleUpdateStatus} />
-            <QuoteDetailsModal isOpen={modals.details} onClose={() => toggleModal('details', false)} quote={selectedQuoteDetails} onReset={handleResetQuote} onUnlockClient={handleUnlockQuote} onApproveToOrder={handleApproveToOrder} API_BASE_URL={API_BASE_URL} userRole={user?.role} />
+            <StatusModal preview={preview} isOpen={modals.status} onClose={() => toggleModal('status', false)} quoteToUpdate={quoteToUpdateStatus} onUpdateStatus={handleUpdateStatus} />
+            <QuoteDetailsModal preview={preview} isOpen={modals.details} onClose={() => toggleModal('details', false)} quote={selectedQuoteDetails} onReset={handleResetQuote} onUnlockClient={handleUnlockQuote} onApproveToOrder={handleApproveToOrder} API_BASE_URL={API_BASE_URL} userRole={user?.role} />
         </div>
     );
 };
@@ -1386,7 +1556,7 @@ const handleApproveToOrder = useCallback(async (quote) => {
 const styles = {
     header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', gap: '16px', flexWrap: 'wrap' },
     addButton: { backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', fontSize: '0.9rem' },
-    deleteButton: { backgroundColor: '#fff', color: '#dc2626', border: '1px solid #fee2e2', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', fontSize: '0.9rem', transition: 'all 0.2s' },
+    deleteButton: { backgroundColor: '#fff', color: '#dc2626', border: '1px solid #fee2e2', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', fontSize: '0.9rem', transition: 'transform 150ms cubic-bezier(0.23, 1, 0.32, 1), background-color 150ms ease, border-color 150ms ease, color 150ms ease' },
     clearFilterButton: { backgroundColor: '#fff', color: '#475569', border: '1px solid #cbd5e1', padding: '8px 16px', borderRadius: '20px', cursor: 'pointer', fontWeight: '600', fontSize: '0.8rem', display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' },
     controlsContainer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px', gap: '14px', flexWrap: 'wrap' },
     searchBox: { display: 'flex', alignItems: 'center', backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px', width: 'min(100%, 260px)' },
@@ -1402,7 +1572,7 @@ const styles = {
     table: { width: '100%', borderCollapse: 'collapse', minWidth: '860px' },
     th: { backgroundColor: '#f8fafc', padding: '16px 24px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', color: '#475569', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' },
     td: { padding: '16px 24px', borderBottom: '1px solid #e2e8f0', color: '#334155', fontSize: '0.95rem' },
-    tr: { transition: 'all 0.15s ease-out' },
+    tr: { transition: 'background-color 120ms cubic-bezier(0.23, 1, 0.32, 1)' },
     trHover: { backgroundColor: '#F8FAFC' },
     statusBadge: { padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', display: 'inline-block', cursor: 'pointer', letterSpacing: '0.02em' },
     iconButton: { backgroundColor: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', padding: '6px', borderRadius: '6px', transition: 'background 0.2s' },
@@ -1453,7 +1623,7 @@ const styles = {
     detailsContainer: { padding: '10px 0' },
     actionsContainer: { backgroundColor: '#f8fafc', padding: '24px', borderRadius: '12px', marginBottom: '24px', border: '1px solid #e2e8f0' },
     buttonsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '12px' },
-    statusButton: { padding: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', backgroundColor: 'white', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: '#475569', transition: 'all 0.2s', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    statusButton: { padding: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', backgroundColor: 'white', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: '#475569', transition: 'background-color 150ms ease, border-color 150ms ease, color 150ms ease', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     statusButtonCompleted: { padding: '10px', border: '1px solid #16a34a', borderRadius: '8px', backgroundColor: '#dcfce7', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '700', color: '#166534', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
     historyTimeline: { position: 'relative', paddingLeft: '24px', borderLeft: '2px solid #cbd5e1', marginLeft: '10px' },
     historyItem: { marginBottom: '28px', position: 'relative' },

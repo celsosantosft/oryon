@@ -16,6 +16,7 @@
 - Em Detalhes do Pedido, `Portal` abre o acesso privado e `Link` copia a página segura de compartilhamento para o WhatsApp; ambos usam a URL retornada pela API autenticada, nunca montam o token a partir da listagem.
 - Links do portal gerados pelo sistema usam uma página segura de compartilhamento para o WhatsApp: a prévia identifica o cliente e o pedido, mostra o layout com a logo pequena da instalação e redireciona ao portal autenticado; sem imagem raster, usa a marca como fallback.
 - A rota oficial `/orders` usa a experiência aprovada em telas abaixo de 1000 px e mantém a tabela clássica no desktop. `/orders-preview` continua acessível para conferir a experiência aprovada em qualquer largura. O tema segue a empresa (Atos azul e PD monocromático).
+- A rota oficial `/quotes` segue a mesma experiência mobile aprovada de Pedidos abaixo de 1000 px, com cartões, ações identificadas e abas roláveis; `/quotes-preview` força essa visualização para conferência. O desktop clássico e o tema de cada empresa permanecem preservados.
 - O Google Agenda é opcional e configurado por instalação em `Entregas da Semana`. Somente pedidos gerados criam eventos; orçamentos não criam.
 - Contas a Receber não exibe saldos pendentes de pedidos cancelados ou com arte arquivada, mas preserva recebimentos já pagos no histórico. A baixa em lote é sempre integral; baixas parciais continuam sendo feitas individualmente.
 - Administradores podem cadastrar as credenciais OAuth do Google no próprio painel; o Client Secret fica criptografado no servidor e nunca volta ao navegador.

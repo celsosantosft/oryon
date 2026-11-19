@@ -101,6 +101,7 @@ function App() {
                                 <Route path="/orders" element={<Orders />} />
                                 <Route path="/orders-preview" element={<Orders key="preview" preview />} />
                                 <Route path="/quotes" element={<Quotes />} /> 
+                                <Route path="/quotes-preview" element={<Quotes key="preview" preview />} />
                                 <Route path="/reports" element={<Reports />} />
                                 <Route path="/deliveries" element={<WeeklyDeliveries />} />
                                 <Route path="/products" element={<Products />} /> 
