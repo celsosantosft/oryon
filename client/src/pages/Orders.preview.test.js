@@ -55,8 +55,10 @@ test('copies the branded share link instead of the redirected portal address', (
     assert.match(ordersSource, /Icons\.Link\}\<\/span\> Link/);
 });
 
-test('exports the current order as a client JPG', () => {
+test('shares the current order as a 1080 by 1350 client image', () => {
     assert.match(ordersSource, /exportClientJpg/);
     assert.match(ordersSource, /onExportJpg\(order\)/);
-    assert.match(ordersSource, /Gerar JPG 1080 por 1350/);
+    assert.match(ordersSource, /Compartilhar imagem 1080 por 1350/);
+    assert.match(ordersSource, /Icons\.Share\}\<\/span\>Compartilhar/);
+    assert.match(ordersSource, /SHARE_UNSUPPORTED/);
 });

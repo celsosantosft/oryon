@@ -118,14 +118,6 @@ const renderCompactSizeTable = (sizesList, sizes, total) => {
     `;
 };
 
-const formatQuoteSizesInline = (sizes = {}) => {
-    const entries = Object.entries(sizes)
-        .filter(([, quantity]) => Number(quantity || 0) > 0)
-        .map(([size, quantity]) => `${size}: ${Number(quantity || 0)}`);
-
-    return entries.length ? entries.join(' • ') : 'Grade não informada';
-};
-
 const parsePrintingTypes = (value) => {
     if (!value) return [];
     if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
@@ -475,8 +467,8 @@ const buildPremiumQuotePrintLayout = ({ order, normalizedLines, printDate }) => 
                             <div class="brand-logo-fallback">${escapeHtml(appConfig.brandName.toUpperCase())}</div>
                         </div>
                         <div class="brand-meta">
-                            <div><strong>CNPJ:</strong> 59.907.753/0001-28</div>
-                            <div><strong>Endereço:</strong> R. Atlântica - Ouro Preto, Olinda - PE, 53370-530</div>
+                            ${appConfig.companyDocument ? `<div><strong>CNPJ:</strong> ${escapeHtml(appConfig.companyDocument)}</div>` : ''}
+                            ${appConfig.companyAddress ? `<div><strong>Endereço:</strong> ${escapeHtml(appConfig.companyAddress)}</div>` : ''}
                         <div><strong>E-mail:</strong> ${escapeHtml(appConfig.supportEmail)}</div>
                         <div><strong>WhatsApp:</strong> (81) 98807-4760</div>
                     </div>
@@ -664,6 +656,59 @@ const drawWrappedText = (ctx, value, x, y, maxWidth, lineHeight, maxLines = 2) =
     return visible.length;
 };
 
+const wrapCanvasText = (ctx, value, maxWidth) => {
+    const words = String(value || '').split(/\s+/).filter(Boolean);
+    const lines = [];
+    let current = '';
+
+    words.forEach((word) => {
+        const candidate = current ? `${current} ${word}` : word;
+        if (!current || ctx.measureText(candidate).width <= maxWidth) {
+            current = candidate;
+        } else {
+            lines.push(current);
+            current = word;
+        }
+    });
+    if (current) lines.push(current);
+    return lines;
+};
+
+const drawFullTextToFit = (ctx, value, x, y, maxWidth, {
+    maxLines = 3,
+    fontSize = 31,
+    minFontSize = 18,
+    fontWeight = 800,
+    lineHeightRatio = 1.15
+} = {}) => {
+    let size = fontSize;
+    let lines = [];
+    do {
+        ctx.font = `${fontWeight} ${size}px Arial, sans-serif`;
+        lines = wrapCanvasText(ctx, value, maxWidth);
+        if (lines.length <= maxLines) break;
+        size -= 1;
+    } while (size >= minFontSize);
+
+    const lineHeight = Math.round(size * lineHeightRatio);
+    lines.forEach((line, index) => ctx.fillText(line, x, y + (index * lineHeight)));
+    return { lines: lines.length, fontSize: size, lineHeight };
+};
+
+const drawSectionHeading = (ctx, label, y, accent) => {
+    ctx.fillStyle = accent;
+    ctx.fillRect(64, y, 7, 30);
+    ctx.fillStyle = '#334155';
+    ctx.font = '800 21px Arial, sans-serif';
+    ctx.fillText(label, 88, y + 3);
+};
+
+const chunkItems = (items, size) => {
+    const chunks = [];
+    for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
+    return chunks;
+};
+
 const loadCanvasImage = async (url) => {
     if (!url) return null;
     try {
@@ -704,111 +749,131 @@ const renderClientJpgPage = async (page) => {
     canvas.height = page.height;
     const ctx = canvas.getContext('2d');
     const accent = appConfig.theme === 'monochrome' ? '#111827' : '#2563EB';
-    const accentSoft = appConfig.theme === 'monochrome' ? '#F3F4F6' : '#EFF6FF';
     const [logo, layout] = await Promise.all([
         loadCanvasImage(resolvePublicAssetUrl(appConfig.logoUrl)),
         loadCanvasImage(page.line.layoutUrl)
     ]);
 
-    ctx.fillStyle = '#F1F5F9';
+    ctx.fillStyle = '#E2E8F0';
     ctx.fillRect(0, 0, page.width, page.height);
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(28, 28, page.width - 56, page.height - 56);
 
     ctx.fillStyle = accent;
-    ctx.fillRect(28, 28, page.width - 56, 12);
-    if (logo) drawContainedImage(ctx, logo, 64, 68, 150, 100);
+    ctx.fillRect(28, 28, page.width - 56, 10);
+    if (logo) drawContainedImage(ctx, logo, 64, 58, 132, 132);
 
     ctx.textBaseline = 'top';
-    ctx.fillStyle = '#64748B';
-    ctx.font = '700 24px Arial, sans-serif';
-    ctx.fillText(appConfig.brandName.toUpperCase(), 238, 74);
     ctx.fillStyle = '#0F172A';
-    ctx.font = '800 44px Arial, sans-serif';
-    ctx.fillText(page.documentLabel, 238, 108);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = accent;
-    ctx.font = '800 28px Arial, sans-serif';
-    ctx.fillText(page.trackingCode, 1010, 82);
-    ctx.fillStyle = '#64748B';
-    ctx.font = '700 20px Arial, sans-serif';
-    ctx.fillText(`${page.pageNumber}/${page.pageCount}`, 1010, 124);
-    ctx.textAlign = 'left';
-
-    roundedRect(ctx, 64, 194, 952, 142, 20);
-    ctx.fillStyle = accentSoft;
-    ctx.fill();
-    ctx.fillStyle = '#64748B';
-    ctx.font = '700 20px Arial, sans-serif';
-    ctx.fillText('CLIENTE', 92, 220);
-    ctx.fillStyle = '#0F172A';
-    ctx.font = '800 32px Arial, sans-serif';
-    drawWrappedText(ctx, page.clientName.toUpperCase(), 92, 252, 600, 38, 2);
+    ctx.font = '800 27px Arial, sans-serif';
+    ctx.fillText(appConfig.brandName.toUpperCase(), 224, 60);
     ctx.fillStyle = '#64748B';
     ctx.font = '700 18px Arial, sans-serif';
-    ctx.fillText('PREVISÃO', 780, 220);
+    if (appConfig.companyDocument) ctx.fillText(`CNPJ ${appConfig.companyDocument}`, 224, 101);
+    if (appConfig.companyAddress) drawWrappedText(ctx, appConfig.companyAddress, 224, 132, 530, 23, 2);
+
+    roundedRect(ctx, 810, 58, 206, 112, 18);
+    ctx.fillStyle = '#0F172A';
+    ctx.fill();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '700 17px Arial, sans-serif';
+    ctx.fillText(page.documentLabel, 913, 77);
+    ctx.font = '800 26px Arial, sans-serif';
+    drawWrappedText(ctx, page.trackingCode, 913, 108, 174, 30, 2);
+    ctx.textAlign = 'left';
+
+    ctx.fillStyle = '#0F172A';
+    ctx.fillRect(64, 210, 952, 4);
+
+    roundedRect(ctx, 64, 238, 952, 150, 16);
+    ctx.fillStyle = '#F8FAFC';
+    ctx.fill();
+    ctx.strokeStyle = '#E2E8F0';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#64748B';
+    ctx.font = '700 17px Arial, sans-serif';
+    ctx.fillText('CLIENTE', 90, 260);
+    ctx.fillStyle = '#0F172A';
+    drawFullTextToFit(ctx, page.clientName.toUpperCase(), 90, 292, 630, { maxLines: 3, fontSize: 30 });
+    ctx.fillStyle = '#64748B';
+    ctx.font = '700 17px Arial, sans-serif';
+    ctx.fillText(page.documentLabel === 'ORÇAMENTO' ? 'VALIDADE' : 'DATA DE ENTREGA', 780, 260);
     ctx.fillStyle = '#0F172A';
     ctx.font = '800 25px Arial, sans-serif';
-    ctx.fillText(page.deliveryDate || 'Não informada', 780, 252);
-    if (page.status) {
-        ctx.fillStyle = '#475569';
-        ctx.font = '700 18px Arial, sans-serif';
-        ctx.fillText(page.status, 780, 292);
-    }
+    ctx.fillText(page.deliveryDate || 'Não informada', 780, 294);
+    ctx.fillStyle = '#64748B';
+    ctx.font = '700 16px Arial, sans-serif';
+    ctx.fillText(`${page.pageNumber} de ${page.pageCount}`, 780, 337);
 
-    roundedRect(ctx, 64, 370, 952, 550, 22);
+    drawSectionHeading(ctx, `ITEM ${page.pageNumber} DO ${page.documentLabel}`, 418, accent);
+    ctx.fillStyle = '#0F172A';
+    drawFullTextToFit(ctx, page.line.description, 64, 460, 952, { maxLines: 2, fontSize: 27, minFontSize: 19 });
+
+    const sizeEntries = page.line.combinedVisibleSizes.map((size) => ({ size, quantity: Number(page.line.sizes[size] || 0) }));
+    const sizeRows = chunkItems(sizeEntries.length ? sizeEntries : [{ size: '—', quantity: 0 }], 8);
+    const gradeTop = 530;
+    drawSectionHeading(ctx, 'GRADE DE TAMANHOS', gradeTop, accent);
+    const tableTop = gradeTop + 42;
+    sizeRows.forEach((row, rowIndex) => {
+        const rowTop = tableTop + (rowIndex * 74);
+        const cellWidth = 952 / row.length;
+        row.forEach((entry, entryIndex) => {
+            const x = 64 + (entryIndex * cellWidth);
+            ctx.fillStyle = '#F1F5F9';
+            ctx.fillRect(x, rowTop, cellWidth, 32);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(x, rowTop + 32, cellWidth, 40);
+            ctx.strokeStyle = '#CBD5E1';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, rowTop, cellWidth, 72);
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#475569';
+            ctx.font = '800 17px Arial, sans-serif';
+            ctx.fillText(entry.size, x + (cellWidth / 2), rowTop + 7);
+            ctx.fillStyle = entry.quantity > 0 ? accent : '#94A3B8';
+            ctx.font = '800 23px Arial, sans-serif';
+            ctx.fillText(String(entry.quantity), x + (cellWidth / 2), rowTop + 40);
+        });
+    });
+    ctx.textAlign = 'left';
+
+    const gradeBottom = tableTop + (sizeRows.length * 74);
+    const layoutHeadingTop = gradeBottom + 22;
+    drawSectionHeading(ctx, `LAYOUT DO ${page.documentLabel}`, layoutHeadingTop, accent);
+    const layoutTop = layoutHeadingTop + 42;
+    const layoutBottom = 1170;
+    roundedRect(ctx, 64, layoutTop, 952, Math.max(220, layoutBottom - layoutTop), 18);
     ctx.fillStyle = '#F8FAFC';
     ctx.fill();
     ctx.strokeStyle = '#E2E8F0';
     ctx.lineWidth = 2;
     ctx.stroke();
     if (layout) {
-        drawContainedImage(ctx, layout, 88, 394, 904, 502);
+        drawContainedImage(ctx, layout, 82, layoutTop + 18, 916, Math.max(184, layoutBottom - layoutTop - 36));
     } else {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#94A3B8';
-        ctx.font = '700 28px Arial, sans-serif';
-        ctx.fillText('Layout não anexado', 540, 630);
+        ctx.font = '700 26px Arial, sans-serif';
+        ctx.fillText('Layout não anexado', 540, layoutTop + 90);
         ctx.textAlign = 'left';
     }
 
-    roundedRect(ctx, 64, 946, 952, 258, 22);
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fill();
-    ctx.strokeStyle = '#E2E8F0';
-    ctx.stroke();
-    ctx.fillStyle = accent;
+    ctx.fillStyle = '#475569';
     ctx.font = '800 20px Arial, sans-serif';
-    ctx.fillText(`ITEM ${page.pageNumber}`, 92, 974);
-    ctx.fillStyle = '#0F172A';
-    ctx.font = '800 32px Arial, sans-serif';
-    drawWrappedText(ctx, page.line.product_type, 92, 1006, 620, 38, 2);
+    ctx.fillText(`${page.line.totalPieces} PEÇA(S)`, 64, 1210);
     ctx.fillStyle = '#64748B';
-    ctx.font = '600 23px Arial, sans-serif';
-    ctx.fillText(page.line.fabric_type || 'Malha não informada', 92, 1086);
-    ctx.fillStyle = '#334155';
-    ctx.font = '700 22px Arial, sans-serif';
-    drawWrappedText(ctx, formatQuoteSizesInline(page.line.sizes), 92, 1130, 850, 30, 2);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#64748B';
-    ctx.font = '700 19px Arial, sans-serif';
-    ctx.fillText(`${page.line.totalPieces} peça(s)`, 984, 982);
-    ctx.fillStyle = '#0F172A';
-    ctx.font = '800 28px Arial, sans-serif';
-    ctx.fillText(formatMoney(page.line.total_price), 984, 1018);
-    ctx.textAlign = 'left';
-
-    ctx.fillStyle = '#64748B';
-    ctx.font = '700 20px Arial, sans-serif';
-    ctx.fillText('TOTAL DO DOCUMENTO', 64, 1246);
+    ctx.font = '700 16px Arial, sans-serif';
+    ctx.fillText('TOTAL DO DOCUMENTO', 720, 1198);
     ctx.textAlign = 'right';
     ctx.fillStyle = accent;
-    ctx.font = '800 38px Arial, sans-serif';
-    ctx.fillText(formatMoney(page.total), 1016, 1234);
+    ctx.font = '800 32px Arial, sans-serif';
+    ctx.fillText(formatMoney(page.total), 1016, 1224);
     ctx.textAlign = 'left';
     ctx.fillStyle = '#94A3B8';
-    ctx.font = '600 16px Arial, sans-serif';
-    ctx.fillText('Imagem 1080 × 1350 px • pronta para celular', 64, 1300);
+    ctx.font = '600 15px Arial, sans-serif';
+    ctx.fillText(`${appConfig.brandName} • imagem 1080 × 1350 px`, 64, 1300);
 
     return canvasToJpeg(canvas);
 };
@@ -820,24 +885,21 @@ export const exportClientJpg = async (order, apiBaseUrl) => {
         files.push(new File([await renderClientJpgPage(page)], page.fileName, { type: 'image/jpeg' }));
     }
 
-    if (navigator.share && navigator.canShare?.({ files })) {
-        try {
-            await navigator.share({ files, title: `${pages[0].documentLabel} ${pages[0].trackingCode}` });
-            return { mode: 'shared', count: files.length };
-        } catch (error) {
-            if (error?.name === 'AbortError') return { mode: 'cancelled', count: files.length };
-        }
+    if (!navigator.share || !navigator.canShare?.({ files })) {
+        const error = new Error('Este navegador não permite compartilhar imagens diretamente.');
+        error.code = 'SHARE_UNSUPPORTED';
+        throw error;
     }
 
-    files.forEach((file) => {
-        const url = URL.createObjectURL(file);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = file.name;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-    });
-    return { mode: 'downloaded', count: files.length };
+    try {
+        await navigator.share({
+            files,
+            title: `${pages[0].documentLabel} ${pages[0].trackingCode}`,
+            text: `${pages[0].documentLabel} de ${pages[0].clientName}`
+        });
+        return { mode: 'shared', count: files.length };
+    } catch (error) {
+        if (error?.name === 'AbortError') return { mode: 'cancelled', count: files.length };
+        throw error;
+    }
 };

@@ -76,8 +76,10 @@ test('opens and copies the authenticated customer portal from quote details', ()
     assert.match(quotesSource, /aria-label="Copiar link do portal para o WhatsApp"/);
 });
 
-test('exports the current quote as a client JPG', () => {
+test('shares the current quote as a 1080 by 1350 client image', () => {
     assert.match(quotesSource, /exportClientJpg/);
     assert.match(quotesSource, /onExportJpg\(quote\)/);
-    assert.match(quotesSource, /Gerar JPG 1080 por 1350/);
+    assert.match(quotesSource, /Compartilhar imagem 1080 por 1350/);
+    assert.match(quotesSource, /Icons\.Share\}\<\/span\>Compartilhar/);
+    assert.match(quotesSource, /SHARE_UNSUPPORTED/);
 });

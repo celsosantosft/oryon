@@ -25,6 +25,7 @@ const Icons = {
     Filter: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>,
     User: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>,
     Download: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
+    Share: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 16V3m0 0L7 8m5-5l5 5M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6" /></svg>,
     Return: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h11a4 4 0 010 8H7m-4-8l4-4m-4 4l4 4" /></svg>,
     Unlock: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0v2M5 11h14v10H5z" /></svg>,
     Link: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 007.07 0l2-2a5 5 0 00-7.07-7.07l-1.15 1.15M14 11a5 5 0 00-7.07 0l-2 2A5 5 0 0012 20.07l1.15-1.15" /></svg>
@@ -1324,7 +1325,7 @@ const OrderRow = React.memo(({ order, isSelected, onCheckboxChange, onView, onEd
                         <button type="button" onClick={viewOrder}><span aria-hidden="true">{Icons.Eye}</span>Visualizar</button>
                         {canEdit && <button type="button" disabled={editDisabled} onClick={() => onEdit(order)}><span aria-hidden="true">{Icons.Edit}</span>Editar</button>}
                         <button type="button" onClick={() => onPrint(order)}><span aria-hidden="true">{Icons.Printer}</span>Imprimir</button>
-                        <button type="button" onClick={() => onExportJpg(order)}><span aria-hidden="true">{Icons.Image}</span>JPG</button>
+                        <button type="button" onClick={() => onExportJpg(order)}><span aria-hidden="true">{Icons.Share}</span>Compartilhar</button>
                     </div>
                 </td>
             </tr>
@@ -1352,7 +1353,7 @@ const OrderRow = React.memo(({ order, isSelected, onCheckboxChange, onView, onEd
                     <button onClick={viewOrder} aria-label="Ver Detalhes" style={styles.iconButton} title="Detalhes">{Icons.Eye}</button>
                     {canEdit && <button disabled={editDisabled} onClick={() => onEdit(order)} aria-label="Editar e Aprovar" style={styles.iconButton} title="Editar e Aprovar">{Icons.Edit}</button>}
                     <button onClick={() => onPrint(order)} aria-label="Imprimir" style={styles.iconButton} title="Imprimir O.S.">{Icons.Printer}</button>
-                    <button onClick={() => onExportJpg(order)} aria-label="Gerar JPG 1080 por 1350" style={styles.iconButton} title="Gerar JPG para o cliente">{Icons.Image}</button>
+                    <button onClick={() => onExportJpg(order)} aria-label="Compartilhar imagem 1080 por 1350" style={styles.iconButton} title="Compartilhar com o cliente">{Icons.Share}</button>
                 </div>
             </td>
         </tr>
@@ -1475,7 +1476,7 @@ const Orders = ({ preview: forcePreview = false }) => {
     }, [API_BASE_URL, token]);
 
     const handleExportClientJpg = useCallback(async (order) => {
-        Swal.fire({ title: 'Gerando JPG…', text: 'Preparando a imagem para o cliente.', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        Swal.fire({ title: 'Preparando compartilhamento…', text: 'Organizando a imagem para o cliente.', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         try {
             const res = await OrderService.getOrderHistory(API_BASE_URL, token, order.tracking_code);
             const detailedOrder = {
@@ -1488,11 +1489,13 @@ const Orders = ({ preview: forcePreview = false }) => {
             };
             const result = await exportClientJpg(detailedOrder, API_BASE_URL);
             Swal.close();
-            if (result.mode === 'downloaded') {
-                Swal.fire({ title: result.count > 1 ? `${result.count} imagens geradas!` : 'JPG gerado!', text: 'O arquivo está pronto para enviar ao cliente.', icon: 'success', showConfirmButton: false, timer: 1800 });
+            if (result.mode === 'shared') Swal.fire({ title: 'Compartilhado!', icon: 'success', showConfirmButton: false, timer: 1400 });
+        } catch (error) {
+            if (error?.code === 'SHARE_UNSUPPORTED') {
+                Swal.fire('Abra no celular', 'Este navegador não permite compartilhar a imagem diretamente. Abra o sistema no celular e tente novamente.', 'info');
+                return;
             }
-        } catch {
-            Swal.fire('Falha ao gerar JPG', 'Não foi possível preparar a imagem deste pedido.', 'error');
+            Swal.fire('Falha ao compartilhar', 'Não foi possível preparar a imagem deste pedido.', 'error');
         }
     }, [API_BASE_URL, token]);
 

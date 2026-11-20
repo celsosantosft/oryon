@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { buildClientJpgPages, printOrder } from './printUtils.js';
+
+const printUtilsSource = readFileSync(new URL('./printUtils.js', import.meta.url), 'utf8');
 
 const renderPrintDocument = (order, options) => {
     let html = '';
@@ -122,6 +125,7 @@ test('builds one 1080 by 1350 client image per product', () => {
     assert.equal(pages.length, 2);
     assert.deepEqual(pages.map(({ width, height }) => [width, height]), [[1080, 1350], [1080, 1350]]);
     assert.equal(pages[0].documentLabel, 'PEDIDO');
+    assert.equal(pages[0].clientName, 'BORJA - ESCOLA JOAO FONSECA');
     assert.equal(pages[0].total, 980);
     assert.match(pages[0].fileName, /^pedido-ATOS-9762-1\.jpg$/);
     assert.equal(pages[1].line.product_type, 'Bandeirão');
@@ -132,4 +136,10 @@ test('labels quote images and filenames as orçamento', () => {
 
     assert.equal(page.documentLabel, 'ORÇAMENTO');
     assert.equal(page.fileName, 'orcamento-ORC-6435.jpg');
+});
+
+test('shares client images without silently downloading them', () => {
+    assert.match(printUtilsSource, /navigator\.share\(\{/);
+    assert.match(printUtilsSource, /SHARE_UNSUPPORTED/);
+    assert.doesNotMatch(printUtilsSource, /link\.download/);
 });

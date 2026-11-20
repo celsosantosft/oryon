@@ -22,6 +22,7 @@ const normalizePrefix = (value, fallback = DEFAULT_ORDER_PREFIX) => {
 const CONFIGURED_BRAND_NAME = readEnv('VITE_APP_BRAND_NAME', DEFAULT_BRAND_NAME);
 const CONFIGURED_SYSTEM_NAME = readEnv('VITE_APP_SYSTEM_NAME', DEFAULT_SYSTEM_NAME);
 const CONFIGURED_ORDER_PREFIX = normalizePrefix(readEnv('VITE_APP_ORDER_PREFIX', DEFAULT_ORDER_PREFIX));
+const IS_DEFAULT_ATOS_BRAND = CONFIGURED_ORDER_PREFIX === DEFAULT_ORDER_PREFIX;
 
 const isLocalDevHost = (hostname) => (
     hostname === 'localhost'
@@ -62,6 +63,8 @@ export const appConfig = Object.freeze({
     systemName: CONFIGURED_SYSTEM_NAME,
     orderPrefix: CONFIGURED_ORDER_PREFIX,
     supportEmail: readEnv('VITE_APP_SUPPORT_EMAIL', 'atosfardamentos@gmail.com'),
+    companyDocument: readEnv('VITE_APP_COMPANY_DOCUMENT', IS_DEFAULT_ATOS_BRAND ? '59.907.753/0001-28' : ''),
+    companyAddress: readEnv('VITE_APP_COMPANY_ADDRESS', IS_DEFAULT_ATOS_BRAND ? 'R. Atlântica - Ouro Preto, Olinda - PE, 53370-530' : ''),
     logoUrl: readEnv('VITE_APP_LOGO_URL', '/logo.png'),
     logoSmallUrl: readEnv('VITE_APP_LOGO_SMALL_URL', '/logo-120.png'),
     logoMediumUrl: readEnv('VITE_APP_LOGO_MEDIUM_URL', '/logo-240.png'),

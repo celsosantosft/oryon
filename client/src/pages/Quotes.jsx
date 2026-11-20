@@ -35,6 +35,7 @@ const Icons = {
     Check: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>,
     Search: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>,
     Image: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>,
+    Share: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 16V3m0 0L7 8m5-5l5 5M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6" /></svg>,
     Printer: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>,
     Filter: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>,
     Link: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>,
@@ -1190,7 +1191,7 @@ const QuoteRow = React.memo(({ quote, isSelected, onCheckboxChange, onView, onEd
                         {canConvertQuoteToOrder(quote) && <button type="button" className="quotes-card-convert" onClick={() => onApproveToOrder(quote)}><span aria-hidden="true">{Icons.Check}</span>{quote.status === 'Aprovado' ? 'Gerar pedido' : 'Aprovar'}</button>}
                         {canEdit && <button type="button" disabled={editDisabled} onClick={() => onEdit(quote)}><span aria-hidden="true">{Icons.Edit}</span>Editar</button>}
                         <button type="button" onClick={() => onPrint(quote)}><span aria-hidden="true">{Icons.Printer}</span>Imprimir</button>
-                        <button type="button" onClick={() => onExportJpg(quote)}><span aria-hidden="true">{Icons.Image}</span>JPG</button>
+                        <button type="button" onClick={() => onExportJpg(quote)}><span aria-hidden="true">{Icons.Share}</span>Compartilhar</button>
                     </div>
                 </td>
             </tr>
@@ -1226,7 +1227,7 @@ const QuoteRow = React.memo(({ quote, isSelected, onCheckboxChange, onView, onEd
                     <button onClick={viewQuote} aria-label="Ver Detalhes" style={styles.iconButton} title="Detalhes">{Icons.Eye}</button>
                     {canEdit && <button onClick={() => onEdit(quote)} aria-label="Editar" style={styles.iconButton} title="Editar">{Icons.Edit}</button>}
                     <button onClick={() => onPrint(quote)} aria-label="Imprimir" style={styles.iconButton} title="Imprimir Orçamento">{Icons.Printer}</button>
-                    <button onClick={() => onExportJpg(quote)} aria-label="Gerar JPG 1080 por 1350" style={styles.iconButton} title="Gerar JPG para o cliente">{Icons.Image}</button>
+                    <button onClick={() => onExportJpg(quote)} aria-label="Compartilhar imagem 1080 por 1350" style={styles.iconButton} title="Compartilhar com o cliente">{Icons.Share}</button>
                 </div>
             </td>
         </tr>
@@ -1404,16 +1405,18 @@ const Quotes = ({ preview: forcePreview = false }) => {
     }, [API_BASE_URL, fetchQuoteSnapshot]);
 
     const handleExportClientJpg = useCallback(async (quote) => {
-        Swal.fire({ title: 'Gerando JPG…', text: 'Preparando a imagem para o cliente.', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        Swal.fire({ title: 'Preparando compartilhamento…', text: 'Organizando a imagem para o cliente.', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         try {
             const detailedQuote = await fetchQuoteSnapshot(quote.tracking_code);
             const result = await exportClientJpg(detailedQuote, API_BASE_URL);
             Swal.close();
-            if (result.mode === 'downloaded') {
-                Swal.fire({ title: result.count > 1 ? `${result.count} imagens geradas!` : 'JPG gerado!', text: 'O arquivo está pronto para enviar ao cliente.', icon: 'success', showConfirmButton: false, timer: 1800 });
+            if (result.mode === 'shared') Swal.fire({ title: 'Compartilhado!', icon: 'success', showConfirmButton: false, timer: 1400 });
+        } catch (error) {
+            if (error?.code === 'SHARE_UNSUPPORTED') {
+                Swal.fire('Abra no celular', 'Este navegador não permite compartilhar a imagem diretamente. Abra o sistema no celular e tente novamente.', 'info');
+                return;
             }
-        } catch {
-            Swal.fire('Falha ao gerar JPG', 'Não foi possível preparar a imagem deste orçamento.', 'error');
+            Swal.fire('Falha ao compartilhar', 'Não foi possível preparar a imagem deste orçamento.', 'error');
         }
     }, [API_BASE_URL, fetchQuoteSnapshot]);
 
