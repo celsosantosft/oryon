@@ -600,7 +600,6 @@ const safeFilePart = (value) => String(value || 'documento')
 export const buildClientJpgPages = (order, apiBaseUrl) => {
     const lines = buildNormalizedLines(order, apiBaseUrl);
     const isQuote = String(order?.tracking_code || '').startsWith('#ORC-');
-    const total = Number(order?.total_price || lines.reduce((sum, line) => sum + line.total_price, 0));
     const code = safeFilePart(order?.tracking_code);
 
     return lines.map((line, index) => ({
@@ -611,7 +610,7 @@ export const buildClientJpgPages = (order, apiBaseUrl) => {
         trackingCode: String(order?.tracking_code || ''),
         deliveryDate: formatDateSafe(order?.delivery_date),
         status: String(order?.status || ''),
-        total,
+        total: Number(line.total_price || (lines.length === 1 ? order?.total_price : 0) || 0),
         pageNumber: index + 1,
         pageCount: lines.length,
         fileName: `${isQuote ? 'orcamento' : 'pedido'}-${code}${lines.length > 1 ? `-${index + 1}` : ''}.jpg`,
@@ -865,7 +864,7 @@ const renderClientJpgPage = async (page) => {
     ctx.fillText(`${page.line.totalPieces} PEÇA(S)`, 64, 1210);
     ctx.fillStyle = '#64748B';
     ctx.font = '700 16px Arial, sans-serif';
-    ctx.fillText('TOTAL DO DOCUMENTO', 720, 1198);
+    ctx.fillText('SUBTOTAL DO PRODUTO', 720, 1198);
     ctx.textAlign = 'right';
     ctx.fillStyle = accent;
     ctx.font = '800 32px Arial, sans-serif';
@@ -873,7 +872,7 @@ const renderClientJpgPage = async (page) => {
     ctx.textAlign = 'left';
     ctx.fillStyle = '#94A3B8';
     ctx.font = '600 15px Arial, sans-serif';
-    ctx.fillText(`${appConfig.brandName} • imagem 1080 × 1350 px`, 64, 1300);
+    ctx.fillText(appConfig.brandName, 64, 1300);
 
     return canvasToJpeg(canvas);
 };

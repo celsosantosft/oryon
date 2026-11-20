@@ -126,7 +126,8 @@ test('builds one 1080 by 1350 client image per product', () => {
     assert.deepEqual(pages.map(({ width, height }) => [width, height]), [[1080, 1350], [1080, 1350]]);
     assert.equal(pages[0].documentLabel, 'PEDIDO');
     assert.equal(pages[0].clientName, 'BORJA - ESCOLA JOAO FONSECA');
-    assert.equal(pages[0].total, 980);
+    assert.equal(pages[0].total, 700);
+    assert.equal(pages[1].total, 280);
     assert.match(pages[0].fileName, /^pedido-ATOS-9762-1\.jpg$/);
     assert.equal(pages[1].line.product_type, 'Bandeirão');
 });
@@ -142,4 +143,5 @@ test('shares client images without silently downloading them', () => {
     assert.match(printUtilsSource, /navigator\.share\(\{/);
     assert.match(printUtilsSource, /SHARE_UNSUPPORTED/);
     assert.doesNotMatch(printUtilsSource, /link\.download/);
+    assert.doesNotMatch(printUtilsSource, /imagem 1080 × 1350 px/);
 });

@@ -11,3 +11,12 @@ test('keeps the customer portal grade read-only', () => {
     assert.doesNotMatch(bulkTabSource, /Enviar Grade/);
     assert.doesNotMatch(portalSource, /handleBulkSubmit|confirmBulkSubmitAlert|submit-bulk/);
 });
+
+test('separates the portal grade by product line', () => {
+    assert.match(portalSource, /productLines=\{order\.product_lines\}/);
+    assert.match(bulkTabSource, /productLines = \[\]/);
+    assert.match(bulkTabSource, /line\?\.sizes_json/);
+    assert.match(bulkTabSource, /Produto \{section\.index \+ 1\}/);
+    assert.match(bulkTabSource, /section\.productName/);
+    assert.match(bulkTabSource, /section\.total\} peça\(s\)/);
+});
