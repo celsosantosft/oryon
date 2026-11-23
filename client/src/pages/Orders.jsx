@@ -6,7 +6,7 @@ import Swal from 'sweetalert2';
 import { useAuth } from '../context/AuthContext';
 import { appConfig } from '../config/appConfig';
 import Modal from '../components/Modal';
-import { exportClientJpg, printOrder } from '../utils/printUtils';
+import { exportClientJpg, printOrder, shareClientJpg } from '../utils/printUtils';
 import { normalizeGradeSize, sortGradeItems } from '../utils/cuttingGrouping';
 
 // ============================================================================
@@ -1487,15 +1487,31 @@ const Orders = ({ preview: forcePreview = false }) => {
                     sizes_json: { ...ORDER_CONSTANTS.DEFAULT_SIZES, ...(line.sizes_json || {}) }
                 })) : []
             };
-            const result = await exportClientJpg(detailedOrder, API_BASE_URL);
+            const prepared = await exportClientJpg(detailedOrder, API_BASE_URL, { prepareOnly: true });
             Swal.close();
-            if (result.mode === 'shared') Swal.fire({ title: 'Compartilhado!', icon: 'success', showConfirmButton: false, timer: 1400 });
-        } catch (error) {
-            if (error?.code === 'SHARE_UNSUPPORTED') {
-                Swal.fire('Abra no celular', 'Este navegador não permite compartilhar a imagem diretamente. Abra o sistema no celular e tente novamente.', 'info');
-                return;
-            }
-            Swal.fire('Falha ao compartilhar', 'Não foi possível preparar a imagem deste pedido.', 'error');
+            const confirmation = await Swal.fire({
+                title: prepared.count > 1 ? `${prepared.count} imagens prontas` : 'Imagem pronta',
+                text: 'Toque abaixo para abrir o compartilhamento do celular.',
+                icon: 'success',
+                showCancelButton: true,
+                confirmButtonText: 'Compartilhar agora',
+                cancelButtonText: 'Cancelar',
+                showLoaderOnConfirm: true,
+                allowOutsideClick: () => !Swal.isLoading(),
+                preConfirm: async () => {
+                    try {
+                        return await shareClientJpg(prepared);
+                    } catch (error) {
+                        Swal.showValidationMessage(error?.code === 'SHARE_UNSUPPORTED'
+                            ? 'Abra o sistema no celular para compartilhar as imagens.'
+                            : 'Não foi possível abrir o compartilhamento. Tente novamente.');
+                        return false;
+                    }
+                }
+            });
+            if (confirmation.value?.mode === 'shared') Swal.fire({ title: 'Compartilhado!', icon: 'success', showConfirmButton: false, timer: 1400 });
+        } catch {
+            Swal.fire('Falha ao preparar', 'Não foi possível preparar as imagens deste pedido.', 'error');
         }
     }, [API_BASE_URL, token]);
 

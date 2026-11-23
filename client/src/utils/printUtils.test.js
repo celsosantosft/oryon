@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { buildClientJpgPages, printOrder } from './printUtils.js';
+import { buildClientJpgPages, printOrder, shareClientJpg } from './printUtils.js';
 
 const printUtilsSource = readFileSync(new URL('./printUtils.js', import.meta.url), 'utf8');
 
@@ -173,4 +173,27 @@ test('shares client images without silently downloading them', () => {
     assert.doesNotMatch(printUtilsSource, /link\.download/);
     assert.doesNotMatch(printUtilsSource, /imagem 1080 × 1350 px/);
     assert.doesNotMatch(printUtilsSource, /page\.pageCount/);
+    assert.match(printUtilsSource, /prepareOnly \? prepared : shareClientJpg\(prepared\)/);
+});
+
+test('shares already prepared files from the explicit user action', async () => {
+    const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    let sharedPayload;
+    Object.defineProperty(globalThis, 'navigator', {
+        configurable: true,
+        value: {
+            canShare: () => true,
+            share: async (payload) => { sharedPayload = payload; }
+        }
+    });
+
+    try {
+        const prepared = { files: [{ name: 'pedido.jpg' }], title: 'Pedido', text: 'Cliente', count: 1 };
+        const result = await shareClientJpg(prepared);
+        assert.equal(result.mode, 'shared');
+        assert.deepEqual(sharedPayload, { files: prepared.files, title: 'Pedido', text: 'Cliente' });
+    } finally {
+        if (previousNavigator) Object.defineProperty(globalThis, 'navigator', previousNavigator);
+        else delete globalThis.navigator;
+    }
 });

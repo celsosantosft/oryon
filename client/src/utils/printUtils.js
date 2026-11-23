@@ -1024,13 +1024,7 @@ const renderClientJpgPage = async (page) => {
     return canvasToJpeg(canvas);
 };
 
-export const exportClientJpg = async (order, apiBaseUrl) => {
-    const pages = buildClientJpgPages(order, apiBaseUrl);
-    const files = [];
-    for (const page of pages) {
-        files.push(new File([await renderClientJpgPage(page)], page.fileName, { type: 'image/jpeg' }));
-    }
-
+export const shareClientJpg = async ({ files, title, text, count }) => {
     if (!navigator.share || !navigator.canShare?.({ files })) {
         const error = new Error('Este navegador não permite compartilhar imagens diretamente.');
         error.code = 'SHARE_UNSUPPORTED';
@@ -1038,14 +1032,25 @@ export const exportClientJpg = async (order, apiBaseUrl) => {
     }
 
     try {
-        await navigator.share({
-            files,
-            title: `${pages[0].documentLabel} ${pages[0].trackingCode}`,
-            text: `${pages[0].documentLabel} de ${pages[0].clientName}`
-        });
-        return { mode: 'shared', count: files.length };
+        await navigator.share({ files, title, text });
+        return { mode: 'shared', count };
     } catch (error) {
-        if (error?.name === 'AbortError') return { mode: 'cancelled', count: files.length };
+        if (error?.name === 'AbortError') return { mode: 'cancelled', count };
         throw error;
     }
+};
+
+export const exportClientJpg = async (order, apiBaseUrl, { prepareOnly = false } = {}) => {
+    const pages = buildClientJpgPages(order, apiBaseUrl);
+    const files = [];
+    for (const page of pages) {
+        files.push(new File([await renderClientJpgPage(page)], page.fileName, { type: 'image/jpeg' }));
+    }
+    const prepared = {
+        files,
+        title: `${pages[0].documentLabel} ${pages[0].trackingCode}`,
+        text: `${pages[0].documentLabel} de ${pages[0].clientName}`,
+        count: files.length
+    };
+    return prepareOnly ? prepared : shareClientJpg(prepared);
 };

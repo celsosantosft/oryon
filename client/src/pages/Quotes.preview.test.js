@@ -82,4 +82,7 @@ test('shares the current quote as a 1080 by 1350 client image', () => {
     assert.match(quotesSource, /Compartilhar imagem 1080 por 1350/);
     assert.match(quotesSource, /Icons\.Share\}\<\/span\>Compartilhar/);
     assert.match(quotesSource, /SHARE_UNSUPPORTED/);
+    assert.match(quotesSource, /prepareOnly: true/);
+    assert.match(quotesSource, /preConfirm: async/);
+    assert.match(quotesSource, /shareClientJpg\(prepared\)/);
 });

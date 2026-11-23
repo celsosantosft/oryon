@@ -11,6 +11,7 @@
 - Operational views must use real database records and show explicit errors when loading fails.
 - A ficha de produção deve usar a grade e a lista nominal atuais do pedido. Na impressão, o layout vem primeiro e os nomes/números ficam compactos abaixo, agrupados por tamanho, priorizando uma única folha A4.
 - Pedidos e orçamentos são compartilhados com o cliente em imagem JPG 1080 × 1350 px (4:5), sem baixar o arquivo automaticamente; a ficha inclui cabeçalho empresarial, cliente completo, grade e layout. Quando houver vários produtos, o sistema gera uma imagem por produto, com a grade e o subtotal apenas daquele produto. Nas imagens de pedido, o recibo também informa o valor total já pago pelo cliente. Se houver lista nominal, uma única imagem adicional aparece em segundo lugar com nome, número e tamanho, organizada entre Infantil (2 a 14 anos) e Adulto (PP a XXG).
+- Depois de preparar as imagens, o sistema exige um toque explícito em `Compartilhar agora` para abrir o compartilhamento nativo sem perder a autorização temporária do navegador móvel.
 - Ao abrir um pedido no Kanban de Produção, o modal deve exibir o layout anexado sem ocultar a grade de tamanhos.
 - As rotas oficiais `/portal` usam a experiência mobile aprovada; `/portal-preview` permanece disponível para comparação e é a única que exibe o selo de teste.
 - No portal do cliente, a aba Grade é somente para visualização. Quando a lista estiver liberada, o cliente pode adicionar camisas e alterar tamanhos pela aba Nomes; o envio dessa lista atualiza a grade e os valores do pedido.

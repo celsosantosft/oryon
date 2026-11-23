@@ -61,4 +61,7 @@ test('shares the current order as a 1080 by 1350 client image', () => {
     assert.match(ordersSource, /Compartilhar imagem 1080 por 1350/);
     assert.match(ordersSource, /Icons\.Share\}\<\/span\>Compartilhar/);
     assert.match(ordersSource, /SHARE_UNSUPPORTED/);
+    assert.match(ordersSource, /prepareOnly: true/);
+    assert.match(ordersSource, /preConfirm: async/);
+    assert.match(ordersSource, /shareClientJpg\(prepared\)/);
 });
