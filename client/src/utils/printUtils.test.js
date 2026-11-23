@@ -116,6 +116,8 @@ test('builds one 1080 by 1350 client image per product', () => {
     const pages = buildClientJpgPages({
         ...changedOrder,
         total_price: 980,
+        amount_paid: 400,
+        synced_amount_paid: 450,
         product_lines: [
             { ...changedOrder.product_lines[0], total_price: 700 },
             { product_type: 'Bandeirão', fabric_type: 'Oxford', sizes_json: { ESP: 1 }, total_price: 280 }
@@ -128,6 +130,8 @@ test('builds one 1080 by 1350 client image per product', () => {
     assert.equal(pages[0].clientName, 'BORJA - ESCOLA JOAO FONSECA');
     assert.equal(pages[0].total, 700);
     assert.equal(pages[1].total, 280);
+    assert.equal(pages[0].amountPaid, 450);
+    assert.equal(pages[1].amountPaid, 450);
     assert.match(pages[0].fileName, /^pedido-ATOS-9762-1\.jpg$/);
     assert.equal(pages[1].line.product_type, 'Bandeirão');
 });
@@ -144,4 +148,5 @@ test('shares client images without silently downloading them', () => {
     assert.match(printUtilsSource, /SHARE_UNSUPPORTED/);
     assert.doesNotMatch(printUtilsSource, /link\.download/);
     assert.doesNotMatch(printUtilsSource, /imagem 1080 × 1350 px/);
+    assert.doesNotMatch(printUtilsSource, /page\.pageCount/);
 });

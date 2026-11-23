@@ -601,6 +601,9 @@ export const buildClientJpgPages = (order, apiBaseUrl) => {
     const lines = buildNormalizedLines(order, apiBaseUrl);
     const isQuote = String(order?.tracking_code || '').startsWith('#ORC-');
     const code = safeFilePart(order?.tracking_code);
+    const amountPaid = Math.max(0, ...[order?.amount_paid, order?.synced_amount_paid]
+        .map((value) => Number(value || 0))
+        .filter(Number.isFinite));
 
     return lines.map((line, index) => ({
         width: CLIENT_JPG_WIDTH,
@@ -611,8 +614,8 @@ export const buildClientJpgPages = (order, apiBaseUrl) => {
         deliveryDate: formatDateSafe(order?.delivery_date),
         status: String(order?.status || ''),
         total: Number(line.total_price || (lines.length === 1 ? order?.total_price : 0) || 0),
+        amountPaid,
         pageNumber: index + 1,
-        pageCount: lines.length,
         fileName: `${isQuote ? 'orcamento' : 'pedido'}-${code}${lines.length > 1 ? `-${index + 1}` : ''}.jpg`,
         line
     }));
@@ -802,10 +805,6 @@ const renderClientJpgPage = async (page) => {
     ctx.fillStyle = '#0F172A';
     ctx.font = '800 25px Arial, sans-serif';
     ctx.fillText(page.deliveryDate || 'Não informada', 780, 294);
-    ctx.fillStyle = '#64748B';
-    ctx.font = '700 16px Arial, sans-serif';
-    ctx.fillText(`${page.pageNumber} de ${page.pageCount}`, 780, 337);
-
     drawSectionHeading(ctx, `ITEM ${page.pageNumber} DO ${page.documentLabel}`, 418, accent);
     ctx.fillStyle = '#0F172A';
     drawFullTextToFit(ctx, page.line.description, 64, 460, 952, { maxLines: 2, fontSize: 27, minFontSize: 19 });
@@ -863,12 +862,22 @@ const renderClientJpgPage = async (page) => {
     ctx.font = '800 20px Arial, sans-serif';
     ctx.fillText(`${page.line.totalPieces} PEÇA(S)`, 64, 1210);
     ctx.fillStyle = '#64748B';
-    ctx.font = '700 16px Arial, sans-serif';
-    ctx.fillText('SUBTOTAL DO PRODUTO', 720, 1198);
+    ctx.font = '700 14px Arial, sans-serif';
+    ctx.fillText('SUBTOTAL DO PRODUTO', page.documentLabel === 'PEDIDO' ? 420 : 720, 1198);
     ctx.textAlign = 'right';
     ctx.fillStyle = accent;
-    ctx.font = '800 32px Arial, sans-serif';
-    ctx.fillText(formatMoney(page.total), 1016, 1224);
+    ctx.font = '800 29px Arial, sans-serif';
+    ctx.fillText(formatMoney(page.total), page.documentLabel === 'PEDIDO' ? 690 : 1016, 1224);
+    if (page.documentLabel === 'PEDIDO') {
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#64748B';
+        ctx.font = '700 14px Arial, sans-serif';
+        ctx.fillText('VALOR PAGO NO PEDIDO', 740, 1198);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#059669';
+        ctx.font = '800 29px Arial, sans-serif';
+        ctx.fillText(formatMoney(page.amountPaid), 1016, 1224);
+    }
     ctx.textAlign = 'left';
     ctx.fillStyle = '#94A3B8';
     ctx.font = '600 15px Arial, sans-serif';
