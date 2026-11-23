@@ -41,12 +41,46 @@ const buildLineDescription = (productType, fabricType) => {
     return `${product} ${fabric}`.trim().toUpperCase();
 };
 
+const INFANT_SIZE_ORDER = ['2', '4', '6', '8', '10', '12', '14'];
+const ADULT_SIZE_ORDER = ['PP', 'P', 'M', 'G', 'GG', 'XG', 'XXG', 'XXXG', 'ESP'];
+
+const normalizeNominalSize = (value) => {
+    const normalized = String(value || '').trim().toUpperCase();
+    const infant = normalized.replace(/\s*ANOS?$/, '');
+    return INFANT_SIZE_ORDER.includes(infant) ? `${infant} ANOS` : (normalized || 'SEM TAMANHO');
+};
+
+const buildNominalSections = (items = []) => {
+    const normalizedItems = (Array.isArray(items) ? items : [])
+        .filter((item) => item?.player_name || item?.player_number || item?.size)
+        .map((item) => ({
+            name: String(item.player_name || 'SEM NOME').trim().toUpperCase(),
+            number: String(item.player_number || '-').trim(),
+            size: normalizeNominalSize(item.size)
+        }));
+    const sizeRank = (size) => {
+        const infantIndex = INFANT_SIZE_ORDER.indexOf(size.replace(/\s*ANOS?$/, ''));
+        if (infantIndex >= 0) return infantIndex;
+        const adultIndex = ADULT_SIZE_ORDER.indexOf(size);
+        return adultIndex >= 0 ? INFANT_SIZE_ORDER.length + adultIndex : 100;
+    };
+    normalizedItems.sort((left, right) => (
+        sizeRank(left.size) - sizeRank(right.size)
+        || left.name.localeCompare(right.name, 'pt-BR')
+    ));
+
+    const infant = normalizedItems.filter((item) => item.size.includes('ANOS'));
+    const adult = normalizedItems.filter((item) => !item.size.includes('ANOS'));
+    return [
+        infant.length ? { label: 'INFANTIL', range: '2 A 14 ANOS', items: infant } : null,
+        adult.length ? { label: 'ADULTO', range: 'PP AO XXG', items: adult } : null
+    ].filter(Boolean);
+};
+
 const buildLineSizeData = (sizes = {}) => {
-    const infantSizes = ['2', '4', '6', '8', '10', '12', '14'];
-    const adultSizes = ['PP', 'P', 'M', 'G', 'GG', 'XG', 'XXG', 'XXXG', 'ESP'];
     const visibleSizes = Object.keys(sizes).filter((size) => Number(sizes[size] || 0) > 0);
-    const infantRank = (size) => infantSizes.indexOf(String(size).toUpperCase().replace(/\s*ANOS?$/, ''));
-    const adultRank = (size) => adultSizes.indexOf(String(size).toUpperCase());
+    const infantRank = (size) => INFANT_SIZE_ORDER.indexOf(String(size).toUpperCase().replace(/\s*ANOS?$/, ''));
+    const adultRank = (size) => ADULT_SIZE_ORDER.indexOf(String(size).toUpperCase());
     const visibleInfantSizes = visibleSizes
         .filter((size) => infantRank(size) >= 0)
         .sort((left, right) => infantRank(left) - infantRank(right));
@@ -604,8 +638,8 @@ export const buildClientJpgPages = (order, apiBaseUrl) => {
     const amountPaid = Math.max(0, ...[order?.amount_paid, order?.synced_amount_paid]
         .map((value) => Number(value || 0))
         .filter(Number.isFinite));
-
-    return lines.map((line, index) => ({
+    const nominalSections = buildNominalSections(order?.items);
+    const basePage = {
         width: CLIENT_JPG_WIDTH,
         height: CLIENT_JPG_HEIGHT,
         documentLabel: isQuote ? 'ORÇAMENTO' : 'PEDIDO',
@@ -613,12 +647,26 @@ export const buildClientJpgPages = (order, apiBaseUrl) => {
         trackingCode: String(order?.tracking_code || ''),
         deliveryDate: formatDateSafe(order?.delivery_date),
         status: String(order?.status || ''),
+        amountPaid
+    };
+    const productPages = lines.map((line, index) => ({
+        ...basePage,
+        kind: 'product',
         total: Number(line.total_price || (lines.length === 1 ? order?.total_price : 0) || 0),
-        amountPaid,
         pageNumber: index + 1,
         fileName: `${isQuote ? 'orcamento' : 'pedido'}-${code}${lines.length > 1 ? `-${index + 1}` : ''}.jpg`,
         line
     }));
+
+    if (!nominalSections.length) return productPages;
+    const namesPage = {
+        ...basePage,
+        kind: 'names',
+        nominalSections,
+        totalNames: nominalSections.reduce((sum, section) => sum + section.items.length, 0),
+        fileName: `${isQuote ? 'orcamento' : 'pedido'}-${code}-nomes.jpg`
+    };
+    return [productPages[0], namesPage, ...productPages.slice(1)];
 };
 
 const roundedRect = (ctx, x, y, width, height, radius) => {
@@ -709,6 +757,92 @@ const chunkItems = (items, size) => {
     const chunks = [];
     for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
     return chunks;
+};
+
+const drawSingleLineToFit = (ctx, value, x, y, maxWidth, fontSize, fontWeight = 700) => {
+    const text = String(value || '-');
+    let size = fontSize;
+    ctx.font = `${fontWeight} ${size}px Arial, sans-serif`;
+    while (size > 7 && ctx.measureText(text).width > maxWidth) {
+        size -= 1;
+        ctx.font = `${fontWeight} ${size}px Arial, sans-serif`;
+    }
+    ctx.fillText(text, x, y, maxWidth);
+};
+
+const drawNominalSection = (ctx, section, x, y, width, height, accent) => {
+    roundedRect(ctx, x, y, width, height, 18);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
+    ctx.strokeStyle = '#E2E8F0';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = accent;
+    ctx.font = '800 22px Arial, sans-serif';
+    ctx.fillText(section.label, x + 22, y + 18);
+    ctx.fillStyle = '#64748B';
+    ctx.font = '700 15px Arial, sans-serif';
+    ctx.fillText(section.range, x + 22, y + 47);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#334155';
+    ctx.font = '800 17px Arial, sans-serif';
+    ctx.fillText(`${section.items.length} peça(s)`, x + width - 22, y + 25);
+    ctx.textAlign = 'left';
+
+    const itemsTop = y + 78;
+    const itemsHeight = Math.max(40, height - 94);
+    const maxRows = Math.max(1, Math.floor(itemsHeight / 32));
+    const columnCount = Math.min(6, Math.max(1, Math.ceil(section.items.length / maxRows)));
+    const rowsPerColumn = Math.ceil(section.items.length / columnCount);
+    const columnGap = 10;
+    const columnWidth = (width - 44 - ((columnCount - 1) * columnGap)) / columnCount;
+    const rowHeight = Math.min(42, itemsHeight / Math.max(1, rowsPerColumn));
+    const fontSize = Math.max(7, Math.min(15, Math.floor(rowHeight * 0.42)));
+
+    section.items.forEach((item, index) => {
+        const column = Math.floor(index / rowsPerColumn);
+        const row = index % rowsPerColumn;
+        const rowX = x + 22 + (column * (columnWidth + columnGap));
+        const rowY = itemsTop + (row * rowHeight);
+        const sizeWidth = Math.min(72, columnWidth * 0.3);
+        const numberWidth = Math.min(44, columnWidth * 0.2);
+
+        ctx.fillStyle = row % 2 === 0 ? '#F8FAFC' : '#FFFFFF';
+        ctx.fillRect(rowX, rowY, columnWidth, rowHeight - 2);
+        ctx.fillStyle = accent;
+        drawSingleLineToFit(ctx, item.size, rowX + 7, rowY + Math.max(5, (rowHeight - fontSize) / 2), sizeWidth - 10, fontSize, 800);
+        ctx.fillStyle = '#0F172A';
+        drawSingleLineToFit(ctx, item.name, rowX + sizeWidth, rowY + Math.max(5, (rowHeight - fontSize) / 2), columnWidth - sizeWidth - numberWidth - 8, fontSize, 700);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#334155';
+        drawSingleLineToFit(ctx, item.number, rowX + columnWidth - 7, rowY + Math.max(5, (rowHeight - fontSize) / 2), numberWidth - 7, fontSize, 800);
+        ctx.textAlign = 'left';
+    });
+};
+
+const drawNominalPage = (ctx, page, accent) => {
+    drawSectionHeading(ctx, 'RELAÇÃO NOMINAL', 418, accent);
+    ctx.fillStyle = '#64748B';
+    ctx.font = '700 18px Arial, sans-serif';
+    ctx.fillText(`${page.totalNames} peça(s) • nome, número e tamanho`, 64, 460);
+
+    const top = 500;
+    const availableHeight = 760;
+    const gap = 18;
+    if (page.nominalSections.length === 1) {
+        drawNominalSection(ctx, page.nominalSections[0], 64, top, 952, availableHeight, accent);
+    } else {
+        const totalItems = page.nominalSections.reduce((sum, section) => sum + section.items.length, 0);
+        const usableHeight = availableHeight - gap;
+        const firstHeight = Math.max(220, Math.min(usableHeight - 220, Math.round(usableHeight * (page.nominalSections[0].items.length / totalItems))));
+        drawNominalSection(ctx, page.nominalSections[0], 64, top, 952, firstHeight, accent);
+        drawNominalSection(ctx, page.nominalSections[1], 64, top + firstHeight + gap, 952, usableHeight - firstHeight, accent);
+    }
+
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = '600 15px Arial, sans-serif';
+    ctx.fillText(appConfig.brandName, 64, 1300);
 };
 
 const loadCanvasImage = async (url) => {
@@ -805,6 +939,10 @@ const renderClientJpgPage = async (page) => {
     ctx.fillStyle = '#0F172A';
     ctx.font = '800 25px Arial, sans-serif';
     ctx.fillText(page.deliveryDate || 'Não informada', 780, 294);
+    if (page.kind === 'names') {
+        drawNominalPage(ctx, page, accent);
+        return canvasToJpeg(canvas);
+    }
     drawSectionHeading(ctx, `ITEM ${page.pageNumber} DO ${page.documentLabel}`, 418, accent);
     ctx.fillStyle = '#0F172A';
     drawFullTextToFit(ctx, page.line.description, 64, 460, 952, { maxLines: 2, fontSize: 27, minFontSize: 19 });

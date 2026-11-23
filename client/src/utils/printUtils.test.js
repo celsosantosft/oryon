@@ -124,16 +124,40 @@ test('builds one 1080 by 1350 client image per product', () => {
         ]
     }, 'https://atosfardamentos.com.br/api');
 
-    assert.equal(pages.length, 2);
-    assert.deepEqual(pages.map(({ width, height }) => [width, height]), [[1080, 1350], [1080, 1350]]);
+    assert.equal(pages.length, 3);
+    assert.deepEqual(pages.map(({ width, height }) => [width, height]), [[1080, 1350], [1080, 1350], [1080, 1350]]);
     assert.equal(pages[0].documentLabel, 'PEDIDO');
     assert.equal(pages[0].clientName, 'BORJA - ESCOLA JOAO FONSECA');
     assert.equal(pages[0].total, 700);
-    assert.equal(pages[1].total, 280);
+    assert.equal(pages[1].kind, 'names');
+    assert.equal(pages[1].totalNames, 3);
+    assert.equal(pages[1].fileName, 'pedido-ATOS-9762-nomes.jpg');
+    assert.equal(pages[2].total, 280);
     assert.equal(pages[0].amountPaid, 450);
-    assert.equal(pages[1].amountPaid, 450);
+    assert.equal(pages[2].amountPaid, 450);
     assert.match(pages[0].fileName, /^pedido-ATOS-9762-1\.jpg$/);
-    assert.equal(pages[1].line.product_type, 'Bandeirão');
+    assert.equal(pages[2].line.product_type, 'Bandeirão');
+});
+
+test('puts one ordered nominal list in the second shared image', () => {
+    const pages = buildClientJpgPages({
+        ...changedOrder,
+        items: [
+            { player_name: 'ADOLESCENTE', player_number: '14', size: '14 ANOS' },
+            { player_name: 'ADULTO M', player_number: '8', size: 'M' },
+            { player_name: 'CRIANÇA', player_number: '2', size: '2' },
+            { player_name: 'ADULTO PP', player_number: '1', size: 'PP' }
+        ]
+    }, 'https://atosfardamentos.com.br/api');
+    const namesPage = pages[1];
+
+    assert.equal(namesPage.kind, 'names');
+    assert.deepEqual(namesPage.nominalSections.map(({ label, range }) => [label, range]), [
+        ['INFANTIL', '2 A 14 ANOS'],
+        ['ADULTO', 'PP AO XXG']
+    ]);
+    assert.deepEqual(namesPage.nominalSections[0].items.map(({ size }) => size), ['2 ANOS', '14 ANOS']);
+    assert.deepEqual(namesPage.nominalSections[1].items.map(({ size }) => size), ['PP', 'M']);
 });
 
 test('labels quote images and filenames as orçamento', () => {
