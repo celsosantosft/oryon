@@ -610,6 +610,13 @@ function createTables() {
         FOREIGN KEY (chart_of_account_id) REFERENCES chart_of_accounts(id)
     )`);
 
+    db.run(`CREATE TABLE IF NOT EXISTS finance_series_receipts (
+        user_id INTEGER NOT NULL,
+        request_id TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        PRIMARY KEY (user_id, request_id)
+    )`);
+
     db.run(`CREATE TABLE IF NOT EXISTS financial_accounts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,

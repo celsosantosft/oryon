@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { financeDay, seriesRequestId } from '../utils/financeEntry';
 import Modal from '../components/Modal';
 import Swal from 'sweetalert2';
 import { appConfig } from '../config/appConfig';
@@ -9,6 +10,8 @@ import {
     formatCurrencyValueInput,
     parseCurrencyInput
 } from '../utils/currencyInput';
+
+const isOpenAccount = transaction => ['Pendente', 'Parcial'].includes(transaction.status);
 
 const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const ORDER_CODE_PATTERN = new RegExp(`(#${escapeRegExp(appConfig.orderPrefix)}-\\d+)`, 'i');
@@ -30,17 +33,20 @@ const Icons = {
 };
 
 const FinanceTransactions = () => {
-    const { token, API_BASE_URL } = useAuth();
+    const { token, user, API_BASE_URL } = useAuth();
     const [transactions, setTransactions] = useState([]);
     const [accounts, setAccounts] = useState([]);
     const [orders, setOrders] = useState([]); 
     
+    const openUndated = new URLSearchParams(window.location.search).get('sem_data') === '1';
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState('A Receber'); 
+    const [activeTab, setActiveTab] = useState(openUndated ? 'Histórico' : 'A Receber');
     
     const [historyType, setHistoryType] = useState('Todas'); 
     const [searchQuery, setSearchQuery] = useState('');
-    const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7)); 
+    const [monthFilter, setMonthFilter] = useState(financeDay().slice(0, 7));
+    const [onlyUndated, setOnlyUndated] = useState(openUndated);
+    const [saving, setSaving] = useState(false);
     const [expandedOrders, setExpandedOrders] = useState({});
     const [selectedTransactionIds, setSelectedTransactionIds] = useState([]);
 
@@ -58,36 +64,27 @@ const FinanceTransactions = () => {
     };
     const [formData, setFormData] = useState(initialFormState);
 
-    useEffect(() => {
-        fetchTransactions();
-        fetchConfigData();
-        fetchOrdersForNames();
-    }, []); // eslint-disable-line
-
     const fetchTransactions = () => {
         axios.get(`${API_BASE_URL}/api/finance/transactions`, { headers: { Authorization: `Bearer ${token}` } })
             .then(res => {
                 setTransactions(res.data);
                 setSelectedTransactionIds((current) => current.filter((id) =>
-                    res.data.some((transaction) => transaction.id === id && transaction.status !== 'Pago')
+                    res.data.some((transaction) => transaction.id === id && isOpenAccount(transaction))
                 ));
             })
             .catch(err => console.error("Erro", err));
     };
 
-    const fetchConfigData = async () => {
-        try {
-            const accRes = await axios.get(`${API_BASE_URL}/api/finance/accounts`, { headers: { Authorization: `Bearer ${token}` } });
-            setAccounts(accRes.data);
-        } catch (error) { console.error(error); }
-    };
-
-    const fetchOrdersForNames = async () => {
-        try {
-            const res = await axios.get(`${API_BASE_URL}/api/orders`, { headers: { Authorization: `Bearer ${token}` } });
-            setOrders(res.data.orders || []);
-        } catch (error) { console.error("Erro ao buscar pedidos para nomes", error); }
-    };
+    useEffect(() => {
+        fetchTransactions();
+        const config = { headers: { Authorization: `Bearer ${token}` } };
+        axios.get(`${API_BASE_URL}/api/finance/accounts`, config)
+            .then(response => setAccounts(response.data))
+            .catch(error => console.error(error));
+        axios.get(`${API_BASE_URL}/api/orders`, config)
+            .then(response => setOrders(response.data.orders || []))
+            .catch(error => console.error("Erro ao buscar pedidos para nomes", error));
+    }, [API_BASE_URL, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const formatISODate = (year, month, day) => {
         const safeMonth = String(month).padStart(2, '0');
@@ -124,6 +121,8 @@ const FinanceTransactions = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (saving) return;
+        setSaving(true);
         try {
             const repeatCount = Math.max(1, parseInt(formData.repeat_count || '1', 10) || 1);
             const repeatInterval = formData.repeat_interval || 'monthly';
@@ -147,11 +146,12 @@ const FinanceTransactions = () => {
                 };
             });
 
-            await Promise.all(
-                launches.map((payload) =>
-                    axios.post(`${API_BASE_URL}/api/finance/transactions`, payload, { headers: { Authorization: `Bearer ${token}` } })
-                )
-            );
+            const slot = `oryon:finance:request:${user?.id || ''}`;
+            const requestId = seriesRequestId(sessionStorage, slot, launches);
+            await axios.post(`${API_BASE_URL}/api/finance/transactions/series`, {
+                request_id: requestId, entries: launches
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            sessionStorage.removeItem(slot);
 
             Swal.fire({
                 title: 'Sucesso',
@@ -163,11 +163,15 @@ const FinanceTransactions = () => {
             fetchTransactions();
             setIsModalOpen(false);
             setFormData(initialFormState);
-        } catch (error) { Swal.fire('Erro', 'Falha ao salvar.', 'error'); }
+        } catch (error) {
+            Swal.fire('Erro', error.response?.data?.error || 'Não foi possível confirmar. Reenvie com os mesmos dados para conferir o registro.', 'error');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handlePay = async (transaction) => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = financeDay();
         const pendingAmount = Number(transaction?.amount || 0);
         const actionLabel = transaction?.type === 'Receita' ? 'receber' : 'pagar';
 
@@ -247,6 +251,26 @@ const FinanceTransactions = () => {
         }
     };
 
+    const reconcilePaymentDate = async (id) => {
+        const { isConfirmed, value } = await Swal.fire({
+            title: 'Data da baixa',
+            input: 'date',
+            inputLabel: 'Informe a data de pagamento que consta no comprovante.',
+            inputValidator: (date) => !date && 'Informe a data do comprovante.',
+            showCancelButton: true,
+            confirmButtonText: 'Salvar data',
+            cancelButtonText: 'Cancelar'
+        });
+        if (!isConfirmed) return;
+        try {
+            await axios.put(`${API_BASE_URL}/api/finance/transactions/${id}/payment-date`,
+                { payment_date: value }, { headers: { Authorization: `Bearer ${token}` } });
+            fetchTransactions();
+        } catch (error) {
+            Swal.fire('Data não registrada', error.response?.data?.error || 'Não foi possível salvar a data.', 'error');
+        }
+    };
+
     const handleDelete = async (id) => {
         const result = await Swal.fire({ title: 'Excluir?', text: 'Deseja apagar este registro?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#EF4444', confirmButtonText: 'Sim' });
         if (result.isConfirmed) {
@@ -265,7 +289,7 @@ const FinanceTransactions = () => {
     const summary = useMemo(() => {
         let receitas = 0; let despesas = 0;
         transactions.forEach(t => {
-            if (t.status === 'Pago') {
+            if (t.status === 'Pago' && t.movement_date) {
                 if (t.type === 'Receita') receitas += parseFloat(t.amount);
                 if (t.type === 'Despesa') despesas += parseFloat(t.amount);
             }
@@ -281,17 +305,17 @@ const FinanceTransactions = () => {
                 if (t.status !== 'Pago') return false; 
                 if (historyType === 'Receitas' && t.type !== 'Receita') return false;
                 if (historyType === 'Despesas' && t.type !== 'Despesa') return false;
-                const itemMonth = (t.payment_date || t.due_date || '').substring(0, 7);
-                if (monthFilter && itemMonth !== monthFilter) return false;
+                const itemMonth = t.movement_date?.slice(0, 7);
+                if (onlyUndated ? itemMonth : monthFilter && itemMonth !== monthFilter) return false;
                 if (searchQuery && !t.description.toLowerCase().includes(searchLower)) return false;
                 return true;
-            }).sort((a, b) => new Date(b.payment_date || b.due_date) - new Date(a.payment_date || a.due_date));
+            }).sort((a, b) => (b.movement_date || '').localeCompare(a.movement_date || ''));
             return { type: 'history', items: historyItems };
         }
 
         if (activeTab === 'A Pagar') {
             const pendingDespesas = transactions.filter(t => {
-                if (t.type !== 'Despesa' || t.status === 'Pago') return false;
+                if (t.type !== 'Despesa' || !isOpenAccount(t)) return false;
                 if (searchQuery && !t.description.toLowerCase().includes(searchLower)) return false;
                 return true;
             }).sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
@@ -299,7 +323,7 @@ const FinanceTransactions = () => {
         }
 
         if (activeTab === 'A Receber') {
-            const pendingReceitas = transactions.filter(t => t.type === 'Receita');
+            const pendingReceitas = transactions.filter(t => t.type === 'Receita' && (t.status === 'Pago' || isOpenAccount(t)));
             const groups = {};
             const avulsas = [];
 
@@ -336,7 +360,7 @@ const FinanceTransactions = () => {
                     if (t.status === 'Pago') groups[orderId].paid += val;
                     else groups[orderId].pending += val;
                 } else {
-                    if (matchesSearch && t.status !== 'Pago') avulsas.push(t);
+                    if (matchesSearch && isOpenAccount(t)) avulsas.push(t);
                 }
             });
 
@@ -351,13 +375,13 @@ const FinanceTransactions = () => {
 
             return { type: 'receivable', groups: groupedArray, avulsas };
         }
-    }, [transactions, activeTab, searchQuery, monthFilter, orders, historyType]);
+    }, [transactions, activeTab, searchQuery, monthFilter, onlyUndated, orders, historyType]);
 
     const selectableTransactionIds = useMemo(() => {
         if (activeTab === 'A Receber') {
             return [
                 ...processedData.groups.flatMap((group) => group.transactions
-                    .filter((transaction) => transaction.status !== 'Pago')
+                    .filter((transaction) => isOpenAccount(transaction))
                     .map((transaction) => transaction.id)),
                 ...processedData.avulsas.map((transaction) => transaction.id)
             ];
@@ -371,7 +395,7 @@ const FinanceTransactions = () => {
     }, [activeTab, processedData]);
 
     const selectedTransactions = useMemo(() => transactions.filter((transaction) =>
-        selectedTransactionIds.includes(transaction.id) && transaction.status !== 'Pago'
+        selectedTransactionIds.includes(transaction.id) && isOpenAccount(transaction)
     ), [transactions, selectedTransactionIds]);
 
     const selectedTotal = useMemo(() => selectedTransactions.reduce(
@@ -394,7 +418,7 @@ const FinanceTransactions = () => {
     const handleBatchPay = async () => {
         if (selectedTransactions.length === 0) return;
 
-        const today = new Date().toISOString().split('T')[0];
+        const today = financeDay();
         const isReceivable = activeTab === 'A Receber';
         const result = await Swal.fire({
             title: isReceivable ? 'Dar baixa nos recebimentos?' : 'Pagar contas selecionadas?',
@@ -490,14 +514,14 @@ const FinanceTransactions = () => {
                 <div style={styles.mobillsCard}>
                     <div style={{...styles.cardIconBox, backgroundColor: '#3B82F6'}}>{Icons.Bank}</div>
                     <div style={styles.cardContent}>
-                        <p style={styles.cardLabel}>Saldo em Caixa</p>
+                        <p style={styles.cardLabel}>Saldo das movimentações</p>
                         <h2 style={{...styles.cardValue, color: summary.saldo >= 0 ? '#0F172A' : '#EF4444'}}>{formatMoney(summary.saldo)}</h2>
                     </div>
                 </div>
                 <div style={styles.mobillsCard}>
                     <div style={{...styles.cardIconBox, backgroundColor: '#10B981'}}>{Icons.ArrowUp}</div>
                     <div style={styles.cardContent}>
-                        <p style={styles.cardLabel}>Faturamento Global</p>
+                        <p style={styles.cardLabel}>Receitas recebidas</p>
                         <h2 style={styles.cardValue}>{formatMoney(summary.receitas)}</h2>
                     </div>
                 </div>
@@ -540,8 +564,11 @@ const FinanceTransactions = () => {
                     {activeTab === 'Histórico' && (
                         <div style={styles.monthFilterBox}>
                             <span style={{ fontSize: '0.85rem', fontWeight: '600', color: '#64748B' }}>Mês:</span>
-                            <input type="month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', fontWeight: '700', color: '#0F172A', cursor: 'pointer' }} />
+                            <input type="month" disabled={onlyUndated} value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', fontWeight: '700', color: '#0F172A', cursor: 'pointer' }} />
                         </div>
+                    )}
+                    {activeTab === 'Histórico' && (onlyUndated || transactions.some(t => t.status === 'Pago' && !t.movement_date)) && (
+                        <label><input type="checkbox" checked={onlyUndated} onChange={e => setOnlyUndated(e.target.checked)} /> Só baixas sem data válida</label>
                     )}
                 </div>
             </div>
@@ -617,7 +644,7 @@ const FinanceTransactions = () => {
                             const isExpanded = expandedOrders[group.orderId];
                             const percent = (group.paid / group.total) * 100;
                             const pendingIds = group.transactions
-                                .filter((transaction) => transaction.status !== 'Pago')
+                                .filter((transaction) => isOpenAccount(transaction))
                                 .map((transaction) => transaction.id);
                             const groupSelected = pendingIds.length > 0
                                 && pendingIds.every((id) => selectedTransactionIds.includes(id));
@@ -654,7 +681,7 @@ const FinanceTransactions = () => {
                                     {isExpanded && group.transactions.map(t => (
                                         <tr key={t.id} className="sub-row" style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                                             <td style={{...styles.td, textAlign: 'center'}}>
-                                                {t.status !== 'Pago' && (
+                                                {isOpenAccount(t) && (
                                                     <input
                                                         type="checkbox"
                                                         aria-label={`Selecionar ${t.description}`}
@@ -674,7 +701,7 @@ const FinanceTransactions = () => {
                                             <td style={{padding: '12px 24px', textAlign: 'right'}}>
                                                 <div style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:'16px'}}>
                                                     <span style={{fontWeight: '600', color: '#334155'}}>{formatMoney(t.amount)}</span>
-                                                    {t.status === 'Pendente' && <button onClick={(e) => { e.stopPropagation(); handlePay(t); }} style={{...styles.iconButton, color: '#10B981', backgroundColor: '#ECFDF5', padding: '4px 10px'}} title="Dar Baixa"><span style={{marginRight: '4px', display: 'flex'}}>{Icons.Check}</span> Baixar</button>}
+                                                    {isOpenAccount(t) && <button onClick={(e) => { e.stopPropagation(); handlePay(t); }} style={{...styles.iconButton, color: '#10B981', backgroundColor: '#ECFDF5', padding: '4px 10px'}} title="Dar Baixa"><span style={{marginRight: '4px', display: 'flex'}}>{Icons.Check}</span> Baixar</button>}
                                                 </div>
                                             </td>
                                         </tr>
@@ -699,7 +726,7 @@ const FinanceTransactions = () => {
                                 <td style={styles.td}><StatusBadge status={t.status} /></td>
                                 <td style={{...styles.td, textAlign: 'center'}}>
                                     <div style={{display:'flex', gap:'8px', justifyContent:'flex-end'}}>
-                                        {t.status === 'Pendente' && <button onClick={() => handlePay(t)} style={{...styles.iconButton, color: '#10B981', backgroundColor: '#ECFDF5'}}><span style={{marginRight: '4px', display: 'flex'}}>{Icons.Check}</span> Baixar</button>}
+                                        {isOpenAccount(t) && <button onClick={() => handlePay(t)} style={{...styles.iconButton, color: '#10B981', backgroundColor: '#ECFDF5'}}><span style={{marginRight: '4px', display: 'flex'}}>{Icons.Check}</span> Baixar</button>}
                                         <button onClick={() => handleDelete(t.id)} style={{...styles.iconButton, color: '#94A3B8'}} onMouseEnter={e=>e.currentTarget.style.color='#EF4444'} onMouseLeave={e=>e.currentTarget.style.color='#94A3B8'}>{Icons.Trash}</button>
                                     </div>
                                 </td>
@@ -725,7 +752,7 @@ const FinanceTransactions = () => {
                                 <td style={{...styles.td, textAlign: 'right', fontWeight: '700', color: '#EF4444'}}>- {formatMoney(t.amount)}</td>
                                 <td style={{...styles.td, textAlign: 'center'}}>
                                     <div style={{display:'flex', gap:'8px', justifyContent:'center'}}>
-                                        {t.status === 'Pendente' && <button onClick={() => handlePay(t)} style={{...styles.iconButton, color: '#10B981', backgroundColor: '#ECFDF5'}} title="Dar Baixa"><span style={{marginRight: '4px', display: 'flex'}}>{Icons.Check}</span> Pagar</button>}
+                                        {isOpenAccount(t) && <button onClick={() => handlePay(t)} style={{...styles.iconButton, color: '#10B981', backgroundColor: '#ECFDF5'}} title="Dar Baixa"><span style={{marginRight: '4px', display: 'flex'}}>{Icons.Check}</span> Pagar</button>}
                                         <button onClick={() => handleDelete(t.id)} style={{...styles.iconButton, color: '#94A3B8'}} onMouseEnter={e=>e.currentTarget.style.color='#EF4444'} onMouseLeave={e=>e.currentTarget.style.color='#94A3B8'}>{Icons.Trash}</button>
                                     </div>
                                 </td>
@@ -735,7 +762,7 @@ const FinanceTransactions = () => {
                         {/* ================= ABA 3: HISTÓRICO ================= */}
                         {activeTab === 'Histórico' && processedData.items.map(t => (
                             <tr key={t.id} style={styles.tr}>
-                                <td style={{...styles.td, fontWeight: '600', color: '#0F172A'}}>{formatDate(t.payment_date || t.due_date)}</td>
+                                <td style={{...styles.td, fontWeight: '600', color: '#0F172A'}}>{t.movement_date ? formatDate(t.movement_date) : 'Sem data de baixa válida'}</td>
                                 <td style={{...styles.td, fontWeight: '500', color: '#334155'}}>{t.description}</td>
                                 <td style={styles.td}>
                                     <span style={{ color: t.type === 'Receita' ? '#10B981' : '#EF4444', fontWeight: '700', fontSize: '0.85rem' }}>
@@ -745,6 +772,7 @@ const FinanceTransactions = () => {
                                 <td style={styles.td}><span style={{fontSize:'0.85rem', color:'#64748B'}}>{t.account_name || 'Geral'}</span></td>
                                 <td style={{...styles.td, textAlign: 'right', fontWeight: '700', color: t.type === 'Receita' ? '#10B981' : '#0F172A'}}>{t.type === 'Despesa' ? '- ' : ''}{formatMoney(t.amount)}</td>
                                 <td style={{...styles.td, textAlign: 'center'}}>
+                                    {!t.movement_date && <button onClick={() => reconcilePaymentDate(t.id)} style={styles.iconButton}>Informar data</button>}
                                     <button onClick={() => handleDelete(t.id)} style={{...styles.iconButton, color: '#94A3B8', margin: '0 auto'}} onMouseEnter={e=>e.currentTarget.style.color='#EF4444'} onMouseLeave={e=>e.currentTarget.style.color='#94A3B8'}>{Icons.Trash}</button>
                                 </td>
                             </tr>
@@ -758,7 +786,7 @@ const FinanceTransactions = () => {
                 </table>
             </div>
 
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Novo Lançamento Avulso">
+            <Modal isOpen={isModalOpen} onClose={() => { if (!saving) setIsModalOpen(false); }} title="Novo Lançamento Avulso">
                 <form onSubmit={handleSubmit} style={styles.form}>
                     <div style={{backgroundColor: '#EFF6FF', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.85rem', color: '#1E3A8A', border: '1px solid #BFDBFE'}}>
                         <strong>Aviso:</strong> Para receber de pedidos, use a aba "A Receber". Use este formulário para registrar Despesas operacionais ou Receitas avulsas fora do sistema.
@@ -777,7 +805,7 @@ const FinanceTransactions = () => {
                             </select>
                         </div>
                         <div style={styles.formGroup}>
-                            <label style={styles.label}>Valor (R$) *</label>
+                            <label style={styles.label}>{Number(formData.repeat_count) > 1 ? 'Valor de cada parcela (R$) *' : 'Valor (R$) *'}</label>
                             <input
                                 className="premium-input"
                                 type="text"
@@ -844,10 +872,12 @@ const FinanceTransactions = () => {
                                 </select>
                             </div>
                         </div>
-                        <span style={styles.formHint}>Use 10x para parcelas ou repita semanalmente quando for uma cobrança fixa.</span>
+                        {Number(formData.repeat_count) > 1 && (
+                            <span style={styles.formHint}>Total de {formData.repeat_count} parcelas de {formatMoney(parseCurrencyInput(formData.amount))}: <strong>{formatMoney(parseCurrencyInput(formData.amount) * Number(formData.repeat_count))}</strong></span>
+                        )}
                     </div>
 
-                    <button type="submit" style={{ padding: '16px', backgroundColor: formData.type === 'Receita' ? '#10B981' : '#EF4444', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', marginTop: '10px' }}>
+                    <button type="submit" disabled={saving} style={{ padding: '16px', backgroundColor: formData.type === 'Receita' ? '#10B981' : '#EF4444', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', marginTop: '10px' }}>
                         {Number(formData.repeat_count || 1) > 1 ? 'Registrar lançamentos' : 'Registrar lançamento'}
                     </button>
                 </form>

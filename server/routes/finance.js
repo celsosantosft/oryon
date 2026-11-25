@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { appPaths } = require('../config/paths');
+const { isDate, recordSeries, settleAccounts } = require('../utils/financeSettlements');
 const { RESTORE_MISSING_RECEIVABLES_SQL } = require('../utils/financeHistory');
+const { withFinanceWrite } = require('../utils/financeWrite');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 const {
-    ACTIVE_RECEIVABLE_FILTER_SQL,
-    normalizeBatchTransactionIds
+    ACTIVE_RECEIVABLE_FILTER_SQL
 } = require('../utils/financeTransactions');
 
 const FINANCE_ROLES = ['admin', 'gerente', 'gerente_operacoes'];
@@ -564,6 +566,7 @@ router.get('/api/finance/cost-centers', authenticateToken, authorizeRole(FINANCE
 // ==========================================
 router.post('/api/finance/transactions', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const { description, type, status, amount, due_date, payment_date, payment_method, order_id, cost_center_id, chart_of_account_id } = req.body;
+    if (status === 'Pago' && !isDate(payment_date)) return res.status(400).json({ error: 'Informe a data válida da baixa.' });
 
     db.run(`
         INSERT INTO transactions
@@ -579,10 +582,21 @@ router.post('/api/finance/transactions', authenticateToken, authorizeRole(FINANC
     });
 });
 
+// A baixa sem data civil válida fica disponível na listagem para conciliação.
+const paidDateSql = "CASE WHEN date(t.payment_date, '+0 days') = t.payment_date THEN t.payment_date END";
+const movementDateSql = `CASE WHEN t.status = 'Pago' THEN ${paidDateSql} ELSE t.due_date END`;
+
+function dateBounds(dateExpression, start, end, params) {
+    let sql = '';
+    if (start) { sql += ` AND ${dateExpression} >= ?`; params.push(start); }
+    if (end) { sql += ` AND ${dateExpression} <= ?`; params.push(end); }
+    return sql;
+}
+
 router.get('/api/finance/transactions', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
     const { type, status, start_date, end_date } = req.query;
     let sql = `
-        SELECT t.*, COALESCE(t.payment_date, t.due_date) AS movement_date, c.name as cost_center_name, a.name as account_name
+        SELECT t.*, ${movementDateSql} AS movement_date, c.name as cost_center_name, a.name as account_name
         FROM transactions t
         LEFT JOIN cost_centers c ON t.cost_center_id = c.id
         LEFT JOIN chart_of_accounts a ON t.chart_of_account_id = a.id
@@ -594,7 +608,7 @@ router.get('/api/finance/transactions', authenticateToken, authorizeRole(FINANCE
 
     if (type) { sql += ` AND t.type = ?`; params.push(type); }
     if (status) { sql += ` AND t.status = ?`; params.push(status); }
-    if (start_date && end_date) { sql += ` AND COALESCE(t.payment_date, t.due_date) BETWEEN ? AND ?`; params.push(start_date, end_date); }
+    sql += dateBounds(movementDateSql, start_date, end_date, params);
 
     sql += ` ORDER BY movement_date ASC, t.id ASC`;
 
@@ -604,80 +618,21 @@ router.get('/api/finance/transactions', authenticateToken, authorizeRole(FINANCE
     });
 });
 
-router.put('/api/finance/transactions/pay-batch', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
-    const rawIds = req.body?.ids;
-    const paymentDate = typeof req.body?.payment_date === 'string' ? req.body.payment_date.trim() : '';
-    const paymentMethod = typeof req.body?.payment_method === 'string' ? req.body.payment_method.trim() : '';
-
-    if (!Array.isArray(rawIds) || rawIds.length === 0 || rawIds.length > 500) {
-        return res.status(400).json({ error: 'Selecione de 1 a 500 contas para dar baixa.' });
+router.post('/api/finance/transactions/series', authenticateToken, authorizeRole(FINANCE_ROLES), async (req, res) => {
+    try {
+        const result = await recordSeries(appPaths.databasePath, req.user.id, req.body || {});
+        res.status(result.replay ? 200 : 201).json(result);
+    } catch (error) {
+        res.status(error.status || 500).json({ error: error.message });
     }
+});
 
-    if (rawIds.some((id) => !Number.isInteger(Number(id)) || Number(id) <= 0)) {
-        return res.status(400).json({ error: 'A seleção contém uma conta inválida.' });
+router.put('/api/finance/transactions/pay-batch', authenticateToken, authorizeRole(FINANCE_ROLES), async (req, res) => {
+    try {
+        res.json(await settleAccounts(appPaths.databasePath, req.body?.ids, req.body || {}));
+    } catch (error) {
+        res.status(error.status || 500).json({ error: error.message });
     }
-
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) {
-        return res.status(400).json({ error: 'Informe uma data válida para a baixa.' });
-    }
-
-    const ids = normalizeBatchTransactionIds(rawIds);
-    const placeholders = ids.map(() => '?').join(', ');
-
-    db.serialize(() => {
-        let completed = false;
-
-        const rollback = (statusCode, error) => {
-            if (completed) return;
-            completed = true;
-            db.run('ROLLBACK', () => res.status(statusCode).json({ error }));
-        };
-
-        db.run('BEGIN IMMEDIATE TRANSACTION', (beginErr) => {
-            if (beginErr) return res.status(500).json({ error: beginErr.message });
-
-            db.all(
-                `SELECT t.id, t.order_id
-                 FROM transactions t
-                 LEFT JOIN orders o ON t.order_id = o.id
-                 WHERE t.id IN (${placeholders})
-                   AND t.status <> 'Pago'
-                   ${ACTIVE_RECEIVABLE_FILTER_SQL}`,
-                ids,
-                (fetchErr, rows) => {
-                    if (fetchErr) return rollback(500, fetchErr.message);
-                    if (rows.length !== ids.length) {
-                        return rollback(409, 'Uma das contas já foi baixada, não existe ou pertence a um pedido cancelado. Atualize a página e tente novamente.');
-                    }
-
-                    db.run(
-                        `UPDATE transactions
-                         SET status = 'Pago', payment_date = ?, payment_method = ?
-                         WHERE id IN (${placeholders}) AND status <> 'Pago'`,
-                        [paymentDate, paymentMethod || null, ...ids],
-                        function(updateErr) {
-                            if (updateErr) return rollback(500, updateErr.message);
-                            if (this.changes !== ids.length) {
-                                return rollback(409, 'Alguma conta mudou durante a baixa. Atualize a página e tente novamente.');
-                            }
-
-                            db.run('COMMIT', (commitErr) => {
-                                if (commitErr) return rollback(500, commitErr.message);
-                                completed = true;
-                                syncOrderAmounts(rows.map((row) => row.order_id), (syncErr) => {
-                                    if (syncErr) return res.status(500).json({ error: syncErr.message });
-                                    res.json({
-                                        message: `${ids.length} conta(s) baixada(s) com sucesso!`,
-                                        count: ids.length
-                                    });
-                                });
-                            });
-                        }
-                    );
-                }
-            );
-        });
-    });
 });
 
 router.put('/api/finance/transactions/:id', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
@@ -704,6 +659,7 @@ router.put('/api/finance/transactions/:id', authenticateToken, authorizeRole(FIN
     if (!['Receita', 'Despesa'].includes(safeType)) return res.status(400).json({ error: 'Tipo inválido.' });
     if (!['Pendente', 'Pago', 'Parcial'].includes(safeStatus)) return res.status(400).json({ error: 'Status inválido.' });
     if (!Number.isFinite(safeAmount) || safeAmount <= 0) return res.status(400).json({ error: 'Valor inválido.' });
+    if (safeStatus === 'Pago' && !isDate(payment_date)) return res.status(400).json({ error: 'Informe a data válida da baixa.' });
     if (!safeDueDate) return res.status(400).json({ error: 'Data é obrigatória.' });
 
     db.get(`SELECT order_id FROM transactions WHERE id = ?`, [req.params.id], (fetchErr, existingTransaction) => {
@@ -737,92 +693,27 @@ router.put('/api/finance/transactions/:id', authenticateToken, authorizeRole(FIN
     });
 });
 
-router.put('/api/finance/transactions/:id/pay', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
-    const { payment_date, payment_method, paid_amount } = req.body;
+router.put('/api/finance/transactions/:id/pay', authenticateToken, authorizeRole(FINANCE_ROLES), async (req, res) => {
+    try {
+        res.json(await settleAccounts(appPaths.databasePath, [req.params.id], req.body || {}, true));
+    } catch (error) {
+        res.status(error.status || 500).json({ error: error.message });
+    }
+});
 
-    db.get(`SELECT * FROM transactions WHERE id = ?`, [req.params.id], (fetchErr, transaction) => {
-        if (fetchErr) return res.status(500).json({ error: fetchErr.message });
-        if (!transaction) return res.status(404).json({ error: 'Transação não encontrada.' });
-        if (transaction.status === 'Pago') return res.status(400).json({ error: 'Esta transação já foi baixada.' });
-
-        const originalAmount = Number(transaction.amount || 0);
-        const requestedAmount = paid_amount === undefined || paid_amount === null || paid_amount === ''
-            ? originalAmount
-            : Number(paid_amount);
-
-        if (!payment_date) return res.status(400).json({ error: 'Informe a data da baixa.' });
-        if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
-            return res.status(400).json({ error: 'Informe um valor válido para a baixa.' });
-        }
-        if (requestedAmount > originalAmount) {
-            return res.status(400).json({ error: 'O valor da baixa não pode ser maior que o valor pendente.' });
-        }
-
-        const normalizedPaidAmount = Number(requestedAmount.toFixed(2));
-        const remainingAmount = Number((originalAmount - normalizedPaidAmount).toFixed(2));
-        const finalizeResponse = (message) => {
-            syncOrderAmounts(transaction.order_id, (syncErr) => {
-                if (syncErr) return res.status(500).json({ error: syncErr.message });
-                res.json({ message });
-            });
-        };
-
-        if (remainingAmount <= 0) {
-            db.run(
-                `UPDATE transactions SET status = 'Pago', payment_date = ?, payment_method = ? WHERE id = ?`,
-                [payment_date, payment_method || null, req.params.id],
-                function(err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    finalizeResponse('Transação baixada com sucesso!');
-                }
-            );
-            return;
-        }
-
-        db.serialize(() => {
-            let rolledBack = false;
-
-            const rollbackWithError = (errorMessage, statusCode = 500) => {
-                if (rolledBack) return;
-                rolledBack = true;
-                db.run('ROLLBACK', () => res.status(statusCode).json({ error: errorMessage }));
-            };
-
-            db.run('BEGIN TRANSACTION', (beginErr) => {
-                if (beginErr) return res.status(500).json({ error: beginErr.message });
-
-                db.run(
-                    `UPDATE transactions SET status = 'Pago', amount = ?, payment_date = ?, payment_method = ? WHERE id = ?`,
-                    [normalizedPaidAmount, payment_date, payment_method || null, req.params.id],
-                    function(updateErr) {
-                        if (updateErr) return rollbackWithError(updateErr.message);
-
-                        db.run(
-                            `INSERT INTO transactions (description, type, status, amount, due_date, payment_date, payment_method, order_id, cost_center_id, chart_of_account_id)
-                             VALUES (?, ?, 'Pendente', ?, ?, NULL, NULL, ?, ?, ?)`,
-                            [
-                                transaction.description,
-                                transaction.type,
-                                remainingAmount,
-                                transaction.due_date,
-                                transaction.order_id || null,
-                                transaction.cost_center_id || null,
-                                transaction.chart_of_account_id || null
-                            ],
-                            function(insertErr) {
-                                if (insertErr) return rollbackWithError(insertErr.message);
-
-                                db.run('COMMIT', (commitErr) => {
-                                    if (commitErr) return rollbackWithError(commitErr.message);
-                                    finalizeResponse('Baixa parcial registrada com sucesso!');
-                                });
-                            }
-                        );
-                    }
-                );
-            });
-        });
-    });
+router.put('/api/finance/transactions/:id/payment-date', authenticateToken, authorizeRole(FINANCE_ROLES), async (req, res) => {
+    const paymentDate = req.body?.payment_date;
+    if (!isDate(paymentDate)) return res.status(400).json({ error: 'Informe a data que consta no comprovante.' });
+    try {
+        const { changes } = await withFinanceWrite(appPaths.databasePath, ({ run }) => run(
+            `UPDATE transactions AS t SET payment_date = ?
+            WHERE t.id = ? AND t.status = 'Pago' AND ${paidDateSql} IS NULL`,
+            [paymentDate, req.params.id]));
+        if (!changes) return res.status(409).json({ error: 'O lançamento já foi conciliado ou não está disponível. Atualize o histórico.' });
+        res.json({ message: 'Data da baixa registrada.' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 router.delete('/api/finance/transactions/:id', authenticateToken, authorizeRole(FINANCE_ROLES), (req, res) => {
@@ -846,21 +737,18 @@ router.get('/api/finance/expense-report', authenticateToken, authorizeRole(FINAN
     let sql = `
         SELECT
             t.*,
-            COALESCE(t.payment_date, t.due_date) AS movement_date,
+            ${movementDateSql} AS movement_date,
             c.name AS cost_center_name,
             a.name AS account_name
         FROM transactions t
         LEFT JOIN cost_centers c ON t.cost_center_id = c.id
         LEFT JOIN chart_of_accounts a ON t.chart_of_account_id = a.id
-        WHERE t.type = 'Despesa'
+        WHERE t.type = 'Despesa' AND (t.status <> 'Pago' OR ${paidDateSql} IS NOT NULL)
     `;
 
     const params = [];
 
-    if (start_date && end_date) {
-        sql += ` AND COALESCE(t.payment_date, t.due_date) BETWEEN ? AND ?`;
-        params.push(start_date, end_date);
-    }
+    sql += dateBounds(movementDateSql, start_date, end_date, params);
 
     if (account_id && account_id !== 'all') {
         if (account_id === 'uncategorized') {
@@ -921,7 +809,7 @@ router.get('/api/finance/expense-report', authenticateToken, authorizeRole(FINAN
             const amount = Number(row.amount) || 0;
             const category = row.account_name || 'Geral/Sem Categoria';
             const method = row.payment_method || 'Sem forma definida';
-            const day = row.movement_date || row.due_date || 'Sem data';
+            const day = row.movement_date || 'Sem data';
             const rowStatus = row.status || 'Pendente';
 
             summary.total += amount;
@@ -978,78 +866,49 @@ router.get('/api/finance/expense-report', authenticateToken, authorizeRole(FINAN
 });
 
 // ==========================================
-// ⭐ 4. DRE & INDICADORES BI (Motor de Gráficos)
+// 4. Caixa realizado. A rota /dre é mantida para clientes anteriores.
 // ==========================================
-router.get('/api/finance/dre', authenticateToken, authorizeRole(FINANCE_ROLES), async (req, res) => {
+router.get(['/api/finance/cash-summary', '/api/finance/dre'], authenticateToken, authorizeRole(FINANCE_ROLES), async (req, res) => {
     const { start_date, end_date } = req.query;
-
-    let dateFilter = '';
-    let params = [];
-    if (start_date && end_date) {
-        dateFilter = ` AND payment_date BETWEEN ? AND ?`;
-        params.push(start_date, end_date);
-    }
+    const params = [];
+    const bounds = dateBounds('t.payment_date', start_date, end_date, params);
+    const datedPaid = `t.status = 'Pago' AND ${paidDateSql} IS NOT NULL ${bounds}`;
+    const all = (sql, values) => new Promise((resolve, reject) => {
+        db.all(sql, values, (error, rows) => error ? reject(error) : resolve(rows));
+    });
 
     try {
-        // 1. Resumo Total
-        const totals = await new Promise((resolve, reject) => {
-            db.all(`SELECT type, SUM(amount) as total FROM transactions WHERE status = 'Pago' ${dateFilter} GROUP BY type`, params, (err, rows) => {
-                if (err) reject(err); else resolve(rows);
-            });
-        });
-
-        let receitas = 0; let despesas = 0;
-        totals.forEach(r => {
-            if (r.type === 'Receita') receitas = r.total;
-            if (r.type === 'Despesa') despesas = r.total;
-        });
-
-        const lucro_operacional = receitas - despesas;
-        const margem = receitas > 0 ? (lucro_operacional / receitas) * 100 : 0;
-
-        // 2. Gráfico Mensal (Evolução)
-        const monthly = await new Promise((resolve, reject) => {
-            db.all(`
-                SELECT strftime('%Y-%m', payment_date) as month, type, SUM(amount) as total 
-                FROM transactions 
-                WHERE status = 'Pago' AND payment_date IS NOT NULL ${dateFilter} 
-                GROUP BY month, type ORDER BY month ASC
-            `, params, (err, rows) => {
-                if (err) reject(err); else resolve(rows);
-            });
-        });
-
+        const monthly = await all(`
+            SELECT substr(t.payment_date, 1, 7) AS month, t.type, SUM(t.amount) AS total
+            FROM transactions t WHERE ${datedPaid} GROUP BY month, t.type ORDER BY month
+        `, params);
         const monthlyMap = {};
-        monthly.forEach(r => {
-            if (!monthlyMap[r.month]) monthlyMap[r.month] = { name: r.month, Receitas: 0, Despesas: 0 };
-            if (r.type === 'Receita') monthlyMap[r.month].Receitas = r.total;
-            if (r.type === 'Despesa') monthlyMap[r.month].Despesas = r.total;
-        });
-
-        // 3. Gráfico de Categorias (Para onde está indo o dinheiro?)
-        const categories = await new Promise((resolve, reject) => {
-            db.all(`
-                SELECT c.name as category, SUM(t.amount) as total 
-                FROM transactions t
-                LEFT JOIN chart_of_accounts c ON t.chart_of_account_id = c.id
-                WHERE t.status = 'Pago' AND t.type = 'Despesa' ${dateFilter}
-                GROUP BY category ORDER BY total DESC LIMIT 7
-            `, params, (err, rows) => {
-                if (err) reject(err); else resolve(rows);
-            });
-        });
-
-        const categoryData = categories.map(c => ({
-            name: c.category || 'Geral/Sem Categoria',
-            total: c.total
-        }));
-
+        let receitas = 0;
+        let despesas = 0;
+        for (const row of monthly) {
+            const month = monthlyMap[row.month] ||= { name: row.month, Receitas: 0, Despesas: 0 };
+            if (row.type === 'Receita') { month.Receitas = row.total; receitas += row.total; }
+            if (row.type === 'Despesa') { month.Despesas = row.total; despesas += row.total; }
+        }
+        const categoryData = await all(`
+            SELECT COALESCE(c.name, 'Geral/Sem Categoria') AS name, SUM(t.amount) AS total
+            FROM transactions t LEFT JOIN chart_of_accounts c ON t.chart_of_account_id = c.id
+            WHERE ${datedPaid} AND t.type = 'Despesa' GROUP BY name ORDER BY total DESC LIMIT 7
+        `, params);
+        const [undated] = await all(`
+            SELECT COUNT(*) AS count,
+                COALESCE(SUM(CASE WHEN t.type = 'Receita' THEN t.amount ELSE 0 END), 0) AS income,
+                COALESCE(SUM(CASE WHEN t.type = 'Despesa' THEN t.amount ELSE 0 END), 0) AS expense
+            FROM transactions t WHERE t.status = 'Pago' AND ${paidDateSql} IS NULL
+        `, []);
+        const variacao_caixa = receitas - despesas;
         res.json({
-            receitas, despesas, lucro_operacional, margem: margem.toFixed(1),
-            monthlyData: Object.values(monthlyMap),
-            categoryData
+            receitas, despesas, variacao_caixa, undated,
+            monthlyData: Object.values(monthlyMap), categoryData,
+            ...(req.path.endsWith('/dre') && {
+                lucro_operacional: variacao_caixa, margem: (receitas > 0 ? variacao_caixa / receitas * 100 : 0).toFixed(1)
+            })
         });
-
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -1058,14 +917,16 @@ router.get('/api/finance/dre', authenticateToken, authorizeRole(FINANCE_ROLES), 
 // ==========================================
 // 5. MÁQUINA DO TEMPO
 // ==========================================
-router.post('/api/finance/sync-history', authenticateToken, authorizeRole(['admin']), (req, res) => {
-    db.run(RESTORE_MISSING_RECEIVABLES_SQL, function(err) {
-        if (err) return res.status(500).json({ error: err.message });
+router.post('/api/finance/sync-history', authenticateToken, authorizeRole(['admin']), async (req, res) => {
+    try {
+        const { changes } = await withFinanceWrite(appPaths.databasePath, ({ run }) => run(RESTORE_MISSING_RECEIVABLES_SQL));
         res.json({
-            created: this.changes,
-            message: `${this.changes} saldo(s) a receber recomposto(s). Pedidos sem vencimento, com sinal sem lançamento correspondente ou com histórico inconclusivo exigem conferência.`
+            created: changes,
+            message: `${changes} saldo(s) a receber recomposto(s). Pedidos sem vencimento, com sinal sem lançamento correspondente ou com histórico inconclusivo exigem conferência.`
         });
-    });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 module.exports = router;
