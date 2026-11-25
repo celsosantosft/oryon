@@ -635,7 +635,7 @@ export const buildClientJpgPages = (order, apiBaseUrl) => {
     const lines = buildNormalizedLines(order, apiBaseUrl);
     const isQuote = String(order?.tracking_code || '').startsWith('#ORC-');
     const code = safeFilePart(order?.tracking_code);
-    const amountPaid = Math.max(0, ...[order?.amount_paid, order?.synced_amount_paid]
+    const amountPaid = Math.max(0, ...[order?.amount_paid, order?.synced_amount_paid, order?.received_total]
         .map((value) => Number(value || 0))
         .filter(Number.isFinite));
     const nominalSections = buildNominalSections(order?.items);

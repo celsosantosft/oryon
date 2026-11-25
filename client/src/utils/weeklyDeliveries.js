@@ -28,7 +28,8 @@ export const getDeliveryFinancialSummary = (order) => {
     const total = normalizeMoney(order?.total_price);
     const paid = Math.max(
         normalizeMoney(order?.amount_paid),
-        normalizeMoney(order?.synced_amount_paid)
+        normalizeMoney(order?.synced_amount_paid),
+        normalizeMoney(order?.received_total)
     );
 
     return { total, paid, remaining: Math.max(0, total - paid) };

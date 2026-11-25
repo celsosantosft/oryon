@@ -213,7 +213,7 @@ const ClientPortal = ({ preview = false, modern = false }) => {
         if (currentStepIndex === -1 && order.status !== 'Cancelado') currentStepIndex = 0; 
         
         const totalOrder = parseFloat(order.total_price) || 0;
-        const paidOrder = parseFloat(order.amount_paid) || 0;
+        const paidOrder = Math.max(Number(order.amount_paid) || 0, Number(order.received_total) || 0);
 
         return {
             isLocked, isBulkOnly, isUsingNominalList: hasNamesOrNumbers, hasAdminSizes, availableSizes, 

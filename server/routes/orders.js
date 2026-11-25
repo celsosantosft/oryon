@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { syncOrderFinance, receivedTotalExpression, deleteUnpaidOrder } = require('../utils/orderFinance');
+const { withFinanceWrite, financeQueries } = require('../utils/financeWrite');
 const archiver = require('archiver');
 const crypto = require('crypto');
 const { rateLimit } = require('express-rate-limit');
@@ -318,52 +320,29 @@ function summarizeLines(lines, discount = 0) {
     };
 }
 
-function saveOrderProductLines(orderId, lines, callback) {
-    db.run(`DELETE FROM order_product_lines WHERE order_id = ?`, [orderId], (deleteErr) => {
-        if (deleteErr) return callback(deleteErr);
-        if (!lines.length) return callback(null);
-
-        const stmt = db.prepare(`
+async function saveOrderProductLines(tx, orderId, lines) {
+    await tx.run('DELETE FROM order_product_lines WHERE order_id = ?', [orderId]);
+    for (const line of lines) {
+        await tx.run(`
             INSERT INTO order_product_lines
             (order_id, sort_order, product_type, production_label, printing_types_json, production_notes, fabric_type, sizes_json, unit_price, unit_cost, total_price, cost_price, layout_path)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        let pending = lines.length;
-        let finished = false;
-
-        const finish = (runErr) => {
-            if (finished) return;
-            if (runErr) {
-                finished = true;
-                return stmt.finalize(() => callback(runErr));
-            }
-
-            pending -= 1;
-            if (pending === 0) {
-                finished = true;
-                stmt.finalize((finalizeErr) => callback(finalizeErr || null));
-            }
-        };
-
-        lines.forEach((line) => {
-            stmt.run([
-                orderId,
-                line.sort_order || 0,
-                line.product_type,
-                line.production_label || null,
-                line.printing_types_json || '[]',
-                line.production_notes || null,
-                line.fabric_type || '',
-                line.sizes_json,
-                Number(line.unit_price || 0),
-                Number(line.unit_cost || 0),
-                Number(line.total_price || 0),
-                Number(line.cost_price || 0),
-                line.layout_path || null
-            ], finish);
-        });
-    });
+        `, [
+            orderId,
+            line.sort_order || 0,
+            line.product_type,
+            line.production_label || null,
+            line.printing_types_json || '[]',
+            line.production_notes || null,
+            line.fabric_type || '',
+            line.sizes_json,
+            Number(line.unit_price || 0),
+            Number(line.unit_cost || 0),
+            Number(line.total_price || 0),
+            Number(line.cost_price || 0),
+            line.layout_path || null
+        ]);
+    }
 }
 
 function sumSizes(sizes) {
@@ -637,116 +616,6 @@ function copyOrderItemsToQuote(orderId, quoteId, callback) {
                 });
             });
         });
-    });
-}
-
-function syncFinanceWithOrder(orderId, callback = () => {}) {
-    const safeOrderId = Number(orderId);
-    if (!Number.isInteger(safeOrderId) || safeOrderId <= 0) {
-        callback(null);
-        return;
-    }
-
-    db.get(`SELECT * FROM orders WHERE id = ?`, [safeOrderId], (err, order) => {
-        if (err) {
-            callback(err);
-            return;
-        }
-
-        if (!order) {
-            callback(null);
-            return;
-        }
-
-        db.get(`
-            SELECT COALESCE(SUM(amount), 0) AS manual_paid
-            FROM transactions
-            WHERE order_id = ?
-              AND type = 'Receita'
-              AND status = 'Pago'
-              AND description NOT LIKE 'Sinal/Pago - Pedido %'
-        `, [safeOrderId], (manualPaidErr, paidRow) => {
-            if (manualPaidErr) {
-                callback(manualPaidErr);
-                return;
-            }
-
-            db.run(`
-                DELETE FROM transactions
-                WHERE order_id = ?
-                  AND type = 'Receita'
-                  AND (
-                      (status = 'Pago' AND description LIKE 'Sinal/Pago - Pedido %')
-                      OR (status = 'Pendente' AND description LIKE 'Falta Pagar - Pedido %')
-                  )
-            `, [safeOrderId], (deleteErr) => {
-                if (deleteErr) {
-                    callback(deleteErr);
-                    return;
-                }
-
-                if (order.status === 'Cancelado' || order.status === 'Arte Arquivada') {
-                    callback(null);
-                    return;
-                }
-
-                const dateEntrega = order.delivery_date || new Date().toISOString().split('T')[0];
-                const dateHoje = new Date().toISOString().split('T')[0];
-                const total = parseFloat(order.total_price) || 0;
-                const manualPaid = Number(paidRow?.manual_paid || 0);
-                const storedPaid = parseFloat(order.amount_paid) || 0;
-                const autoPaid = Math.max(0, Math.min(storedPaid, total));
-                const remaining = Math.max(0, total - manualPaid - autoPaid);
-                const clientName = order.client_name ? ` - ${order.client_name}` : '';
-                const operations = [];
-
-                if (autoPaid > 0) {
-                    operations.push({
-                        sql: `INSERT INTO transactions (description, type, status, amount, due_date, payment_date, order_id) VALUES (?, 'Receita', 'Pago', ?, ?, ?, ?)`,
-                        params: [`Sinal/Pago - Pedido ${order.tracking_code}${clientName}`, autoPaid, dateHoje, dateHoje, safeOrderId]
-                    });
-                }
-
-                if (remaining > 0) {
-                    operations.push({
-                        sql: `INSERT INTO transactions (description, type, status, amount, due_date, order_id) VALUES (?, 'Receita', 'Pendente', ?, ?, ?)`,
-                        params: [`Falta Pagar - Pedido ${order.tracking_code}${clientName}`, remaining, dateEntrega, safeOrderId]
-                    });
-                }
-
-                if (operations.length === 0) {
-                    callback(null);
-                    return;
-                }
-
-                let pending = operations.length;
-                let finished = false;
-
-                operations.forEach(({ sql, params }) => {
-                    db.run(sql, params, (runErr) => {
-                        if (finished) return;
-
-                        if (runErr) {
-                            finished = true;
-                            callback(runErr);
-                            return;
-                        }
-
-                        pending -= 1;
-                        if (pending === 0) {
-                            finished = true;
-                            callback(null);
-                        }
-                    });
-                });
-            });
-        });
-    });
-}
-
-function syncFinanceAfterResponse(orderId) {
-    syncFinanceWithOrder(orderId, (syncErr) => {
-        if (syncErr) console.error('Erro ao sincronizar financeiro do pedido:', syncErr.message);
     });
 }
 
@@ -1133,7 +1002,9 @@ router.put('/api/design-requests/:id', authenticateToken, upload.single('layout_
 });
 
 router.post('/api/orders/:code/convert-to-quote', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes', 'designer']), (req, res) => {
-    db.get(`SELECT * FROM orders WHERE tracking_code=? OR legacy_tracking_code=?`, [req.params.code, req.params.code], (err, order) => {
+    db.get(`SELECT orders.*, ${receivedTotalExpression('orders')} AS received_total FROM orders WHERE tracking_code=? OR legacy_tracking_code=?`, [req.params.code, req.params.code], (err, order) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (order?.received_total > 0) return res.status(409).json({ error: 'Esta arte já tem recebimentos vinculados. Mantenha o pedido original para preservar o histórico financeiro.' });
         if (!order) return res.status(404).json({ message: "Arte não encontrada." });
         const newQuoteCode = generateQuoteTrackingCode();
 
@@ -1232,42 +1103,43 @@ router.post('/api/orders', authenticateToken, authorizeRole(['admin', 'gerente',
         try { acquisitionSource = await resolveOrderSource(db, clientInfo.client_phone, selectedSource); }
         catch { return res.status(500).json({ error: 'Não foi possível identificar a origem do pedido. Tente novamente.' }); }
 
-        db.run(`INSERT INTO orders (tracking_code, portal_token, client_id, client_name, client_phone, acquisition_source, product_type, fabric_type, category, sizes_json, total_price, amount_paid, cost_price, delivery_date, layout_path, status, board_order, discount, allowed_sizes, allowed_models, unit_price, unit_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 999999, ?, ?, ?, ?, ?)`,
-            [
-                trackingCode,
-                portalToken,
-                clientInfo.client_id,
-                clientInfo.client_name || client_name,
-                clientInfo.client_phone,
-                acquisitionSource,
-                summary.product_type,
-                summary.fabric_type,
-                category || 'Geral',
-                summary.sizes_json,
-                summary.total_price,
-                amount_paid || 0,
-                summary.cost_price,
-                delivery_date,
-                summary.layout_path,
-                status || 'Criação de Arte',
-                discount || 0,
-                sizesStr,
-                modelsStr,
-                summary.unit_price,
-                summary.unit_cost
-            ],
-            function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                const orderId = this.lastID;
-                saveOrderProductLines(orderId, productLines, (linesErr) => {
-                    if (linesErr) return res.status(500).json({ error: linesErr.message });
-                    db.run(`INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`, [orderId, status || 'Criação de Arte', req.user.id]);
-                    enqueueCalendarUpsert(orderId).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
-                    linkOrderConversation(db, orderId).catch(() => console.error('Falha ao vincular pedido ao WhatsApp.'));
-                    res.json({ message: "Pedido criado!", tracking_code: trackingCode, portal_path: buildPortalPath({ tracking_code: trackingCode, portal_token: portalToken }) });
-                    syncFinanceAfterResponse(orderId);
-                });
+        try {
+            const orderId = await withFinanceWrite(appPaths.databasePath, async tx => {
+                const { lastID } = await tx.run(`INSERT INTO orders (tracking_code, portal_token, client_id, client_name, client_phone, acquisition_source, product_type, fabric_type, category, sizes_json, total_price, amount_paid, cost_price, delivery_date, layout_path, status, board_order, discount, allowed_sizes, allowed_models, unit_price, unit_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 999999, ?, ?, ?, ?, ?)`,
+                    [
+                        trackingCode,
+                        portalToken,
+                        clientInfo.client_id,
+                        clientInfo.client_name || client_name,
+                        clientInfo.client_phone,
+                        acquisitionSource,
+                        summary.product_type,
+                        summary.fabric_type,
+                        category || 'Geral',
+                        summary.sizes_json,
+                        summary.total_price,
+                        amount_paid || 0,
+                        summary.cost_price,
+                        delivery_date,
+                        summary.layout_path,
+                        status || 'Criação de Arte',
+                        discount || 0,
+                        sizesStr,
+                        modelsStr,
+                        summary.unit_price,
+                        summary.unit_cost
+                    ]);
+                await saveOrderProductLines(tx, lastID, productLines);
+                await tx.run('INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, ?, ?)', [lastID, status || 'Criação de Arte', req.user.id]);
+                await syncOrderFinance(tx, lastID, { depositChanged: true });
+                return lastID;
             });
+            enqueueCalendarUpsert(orderId).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
+            linkOrderConversation(db, orderId).catch(() => console.error('Falha ao vincular pedido ao WhatsApp.'));
+            res.json({ message: "Pedido criado!", tracking_code: trackingCode, portal_path: buildPortalPath({ tracking_code: trackingCode, portal_token: portalToken }) });
+        } catch (error) {
+            res.status(error.status || 500).json({ error: error.message });
+        }
     });
 });
 
@@ -1344,7 +1216,7 @@ router.put('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerent
         try { if (selectedSource !== null) acquisitionSource = await resolveOrderSource(db, clientInfo.client_phone, selectedSource); }
         catch { return res.status(500).json({ error: 'Não foi possível identificar a origem do pedido. Tente novamente.' }); }
 
-        let sql = `UPDATE orders SET client_id=?, client_name=?, client_phone=?, acquisition_source=COALESCE(?,acquisition_source), product_type=?, fabric_type=?, category=?, sizes_json=?, total_price=?, amount_paid=?, cost_price=?, delivery_date=?, discount=?, allowed_sizes=?, allowed_models=?, unit_price=?, unit_cost=?, layout_path=?`;
+        let sql = `UPDATE orders SET client_id=?, client_name=?, client_phone=?, acquisition_source=COALESCE(?,acquisition_source), product_type=?, fabric_type=?, category=?, sizes_json=?, total_price=?, amount_paid=COALESCE(?,amount_paid), cost_price=?, delivery_date=?, discount=?, allowed_sizes=?, allowed_models=?, unit_price=?, unit_cost=?, layout_path=?`;
         const params = [
             clientInfo.client_id,
             clientInfo.client_name || client_name,
@@ -1355,7 +1227,7 @@ router.put('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerent
             category || 'Geral',
             summary.sizes_json,
             summary.total_price,
-            amount_paid || 0,
+            amount_paid === undefined ? null : Number(amount_paid || 0),
             summary.cost_price,
             delivery_date,
             discount || 0,
@@ -1368,17 +1240,23 @@ router.put('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerent
         
         sql += ` WHERE id=?`; params.push(req.params.id);
         
-        db.run(sql, params, function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            if (this.changes === 0) return res.status(404).json({ error: 'Pedido não encontrado.' });
-            saveOrderProductLines(req.params.id, productLines, (linesErr) => {
-                if (linesErr) return res.status(500).json({ error: linesErr.message });
-                enqueueCalendarUpsert(req.params.id).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
-                linkOrderConversation(db, req.params.id).catch(() => console.error('Falha ao vincular pedido ao WhatsApp.'));
-                res.json({ message: "Pedido atualizado." });
-                syncFinanceAfterResponse(req.params.id);
+        try {
+            await withFinanceWrite(appPaths.databasePath, async tx => {
+                const before = await tx.get('SELECT amount_paid, delivery_date FROM orders WHERE id=?', [req.params.id]);
+                if (!before) throw Object.assign(new Error('Pedido não encontrado.'), { status: 404 });
+                await tx.run(sql, params);
+                await saveOrderProductLines(tx, req.params.id, productLines);
+                await syncOrderFinance(tx, req.params.id, {
+                    depositChanged: amount_paid !== undefined && Number(before.amount_paid || 0) !== Number(amount_paid || 0),
+                    previousDelivery: before.delivery_date
+                });
             });
-        });
+            enqueueCalendarUpsert(req.params.id).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
+            linkOrderConversation(db, req.params.id).catch(() => console.error('Falha ao vincular pedido ao WhatsApp.'));
+            res.json({ message: "Pedido atualizado." });
+        } catch (error) {
+            res.status(error.status || 500).json({ error: error.message });
+        }
     });
 });
 
@@ -1387,6 +1265,7 @@ router.get('/api/orders', authenticateToken, (req, res) => {
         SELECT
             orders.*,
             ${buildSyncedAmountPaidExpression('orders')} AS synced_amount_paid,
+            ${receivedTotalExpression('orders')} AS received_total,
             ${buildEffectiveOrderTotalExpression('orders')} AS effective_total_price,
             ${buildEffectiveOrderClientLockExpression('orders')} AS effective_is_locked_by_client
         FROM orders
@@ -1401,15 +1280,10 @@ router.get('/api/orders', authenticateToken, (req, res) => {
 });
 
 router.delete('/api/orders/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
-    enqueueCalendarDelete(req.params.id).catch(error => console.error('Falha ao enfileirar remoção do Google Agenda:', error.message)).finally(() => {
-        db.run('DELETE FROM order_history WHERE order_id=?', [req.params.id], () => {
-            db.run('DELETE FROM transactions WHERE order_id=?', [req.params.id], () => {
-                db.run('DELETE FROM order_items WHERE order_id=?', [req.params.id], () => {
-                    db.run('DELETE FROM orders WHERE id=?', [req.params.id], () => res.json({ message: 'Pedido excluído.' }));
-                });
-            });
-        });
-    });
+    withFinanceWrite(appPaths.databasePath, tx => deleteUnpaidOrder(tx, req.params.id)).then(() => {
+        enqueueCalendarDelete(req.params.id).catch(error => console.error('Falha ao enfileirar remoção do Google Agenda:', error.message));
+        res.json({ message: 'Pedido excluído.' });
+    }).catch(error => res.status(error.status || 500).json({ error: error.message }));
 });
 
 router.get('/api/orders/upcoming', authenticateToken, (req, res) => {
@@ -1421,6 +1295,7 @@ router.get('/api/orders/upcoming', authenticateToken, (req, res) => {
         SELECT
             orders.*,
             ${buildSyncedAmountPaidExpression('orders')} AS synced_amount_paid,
+            ${receivedTotalExpression('orders')} AS received_total,
             ${buildEffectiveOrderTotalExpression('orders')} AS effective_total_price,
             ${buildEffectiveOrderClientLockExpression('orders')} AS effective_is_locked_by_client
         FROM orders
@@ -1495,6 +1370,7 @@ router.get('/api/orders/:code/history', authenticateToken, (req, res) => {
         SELECT
             orders.*,
             ${buildSyncedAmountPaidExpression('orders')} AS synced_amount_paid,
+            ${receivedTotalExpression('orders')} AS received_total,
             ${buildEffectiveOrderTotalExpression('orders')} AS effective_total_price,
             ${buildEffectiveOrderClientLockExpression('orders')} AS effective_is_locked_by_client
         FROM orders
@@ -1528,25 +1404,16 @@ router.post('/api/orders/:code/status', authenticateToken, authorizeRole(['admin
     db.get(`SELECT id, tracking_code, status, client_id, client_name, client_phone FROM orders WHERE tracking_code=? OR legacy_tracking_code=?`, [req.params.code, req.params.code], (err, order) => {
         if (err) return res.status(500).json({ message: err.message });
         if (!order) return res.status(404).json({ message: "Não encontrado." });
-        db.run(`UPDATE orders SET status=?, board_order=999999 WHERE id=?`, [new_status, order.id], err2 => {
-            if (err2) return res.status(500).json({ error: err2.message });
+        withFinanceWrite(appPaths.databasePath, async tx => {
+            await tx.run('UPDATE orders SET status=?, board_order=999999 WHERE id=?', [new_status, order.id]);
+            await tx.run('INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, ?, ?)', [order.id, new_status, req.user.id]);
+            await syncOrderFinance(tx, order.id);
+        }).then(async () => {
             enqueueCalendarState(order.id).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
-            db.run(`INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`, [order.id, new_status, req.user.id]);
-            syncFinanceWithOrder(order.id, (syncErr) => {
-                if (syncErr) return res.status(500).json({ error: syncErr.message });
-                notifyOrderStatusChange(order, order.status, new_status, req.user.id)
-                    .then((whatsapp) => res.json({ message: "Status atualizado.", whatsapp }))
-                    .catch((notifyErr) => res.json({
-                        message: "Status atualizado.",
-                        whatsapp: {
-                            sent: false,
-                            skipped: false,
-                            reason: 'send_failed',
-                            error: notifyErr.message
-                        }
-                    }));
-            });
-        });
+            const whatsapp = await notifyOrderStatusChange(order, order.status, new_status, req.user.id)
+                .catch(error => ({ sent: false, skipped: false, reason: 'send_failed', error: error.message }));
+            res.json({ message: "Status atualizado.", whatsapp });
+        }).catch(error => res.status(error.status || 500).json({ error: error.message }));
     });
 });
 
@@ -1555,16 +1422,15 @@ router.post('/api/orders/:code/reset', authenticateToken, authorizeRole(['admin'
         if (err) return res.status(500).json({ message: err.message });
         if (!order) return res.status(404).json({ message: "Pedido não encontrado." });
 
-        db.run(`DELETE FROM order_history WHERE order_id=?`, [order.id], () => {
-            db.run(`UPDATE orders SET status='Criação de Arte', board_order=999999 WHERE id=?`, [order.id], () => {
-                enqueueCalendarUpsert(order.id).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
-                db.run(`INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, 'Produção Reiniciada', ?)`, [order.id, req.user.id]);
-                syncFinanceWithOrder(order.id, (syncErr) => {
-                    if (syncErr) return res.status(500).json({ error: syncErr.message });
-                    res.json({ message: "Pedido reiniciado." });
-                });
-            });
-        });
+        withFinanceWrite(appPaths.databasePath, async tx => {
+            await tx.run('DELETE FROM order_history WHERE order_id=?', [order.id]);
+            await tx.run("UPDATE orders SET status='Criação de Arte', board_order=999999 WHERE id=?", [order.id]);
+            await tx.run("INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, 'Produção Reiniciada', ?)", [order.id, req.user.id]);
+            await syncOrderFinance(tx, order.id);
+        }).then(() => {
+            enqueueCalendarUpsert(order.id).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
+            res.json({ message: "Pedido reiniciado." });
+        }).catch(error => res.status(error.status || 500).json({ error: error.message }));
     });
 });
 
@@ -1582,28 +1448,9 @@ router.get('/api/dashboard/summary', authenticateToken, (req, res) => {
                 id,
                 ${buildEffectiveOrderTotalExpression('orders')} AS total_price,
                 cost_price,
-                amount_paid
+                ${receivedTotalExpression('orders')} AS received_total
             FROM orders
             WHERE status NOT IN ('Entregue/Concluído', 'Cancelado', 'Arte Arquivada')
-        ),
-        paid_by_order AS (
-            SELECT order_id, SUM(amount) AS paid_total
-            FROM transactions
-            WHERE type = 'Receita'
-              AND status = 'Pago'
-            GROUP BY order_id
-        ),
-        active_payment_base AS (
-            SELECT
-                ao.id,
-                COALESCE(ao.total_price, 0) AS total_price,
-                CASE
-                    WHEN COALESCE(pbo.paid_total, 0) > COALESCE(ao.amount_paid, 0)
-                        THEN COALESCE(pbo.paid_total, 0)
-                    ELSE COALESCE(ao.amount_paid, 0)
-                END AS received_total
-            FROM active_orders ao
-            LEFT JOIN paid_by_order pbo ON pbo.order_id = ao.id
         )
         SELECT
             (SELECT COUNT(*) FROM active_orders) AS active_count,
@@ -1641,7 +1488,7 @@ router.get('/api/dashboard/summary', authenticateToken, (req, res) => {
                         ELSE received_total
                     END
                 ), 0)
-                FROM active_payment_base
+                FROM active_orders
             ) AS active_paid
     `, [monthStart, nextMonthStart, monthStart, nextMonthStart], (err, totals) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -1663,6 +1510,7 @@ router.get('/api/dashboard/summary', authenticateToken, (req, res) => {
                     SELECT
                         orders.*,
                         ${buildSyncedAmountPaidExpression('orders')} AS synced_amount_paid,
+                        ${receivedTotalExpression('orders')} AS received_total,
                         ${buildEffectiveOrderTotalExpression('orders')} AS effective_total_price,
                         ${buildEffectiveOrderClientLockExpression('orders')} AS effective_is_locked_by_client
                     FROM orders
@@ -1676,6 +1524,7 @@ router.get('/api/dashboard/summary', authenticateToken, (req, res) => {
                             SELECT
                                 orders.*,
                                 ${buildSyncedAmountPaidExpression('orders')} AS synced_amount_paid,
+                                ${receivedTotalExpression('orders')} AS received_total,
                                 ${buildEffectiveOrderTotalExpression('orders')} AS effective_total_price,
                                 ${buildEffectiveOrderClientLockExpression('orders')} AS effective_is_locked_by_client
                             FROM orders
@@ -1797,6 +1646,7 @@ router.get('/api/tracking/portal/:code', (req, res) => {
             orders.sizes_json,
             orders.delivery_date,
             ${buildSyncedAmountPaidExpression('orders')} AS synced_amount_paid,
+            ${receivedTotalExpression('orders')} AS received_total,
             ${buildEffectiveOrderTotalExpression('orders')} AS effective_total_price,
             ${buildEffectiveOrderClientLockExpression('orders')} AS effective_is_locked_by_client
         FROM orders
@@ -1975,6 +1825,16 @@ router.post('/api/tracking/portal/:code/submit', (req, res) => {
                 };
 
             db.serialize(() => {
+                async function finishPortalFinance(ids, message) {
+                    const tx = financeQueries(db);
+                    try {
+                        for (const id of ids) await syncOrderFinance(tx, id);
+                        await tx.run('COMMIT');
+                        res.json({ message });
+                    } catch (error) {
+                        db.run('ROLLBACK', () => res.status(error.status || 500).json({ error: error.message }));
+                    }
+                }
                 db.run('BEGIN TRANSACTION');
                 
                 if (isQuote) {
@@ -2014,10 +1874,7 @@ router.post('/api/tracking/portal/:code/submit', (req, res) => {
                             }, (convertedOrderErr, linkedOrderIds = []) => {
                                 if (convertedOrderErr) { db.run('ROLLBACK'); return res.status(500).json({ error: convertedOrderErr.message }); }
                                 db.run(`INSERT INTO quote_history (quote_id, status_text, changed_by_user_id) VALUES (?, 'Lista Enviada pelo Cliente (Termo Assinado)', NULL)`, [record.id]);
-                                db.run('COMMIT', () => {
-                                    linkedOrderIds.forEach((orderId) => syncFinanceWithOrder(orderId));
-                                    res.json({ message: 'Orçamento atualizado!' });
-                                });
+                                finishPortalFinance(linkedOrderIds, 'Orçamento atualizado!');
                             });
                         });
                     });
@@ -2036,10 +1893,7 @@ router.post('/api/tracking/portal/:code/submit', (req, res) => {
                         syncPrimaryProductLine((lineUpdateErr) => {
                             if (lineUpdateErr) { db.run('ROLLBACK'); return res.status(500).json({ error: lineUpdateErr.message }); }
                             db.run(`INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, 'Lista Enviada pelo Cliente (Termo Assinado)', NULL)`, [record.id]);
-                            db.run('COMMIT', () => {
-                                syncFinanceWithOrder(record.id);
-                                res.json({ message: 'Lista enviada com sucesso!' });
-                            });
+                            finishPortalFinance([record.id], 'Lista enviada com sucesso!');
                         });
                     });
                 }

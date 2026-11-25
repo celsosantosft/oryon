@@ -10,6 +10,7 @@ Oryon is the production ERP for Atos Fardamentos. The live system is `https://at
 
 - Cutting queue, fabric sections, markers and spreading: [[domains/corte]]
 - Orders, quotes, tracking codes and customer portal: [[domains/pedidos]]
+- Receipts, settlements, cash reports and financial reconciliation: [[domains/financeiro]]
 - WhatsApp, Evolution API and Typebot: [[integrations/typebot]]
 - Production hosting, SSH, firewall and availability incidents: [[operations/infrastructure]]
 

@@ -117,6 +117,7 @@ async function reverterPedidoParaOrcamento({ orderId, userId }) {
                         ELSE description || ' | Revertido para orcamento. Valor original: R$ ' || printf('%.2f', amount)
                     END
                 WHERE order_id = ?
+                  AND status = 'Pendente'
                   AND type = 'Receita'
                   AND (
                       description LIKE 'Sinal/Pago - Pedido %'

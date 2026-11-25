@@ -18,7 +18,6 @@ test('pedidos enfileiram sincronizacao sem bloquear a resposta', () => {
 test('conversao e reversao cobrem o ciclo do calendario', () => {
     const quotes = source('quotes.js');
     const revert = source('reverterPedidoParaOrcamento.js');
-    assert.match(quotes, /enqueueCalendarUpsert\(order\.id\)/);
     assert.match(quotes, /enqueueCalendarUpsert\(orderId\)/);
     assert.match(revert, /enqueueCalendarDelete\(order\.id\)/);
 });

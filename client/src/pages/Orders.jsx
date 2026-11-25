@@ -84,7 +84,8 @@ export const formatMoney = (value) => new Intl.NumberFormat('pt-BR', {
 
 export const getOrderAmountPaid = (order) => Math.max(
     normalizeMoneyValue(order?.amount_paid),
-    normalizeMoneyValue(order?.synced_amount_paid)
+    normalizeMoneyValue(order?.synced_amount_paid),
+    normalizeMoneyValue(order?.received_total)
 );
 
 export const calculateTotals = (currentSizes, uPrice, uCost) => {
@@ -297,7 +298,7 @@ const useOrders = (API_BASE_URL, token, preview) => {
             total_price: normalizeMoneyValue(order.total_price),
             cost_price: normalizeMoneyValue(order.cost_price),
             synced_amount_paid: normalizeMoneyValue(order.synced_amount_paid),
-            amount_paid: getOrderAmountPaid(order)
+            amount_paid: normalizeMoneyValue(order.amount_paid)
         }))
     ), []);
 
@@ -469,11 +470,11 @@ const OrderSizeInputs = React.memo(({ sizes, onChange }) => {
     );
 });
 
-const FinancialSummary = ({ subtotal, totalCost, discount, onDiscountChange, amountPaid, onAmountPaidChange }) => {
+const FinancialSummary = ({ subtotal, totalCost, discount, onDiscountChange, amountPaid, otherPayments, onAmountPaidChange }) => {
     const safeDiscount = parseFloat(discount) || 0;
     const finalTotal = Math.max(0, subtotal - safeDiscount);
     const safePaid = parseFloat(amountPaid) || 0;
-    const remaining = Math.max(0, finalTotal - safePaid);
+    const remaining = Math.max(0, finalTotal - safePaid - otherPayments);
 
     let percentDisplay = '';
     if (subtotal > 0 && safeDiscount > 0) {
@@ -516,7 +517,7 @@ const FinancialSummary = ({ subtotal, totalCost, discount, onDiscountChange, amo
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', borderTop: '1px dashed #E2E8F0', paddingTop: '16px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: '0.85rem', color: '#64748B', fontWeight: '600' }}>Sinal / Pago</span>
+                    <span style={{ fontSize: '0.85rem', color: '#64748B', fontWeight: '600' }}>Sinal do pedido</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '6px', padding: '8px 12px', width: '120px', boxSizing: 'border-box' }}>
                     <span style={{ color: '#059669', fontWeight: '700', fontSize: '0.85rem', marginRight: '4px' }}>R$</span>
@@ -565,7 +566,7 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
                 ...orderToEdit,
                 delivery_date: orderToEdit.delivery_date ? parseDateSafe(orderToEdit.delivery_date).toISOString().split('T')[0] : '',
                 discount: normalizeMoneyValue(orderToEdit.discount),
-                amount_paid: getOrderAmountPaid(orderToEdit),
+                amount_paid: normalizeMoneyValue(orderToEdit.amount_paid),
                 status: orderToEdit.status || 'Criação de Arte'
             });
             setProductLines(preparedLines);
@@ -705,7 +706,7 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
             const normalizedAmountPaid = normalizeMoneyValue(orderData.amount_paid);
 
             Object.keys(orderData).forEach((key) => {
-                if (!['history', 'product_lines', 'sizes_json', 'layout_path', 'amount_paid', 'discount', 'synced_amount_paid'].includes(key) && orderData[key] !== undefined && orderData[key] !== null) {
+                if (!['history', 'product_lines', 'sizes_json', 'layout_path', 'amount_paid', 'discount', 'synced_amount_paid', 'received_total'].includes(key) && orderData[key] !== undefined && orderData[key] !== null) {
                     formData.append(key, orderData[key]);
                 }
             });
@@ -825,6 +826,7 @@ const OrderFormModal = ({ isOpen, onClose, orderToEdit, API_BASE_URL, token, aux
                             totalCost={totalCost}
                             discount={orderData.discount}
                             onDiscountChange={handleDiscountChange}
+                            otherPayments={Math.max(0, getOrderAmountPaid(orderToEdit) - normalizeMoneyValue(orderToEdit?.amount_paid))}
                             amountPaid={orderData.amount_paid}
                             onAmountPaidChange={handleAmountPaidChange}
                         />

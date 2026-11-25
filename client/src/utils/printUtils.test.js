@@ -118,6 +118,7 @@ test('builds one 1080 by 1350 client image per product', () => {
         total_price: 980,
         amount_paid: 400,
         synced_amount_paid: 450,
+        received_total: 650,
         product_lines: [
             { ...changedOrder.product_lines[0], total_price: 700 },
             { product_type: 'Bandeirão', fabric_type: 'Oxford', sizes_json: { ESP: 1 }, total_price: 280 }
@@ -133,8 +134,8 @@ test('builds one 1080 by 1350 client image per product', () => {
     assert.equal(pages[1].totalNames, 3);
     assert.equal(pages[1].fileName, 'pedido-ATOS-9762-nomes.jpg');
     assert.equal(pages[2].total, 280);
-    assert.equal(pages[0].amountPaid, 450);
-    assert.equal(pages[2].amountPaid, 450);
+    assert.equal(pages[0].amountPaid, 650);
+    assert.equal(pages[2].amountPaid, 650);
     assert.match(pages[0].fileName, /^pedido-ATOS-9762-1\.jpg$/);
     assert.equal(pages[2].line.product_type, 'Bandeirão');
 });

@@ -41,7 +41,7 @@ async function runFinanceWrite(databasePath, operation) {
         await run('PRAGMA foreign_keys = ON');
         await run('BEGIN IMMEDIATE');
         try {
-            const result = await operation(queries);
+            const result = await operation(queries, db);
             await run('COMMIT');
             return result;
         } catch (error) {

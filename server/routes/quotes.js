@@ -1,6 +1,10 @@
 const express = require('express');
+const { promisify } = require('node:util');
 const router = express.Router();
 const db = require('../database');
+const { syncOrderFinance, deleteUnpaidOrder } = require('../utils/orderFinance');
+const { withFinanceWrite } = require('../utils/financeWrite');
+const { appPaths } = require('../config/paths');
 const crypto = require('crypto');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 const { appConfig, buildTrackingCode } = require('../config/appConfig');
@@ -226,8 +230,8 @@ function saveQuoteProductLines(quoteId, lines, callback) {
     });
 }
 
-function fetchQuoteProductLines(quoteId, callback) {
-    db.all(`SELECT * FROM quote_product_lines WHERE quote_id = ? ORDER BY sort_order ASC, id ASC`, [quoteId], (err, rows) => {
+function fetchQuoteProductLines(connection, quoteId, callback) {
+    connection.all(`SELECT * FROM quote_product_lines WHERE quote_id = ? ORDER BY sort_order ASC, id ASC`, [quoteId], (err, rows) => {
         if (err) return callback(err);
 
         if (rows && rows.length > 0) {
@@ -238,7 +242,7 @@ function fetchQuoteProductLines(quoteId, callback) {
             })));
         }
 
-        db.get(`SELECT * FROM quotes WHERE id = ?`, [quoteId], (quoteErr, quote) => {
+        connection.get(`SELECT * FROM quotes WHERE id = ?`, [quoteId], (quoteErr, quote) => {
             if (quoteErr) return callback(quoteErr);
             if (!quote) return callback(null, []);
 
@@ -262,12 +266,12 @@ function fetchQuoteProductLines(quoteId, callback) {
     });
 }
 
-function saveOrderProductLines(orderId, lines, callback) {
-    db.run(`DELETE FROM order_product_lines WHERE order_id = ?`, [orderId], (deleteErr) => {
+function saveOrderProductLines(connection, orderId, lines, callback) {
+    connection.run(`DELETE FROM order_product_lines WHERE order_id = ?`, [orderId], (deleteErr) => {
         if (deleteErr) return callback(deleteErr);
         if (!lines.length) return callback(null);
 
-        const stmt = db.prepare(`
+        const stmt = connection.prepare(`
             INSERT INTO order_product_lines
             (order_id, sort_order, product_type, production_label, printing_types_json, production_notes, fabric_type, sizes_json, unit_price, unit_cost, total_price, cost_price, layout_path)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -310,71 +314,17 @@ function saveOrderProductLines(orderId, lines, callback) {
     });
 }
 
-function getQuoteItems(quoteId, callback) {
-    db.all(`SELECT player_name, player_number, size, model FROM quote_items WHERE quote_id = ? ORDER BY id ASC`, [quoteId], (err, items) => {
+function getQuoteItems(connection, quoteId, callback) {
+    connection.all(`SELECT player_name, player_number, size, model FROM quote_items WHERE quote_id = ? ORDER BY id ASC`, [quoteId], (err, items) => {
         if (err) return callback(err);
         if (items && items.length > 0) return callback(null, items);
 
-        db.all(`SELECT player_name, player_number, size, model FROM order_items WHERE order_id = ? AND reference_type = 'quote' ORDER BY id ASC`, [quoteId], callback);
+        connection.all(`SELECT player_name, player_number, size, model FROM order_items WHERE order_id = ? AND reference_type = 'quote' ORDER BY id ASC`, [quoteId], callback);
     });
 }
 
-function syncFinanceWithOrder(orderId) {
-    db.get(`SELECT * FROM orders WHERE id = ?`, [orderId], (err, order) => {
-        if (err || !order) return;
-
-        db.get(`
-            SELECT COALESCE(SUM(amount), 0) AS manual_paid
-            FROM transactions
-            WHERE order_id = ?
-              AND type = 'Receita'
-              AND status = 'Pago'
-              AND description NOT LIKE 'Sinal/Pago - Pedido %'
-        `, [orderId], (manualPaidErr, paidRow) => {
-            if (manualPaidErr) return;
-
-            db.run(`
-                DELETE FROM transactions
-                WHERE order_id = ?
-                  AND type = 'Receita'
-                  AND (
-                      (status = 'Pago' AND description LIKE 'Sinal/Pago - Pedido %')
-                      OR (status = 'Pendente' AND description LIKE 'Falta Pagar - Pedido %')
-                  )
-            `, [orderId], () => {
-                if (order.status === 'Cancelado' || order.status === 'Arte Arquivada') return;
-
-                const dateEntrega = order.delivery_date || new Date().toISOString().split('T')[0];
-                const dateHoje = new Date().toISOString().split('T')[0];
-
-                const total = parseFloat(order.total_price) || 0;
-                const manualPaid = Number(paidRow?.manual_paid || 0);
-                const storedPaid = parseFloat(order.amount_paid) || 0;
-                const autoPaid = Math.max(0, Math.min(storedPaid, total));
-                const remaining = Math.max(0, total - manualPaid - autoPaid);
-
-                const clientName = order.client_name ? ` - ${order.client_name}` : '';
-
-                if (autoPaid > 0) {
-                    db.run(
-                        `INSERT INTO transactions (description, type, status, amount, due_date, payment_date, order_id) VALUES (?, 'Receita', 'Pago', ?, ?, ?, ?)`,
-                        [`Sinal/Pago - Pedido ${order.tracking_code}${clientName}`, autoPaid, dateHoje, dateHoje, orderId]
-                    );
-                }
-
-                if (remaining > 0) {
-                    db.run(
-                        `INSERT INTO transactions (description, type, status, amount, due_date, order_id) VALUES (?, 'Receita', 'Pendente', ?, ?, ?)`,
-                        [`Falta Pagar - Pedido ${order.tracking_code}${clientName}`, remaining, dateEntrega, orderId]
-                    );
-                }
-            });
-        });
-    });
-}
-
-function syncQuoteDataToOrder(quote, orderId, callback) {
-    db.run(
+function syncQuoteDataToOrder(connection, quote, orderId, callback) {
+    connection.run(
         `
             UPDATE orders
             SET
@@ -384,7 +334,9 @@ function syncQuoteDataToOrder(quote, orderId, callback) {
                 category = ?,
                 sizes_json = ?,
                 total_price = ?,
-                amount_paid = ?,
+                status = CASE WHEN status = 'Cancelado' AND quote_id IS NULL AND EXISTS (
+                    SELECT 1 FROM order_history WHERE order_id = orders.id AND status_text = 'Pedido revertido para orcamento'
+                ) THEN 'Criação de Arte' ELSE status END,
                 cost_price = ?,
                 delivery_date = ?,
                 layout_path = ?,
@@ -408,7 +360,6 @@ function syncQuoteDataToOrder(quote, orderId, callback) {
             quote.category,
             quote.sizes_json,
             quote.total_price,
-            Number(quote.amount_paid || 0),
             quote.cost_price,
             quote.delivery_date,
             quote.layout_path,
@@ -429,14 +380,14 @@ function syncQuoteDataToOrder(quote, orderId, callback) {
     );
 }
 
-function copyQuoteItemsToOrder(quoteId, orderId, callback) {
-    getQuoteItems(quoteId, (err, items) => {
+function copyQuoteItemsToOrder(connection, quoteId, orderId, callback) {
+    getQuoteItems(connection, quoteId, (err, items) => {
         if (err) return callback(err);
-        db.run(`DELETE FROM order_items WHERE order_id = ? AND (reference_type = 'order' OR reference_type IS NULL)`, [orderId], (deleteErr) => {
+        connection.run(`DELETE FROM order_items WHERE order_id = ? AND (reference_type = 'order' OR reference_type IS NULL)`, [orderId], (deleteErr) => {
             if (deleteErr) return callback(deleteErr);
             if (!items || items.length === 0) return callback(null, 0);
 
-            const stmt = db.prepare(`INSERT INTO order_items (order_id, player_name, player_number, size, model, reference_type) VALUES (?, ?, ?, ?, ?, 'order')`);
+            const stmt = connection.prepare(`INSERT INTO order_items (order_id, player_name, player_number, size, model, reference_type) VALUES (?, ?, ?, ?, ?, 'order')`);
             let pending = items.length;
             let inserted = 0;
             let done = false;
@@ -466,8 +417,8 @@ function copyQuoteItemsToOrder(quoteId, orderId, callback) {
     });
 }
 
-function copyQuoteProductLinesToOrder(quoteId, orderId, callback) {
-    fetchQuoteProductLines(quoteId, (err, lines) => {
+function copyQuoteProductLinesToOrder(connection, quoteId, orderId, callback) {
+    fetchQuoteProductLines(connection, quoteId, (err, lines) => {
         if (err) return callback(err);
 
         const normalizedLines = (lines || []).map((line, index) => {
@@ -488,7 +439,7 @@ function copyQuoteProductLinesToOrder(quoteId, orderId, callback) {
             };
         });
 
-        saveOrderProductLines(orderId, normalizedLines, callback);
+        saveOrderProductLines(connection, orderId, normalizedLines, callback);
     });
 }
 
@@ -683,87 +634,25 @@ router.delete('/api/quotes/:id', authenticateToken, authorizeRole(['admin', 'ger
     });
 });
 
-router.post('/api/quotes/:id/convert', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
-    db.get(`SELECT * FROM quotes WHERE id = ?`, [req.params.id], (err, quote) => {
-        if (err || !quote) return res.status(404).json({ error: 'Orçamento não encontrado.' });
-
-        const syncExistingOrder = (order) => {
-            db.serialize(() => {
-                db.run('BEGIN TRANSACTION');
-
-                syncQuoteDataToOrder(quote, order.id, (updateErr) => {
-                    if (updateErr) {
-                        db.run('ROLLBACK');
-                        return res.status(500).json({ error: 'Erro ao atualizar o pedido existente.' });
-                    }
-
-                    copyQuoteItemsToOrder(quote.id, order.id, (copyItemsErr, copiedCount) => {
-                        if (copyItemsErr) {
-                            db.run('ROLLBACK');
-                            return res.status(500).json({ error: 'Erro ao sincronizar a lista do orçamento.' });
-                        }
-
-                        copyQuoteProductLinesToOrder(quote.id, order.id, (copyLinesErr) => {
-                            if (copyLinesErr) {
-                                db.run('ROLLBACK');
-                                return res.status(500).json({ error: 'Erro ao sincronizar os produtos do orçamento.' });
-                            }
-
-                            db.run(`UPDATE quotes SET status = ? WHERE id = ?`, [QUOTE_CONVERTED_STATUS, quote.id]);
-                            db.run(
-                                `INSERT INTO quote_history (quote_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`,
-                                [quote.id, copiedCount > 0 ? `Pedido já existia; dados, produtos e lista sincronizados (${copiedCount} item(ns))` : 'Pedido já existia; dados e produtos sincronizados', req.user.id]
-                            );
-                            db.run(
-                                `INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`,
-                                [order.id, copiedCount > 0 ? `Pedido sincronizado com orçamento (${copiedCount} item(ns) atualizado(s))` : 'Pedido sincronizado com orçamento', req.user.id]
-                            );
-
-                            db.run('COMMIT', (commitErr) => {
-                                if (commitErr) return res.status(500).json({ error: 'Erro ao finalizar sincronização do pedido.' });
-                                enqueueCalendarUpsert(order.id).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
-                                syncFinanceWithOrder(order.id);
-                                return res.json({
-                                    message: 'Pedido existente sincronizado!',
-                                    tracking_code: order.tracking_code,
-                                    already_exists: true,
-                                    copied_items: copiedCount || 0
-                                });
-                            });
-                        });
-                    });
-                });
-            });
-        };
-
-        db.get(`SELECT id, tracking_code, quote_id, client_name FROM orders WHERE quote_id = ? ORDER BY id DESC LIMIT 1`, [quote.id], (existingErr, existingOrder) => {
-            if (existingErr) return res.status(500).json({ error: 'Erro ao verificar pedido existente.' });
-
-            if (existingOrder) {
-                syncExistingOrder(existingOrder);
-                return;
-            }
-
+router.post('/api/quotes/:id/convert', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), async (req, res) => {
+    try {
+        const result = await withFinanceWrite(appPaths.databasePath, async (tx, connection) => {
+            const quote = await tx.get('SELECT * FROM quotes WHERE id=?', [req.params.id]);
+            if (!quote) throw Object.assign(new Error('Orçamento não encontrado.'), { status: 404 });
+            let order = await tx.get('SELECT * FROM orders WHERE quote_id=? ORDER BY id DESC LIMIT 1', [quote.id]);
             const newOrderCode = buildOrderCodeFromQuoteCode(quote.tracking_code) || generateTrackingCode();
-
-            db.serialize(() => {
-                db.run('BEGIN TRANSACTION');
-
-                db.get(`SELECT id, tracking_code, quote_id, client_name FROM orders WHERE tracking_code = ? OR legacy_tracking_code = ?`, [newOrderCode, newOrderCode], (codeErr, codeOwner) => {
-                    if (codeErr) {
-                        db.run('ROLLBACK');
-                        return res.status(500).json({ error: 'Erro ao verificar código do pedido.' });
-                    }
-                    if (codeOwner) {
-                        db.run('ROLLBACK');
-                        if (canAdoptOrderForQuote(codeOwner, quote)) {
-                            syncExistingOrder(codeOwner);
-                            return;
-                        }
-                        return res.status(409).json({ error: `Já existe um pedido com o código ${newOrderCode}.` });
-                    }
-
-                db.run(`
+            if (!order) {
+                order = await tx.get('SELECT * FROM orders WHERE tracking_code=? OR legacy_tracking_code=?', [newOrderCode, newOrderCode]);
+                if (order && !canAdoptOrderForQuote(order, quote)) {
+                    throw Object.assign(new Error(`Já existe um pedido com o código ${newOrderCode}.`), { status: 409 });
+                }
+            }
+            let orderId;
+            if (order) {
+                orderId = order.id;
+                await promisify(syncQuoteDataToOrder)(connection, quote, orderId);
+            } else {
+                const inserted = await tx.run(`
                     INSERT INTO orders (
                         tracking_code, client_name, product_type, fabric_type, category, sizes_json, total_price,
                         amount_paid, cost_price, delivery_date, layout_path, status, quote_id, board_order, discount,
@@ -794,43 +683,31 @@ router.post('/api/quotes/:id/convert', authenticateToken, authorizeRole(['admin'
                     quote.observacao || null,
                     quote.url_referencia || null,
                     generatePortalToken()
-                ], function (err2) {
-                    if (err2) {
-                        db.run('ROLLBACK');
-                        return res.status(500).json({ error: 'Erro ao gerar pedido.' });
-                    }
-
-                    const orderId = this.lastID;
-
-                    copyQuoteItemsToOrder(quote.id, orderId, (copyItemsErr, copiedCount) => {
-                        if (copyItemsErr) {
-                            db.run('ROLLBACK');
-                            return res.status(500).json({ error: 'Erro ao copiar a lista do orçamento.' });
-                        }
-
-                        copyQuoteProductLinesToOrder(quote.id, orderId, (copyLinesErr) => {
-                            if (copyLinesErr) {
-                                db.run('ROLLBACK');
-                                return res.status(500).json({ error: 'Erro ao copiar os produtos do orçamento.' });
-                            }
-
-                            db.run(`INSERT INTO order_history (order_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`, [orderId, copiedCount > 0 ? `Pedido Gerado via Orçamento (${copiedCount} item(ns) importado(s))` : 'Pedido Gerado via Orçamento', req.user.id]);
-                            db.run(`UPDATE quotes SET status = ? WHERE id = ?`, [QUOTE_CONVERTED_STATUS, quote.id]);
-                            db.run(`INSERT INTO quote_history (quote_id, status_text, changed_by_user_id) VALUES (?, ?, ?)`, [quote.id, QUOTE_CONVERTED_STATUS, req.user.id]);
-                            db.run(`INSERT INTO notifications (target_role, title, message) VALUES (?, ?, ?)`, ['designer', 'Novo Pedido para Arte', `O orçamento aprovado de ${quote.client_name} entrou na fila.`]);
-                            db.run('COMMIT', (commitErr) => {
-                                if (commitErr) return res.status(500).json({ error: 'Erro ao finalizar conversão.' });
-                                enqueueCalendarUpsert(orderId).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
-                                syncFinanceWithOrder(orderId);
-                                res.json({ message: 'Orçamento convertido em pedido!', tracking_code: newOrderCode, copied_items: copiedCount || 0 });
-                            });
-                        });
-                    });
-                });
-                });
-            });
+                ]);
+                orderId = inserted.lastID;
+            }
+            const copiedCount = await promisify(copyQuoteItemsToOrder)(connection, quote.id, orderId);
+            await promisify(copyQuoteProductLinesToOrder)(connection, quote.id, orderId);
+            await syncOrderFinance(tx, orderId, { depositChanged: !order, previousDelivery: order?.delivery_date });
+            const history = order ? 'Pedido sincronizado com orçamento' : 'Pedido Gerado via Orçamento';
+            await tx.run('INSERT INTO order_history (order_id,status_text,changed_by_user_id) VALUES (?,?,?)',
+                [orderId, copiedCount ? `${history} (${copiedCount} item(ns))` : history, req.user.id]);
+            await tx.run('UPDATE quotes SET status=? WHERE id=?', [QUOTE_CONVERTED_STATUS, quote.id]);
+            await tx.run('INSERT INTO quote_history (quote_id,status_text,changed_by_user_id) VALUES (?,?,?)',
+                [quote.id, order ? 'Pedido já existia; dados, produtos e lista sincronizados' : QUOTE_CONVERTED_STATUS, req.user.id]);
+            if (!order) {
+                await tx.run('INSERT INTO notifications (target_role,title,message) VALUES (?,?,?)',
+                    ['designer', 'Novo Pedido para Arte', `O orçamento aprovado de ${quote.client_name} entrou na fila.`]);
+            }
+            return { orderId, message: order ? 'Pedido existente sincronizado!' : 'Orçamento convertido em pedido!',
+                tracking_code: order?.tracking_code || newOrderCode, copied_items: copiedCount, ...(order && { already_exists: true }) };
         });
-    });
+        const { orderId, ...payload } = result;
+        enqueueCalendarUpsert(orderId).catch(error => console.error('Falha ao enfileirar Google Agenda:', error.message));
+        res.json(payload);
+    } catch (error) {
+        res.status(error.status || 500).json({ error: error.message });
+    }
 });
 
 router.get('/api/quotes/:code/history', authenticateToken, (req, res) => {
@@ -840,10 +717,10 @@ router.get('/api/quotes/:code/history', authenticateToken, (req, res) => {
         db.all(`SELECT qh.status_text, qh.change_timestamp, COALESCE(u.name, 'Cliente') AS changed_by_name FROM quote_history qh LEFT JOIN users u ON qh.changed_by_user_id = u.id WHERE qh.quote_id = ? ORDER BY qh.change_timestamp ASC`, [quote.id], (historyErr, history) => {
             if (historyErr) return res.status(500).json({ error: historyErr.message });
 
-            getQuoteItems(quote.id, (itemsErr, items) => {
+            getQuoteItems(db, quote.id, (itemsErr, items) => {
                 if (itemsErr) return res.status(500).json({ error: itemsErr.message });
 
-                fetchQuoteProductLines(quote.id, (linesErr, productLines) => {
+                fetchQuoteProductLines(db, quote.id, (linesErr, productLines) => {
                     if (linesErr) return res.status(500).json({ error: linesErr.message });
 
                     res.json({
@@ -878,35 +755,15 @@ router.post('/api/quotes/:code/status', authenticateToken, authorizeRole(['admin
 });
 
 router.post('/api/quotes/:code/reset', authenticateToken, authorizeRole(['admin', 'gerente', 'gerente_vendas', 'gerente_operacoes']), (req, res) => {
-    db.get(`SELECT id FROM quotes WHERE tracking_code=?`, [req.params.code], (err, quote) => {
-        if (err || !quote) return res.status(404).json({ message: 'Orçamento não encontrado.' });
-
-        db.all(`SELECT id FROM orders WHERE quote_id=?`, [quote.id], (ordersErr, orders) => {
-            if (ordersErr) return res.status(500).json({ error: 'Erro ao buscar pedidos vinculados.' });
-
-            db.serialize(() => {
-                db.run('BEGIN TRANSACTION');
-
-                (orders || []).forEach((order) => {
-                    db.run(`DELETE FROM order_history WHERE order_id=?`, [order.id]);
-                    db.run(`DELETE FROM transactions WHERE order_id=?`, [order.id]);
-                    db.run(`DELETE FROM order_items WHERE order_id=? AND (reference_type = 'order' OR reference_type IS NULL)`, [order.id]);
-                    db.run(`DELETE FROM order_product_lines WHERE order_id=?`, [order.id]);
-                    db.run(`DELETE FROM orders WHERE id=?`, [order.id]);
-                });
-
-                db.run(`UPDATE quotes SET status='Em Análise', is_locked_by_client=0 WHERE id=?`, [quote.id], (updateErr) => {
-                    if (updateErr) {
-                        db.run('ROLLBACK');
-                        return res.status(500).json({ error: 'Erro ao reiniciar orçamento.' });
-                    }
-
-                    db.run(`INSERT INTO quote_history (quote_id, status_text, changed_by_user_id) VALUES (?, 'Orçamento Reiniciado e Liberado para Cliente', ?)`, [quote.id, req.user.id]);
-                    db.run('COMMIT', () => res.json({ message: 'Orçamento reiniciado e liberado para nova edição.' }));
-                });
-            });
-        });
-    });
+    withFinanceWrite(appPaths.databasePath, async tx => {
+        const quote = await tx.get('SELECT id FROM quotes WHERE tracking_code=?', [req.params.code]);
+        if (!quote) throw Object.assign(new Error('Orçamento não encontrado.'), { status: 404 });
+        const orders = await tx.all('SELECT id FROM orders WHERE quote_id=?', [quote.id]);
+        for (const order of orders) await deleteUnpaidOrder(tx, order.id);
+        await tx.run("UPDATE quotes SET status='Em Análise', is_locked_by_client=0 WHERE id=?", [quote.id]);
+        await tx.run("INSERT INTO quote_history (quote_id, status_text, changed_by_user_id) VALUES (?, 'Orçamento Reiniciado e Liberado para Cliente', ?)", [quote.id, req.user.id]);
+    }).then(() => res.json({ message: 'Orçamento reiniciado e liberado para nova edição.' }))
+      .catch(error => res.status(error.status || 500).json({ error: error.message }));
 });
 
 router._test = { buildOrderCodeFromQuoteCode, shouldShowQuoteInList, canAdoptOrderForQuote };
