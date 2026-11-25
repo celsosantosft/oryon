@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { RESTORE_MISSING_RECEIVABLES_SQL } = require('../utils/financeHistory');
 const { authenticateToken, authorizeRole } = require('../middlewares/auth');
 const {
     ACTIVE_RECEIVABLE_FILTER_SQL,
@@ -1058,29 +1059,11 @@ router.get('/api/finance/dre', authenticateToken, authorizeRole(FINANCE_ROLES), 
 // 5. MÁQUINA DO TEMPO
 // ==========================================
 router.post('/api/finance/sync-history', authenticateToken, authorizeRole(['admin']), (req, res) => {
-    db.all(`SELECT * FROM orders WHERE status NOT IN ('Cancelado', 'Arte Arquivada')`, [], (err, orders) => {
+    db.run(RESTORE_MISSING_RECEIVABLES_SQL, function(err) {
         if (err) return res.status(500).json({ error: err.message });
-        db.run(`DELETE FROM transactions WHERE order_id IS NOT NULL AND status = 'Pendente'`, [], () => {
-            let processed = 0;
-            if (orders.length === 0) return res.json({ message: 'Nenhum pedido pendente para sincronizar.' });
-            orders.forEach(o => {
-                const isPaid = o.status === 'Entregue/Concluído' ? 'Pago' : 'Pendente';
-                const date = o.delivery_date || new Date().toISOString().split('T')[0];
-                db.get(`SELECT id FROM transactions WHERE order_id = ? AND type = 'Receita' AND status = 'Pago'`, [o.id], (err, rowRev) => {
-                    if (!rowRev && o.total_price && o.total_price > 0) {
-                        db.run(`INSERT INTO transactions (description, type, status, amount, due_date, order_id) VALUES (?, 'Receita', ?, ?, ?, ?)`, 
-                        [`Pedido ${o.tracking_code} - ${o.client_name}`, isPaid, o.total_price, date, o.id]);
-                    }
-                    db.get(`SELECT id FROM transactions WHERE order_id = ? AND type = 'Despesa' AND status = 'Pago'`, [o.id], (err, rowExp) => {
-                        if (!rowExp && o.cost_price && o.cost_price > 0) {
-                            db.run(`INSERT INTO transactions (description, type, status, amount, due_date, order_id) VALUES (?, 'Despesa', ?, ?, ?, ?)`, 
-                            [`Custo Prod: ${o.tracking_code}`, isPaid, o.cost_price, date, o.id]);
-                        }
-                        processed++;
-                        if (processed === orders.length) res.json({ message: 'Caixa sincronizado com todos os pedidos!' });
-                    });
-                });
-            });
+        res.json({
+            created: this.changes,
+            message: `${this.changes} saldo(s) a receber recomposto(s). Pedidos sem vencimento, com sinal sem lançamento correspondente ou com histórico inconclusivo exigem conferência.`
         });
     });
 });
