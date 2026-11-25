@@ -32,12 +32,15 @@ import {
     getDisplayDate,
     getDaysBetweenInclusive,
     getPeriodLabel,
+    parseDateFromInput,
     getStoredFinanceTheme,
     normalizeNumber,
     normalizeText,
     saveFinanceTheme,
     sanitizeCustomRange
 } from '../utils/financeIntelligence';
+
+import { financeDay } from '../utils/financeEntry';
 
 const ACTIVE_FILTER_GRADIENT = 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(239,246,255,0.94) 100%)';
 const PRIMARY_ACTION_GRADIENT = 'linear-gradient(135deg, #1E3A8A 0%, #38BDF8 100%)';
@@ -144,8 +147,7 @@ const addDays = (date, days) => {
 const getMultiplier = (frequency) => FREQUENCY_OPTIONS.find((option) => option.value === frequency)?.multiplier || 1;
 
 const buildAutoDueDate = (frequency) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = parseDateFromInput(financeDay());
     return formatDateInput(addDays(today, getMultiplier(frequency) - 1));
 };
 
@@ -221,6 +223,7 @@ const getChannelLabel = (transaction) => {
 };
 
 const isMarketingTransaction = (transaction, marketingAccountId) => {
+    if (transaction.type !== 'Despesa') return false;
     const haystack = normalizeText(`${transaction.account_name || ''} ${transaction.description || ''} ${transaction.cost_center_name || ''}`);
     if (marketingAccountId && Number(transaction.chart_of_account_id) === Number(marketingAccountId)) return true;
     return MARKETING_KEYWORDS.some((keyword) => haystack.includes(normalizeText(keyword)));
@@ -280,30 +283,6 @@ const buildChannelData = (transactions) => {
     }, {});
 
     return Object.values(grouped).sort((first, second) => second.value - first.value);
-};
-
-const getRecommendationTone = (tone) => {
-    if (tone === 'positive') {
-        return {
-            border: 'rgba(34,197,94,0.22)',
-            background: 'linear-gradient(180deg, rgba(240,253,244,0.96), rgba(220,252,231,0.82))',
-            icon: '#16A34A'
-        };
-    }
-
-    if (tone === 'warning') {
-        return {
-            border: 'rgba(249,115,22,0.22)',
-            background: 'linear-gradient(180deg, rgba(255,247,237,0.96), rgba(255,237,213,0.82))',
-            icon: '#EA580C'
-        };
-    }
-
-    return {
-        border: 'rgba(37,99,235,0.2)',
-        background: 'linear-gradient(180deg, rgba(239,246,255,0.96), rgba(219,234,254,0.82))',
-        icon: '#2563EB'
-    };
 };
 
 const KPI_THEMES = {
@@ -395,20 +374,6 @@ const PendingChargeCard = ({ transaction, onPay, onEdit, onDelete }) => (
     </div>
 );
 
-const RecommendationCard = ({ item }) => {
-    const tone = getRecommendationTone(item.tone);
-
-    return (
-        <div style={{ ...styles.recommendationCard, borderColor: tone.border, background: tone.background }}>
-            <div style={{ ...styles.recommendationIcon, color: tone.icon }}>{Icons.Spark}</div>
-            <div>
-                <strong style={styles.recommendationTitle}>{item.title}</strong>
-                <p style={styles.recommendationText}>{item.text}</p>
-            </div>
-        </div>
-    );
-};
-
 const FinanceMarketing = () => {
     const { token, API_BASE_URL } = useAuth();
     const navigate = useNavigate();
@@ -425,7 +390,7 @@ const FinanceMarketing = () => {
     const [lastUpdated, setLastUpdated] = useState('');
     const [selectedPreset, setSelectedPreset] = useState('last-30');
     const [customRange, setCustomRange] = useState(buildPresetRange('last-30'));
-    const [relativeNow, setRelativeNow] = useState(Date.now());
+    const [relativeNow, setRelativeNow] = useState(Date.now);
     const [theme, setTheme] = useState(() => HERO_FALLBACK_THEME);
     const [themeDraft, setThemeDraft] = useState(() => HERO_FALLBACK_THEME);
     const [showThemePanel, setShowThemePanel] = useState(false);
@@ -584,8 +549,8 @@ const FinanceMarketing = () => {
     );
 
     const marketingInsights = useMemo(
-        () => calculateMarketingInsights(transactions, rangeInsights, rangeDays, plan.dailyBudget),
-        [plan.dailyBudget, rangeDays, rangeInsights, transactions]
+        () => calculateMarketingInsights(transactions, marketingTransactions, rangeInsights, rangeDays, plan.dailyBudget),
+        [marketingTransactions, plan.dailyBudget, rangeDays, rangeInsights, transactions]
     );
 
     const marketingTrendData = useMemo(
@@ -605,9 +570,6 @@ const FinanceMarketing = () => {
             .slice(0, 6),
         [marketingTransactions]
     );
-
-    const breakEvenText = marketingInsights.breakEvenOrders ? `${marketingInsights.breakEvenOrders} pedidos` : 'Aguardando base';
-    const comfortText = marketingInsights.comfortOrders ? `${marketingInsights.comfortOrders} pedidos` : 'Aguardando base';
 
     const createCharge = async ({ markAsPaid = false } = {}) => {
         if (!marketingAccount?.id) {
@@ -630,7 +592,7 @@ const FinanceMarketing = () => {
         setFeedback('');
 
         try {
-            const today = formatDateInput(new Date());
+            const today = financeDay();
             const payload = {
                 description: `Tráfego ${plan.channel} - ${FREQUENCY_OPTIONS.find((item) => item.value === plan.frequency)?.label || 'Diário'}${plan.notes ? ` - ${plan.notes}` : ''}`,
                 type: 'Despesa',
@@ -664,7 +626,7 @@ const FinanceMarketing = () => {
 
         try {
             await axios.put(`${API_BASE_URL}/api/finance/transactions/${transaction.id}/pay`, {
-                payment_date: formatDateInput(new Date()),
+                payment_date: financeDay(),
                 payment_method: transaction.payment_method || buildPaymentMethodLabel(plan.sourceType, plan.cardLabel)
             }, {
                 headers: { Authorization: `Bearer ${token}` }
@@ -968,17 +930,16 @@ const FinanceMarketing = () => {
                 />
                 <StatCard
                     icon={Icons.TrendUp}
-                    label="ROAS estimado"
-                    value={marketingInsights.estimatedRoas > 0 ? `${marketingInsights.estimatedRoas.toFixed(1)}x` : 'Sem base'}
-                    helper="Receita paga por real investido"
+                    label="Recebimentos por R$ de mídia"
+                    value={marketingInsights.receiptsPerMarketingReal === null ? 'Sem gasto' : formatMoney(marketingInsights.receiptsPerMarketingReal)}
+                    helper="Pedidos de todas as origens no período"
                     tone="roas"
                 />
                 <StatCard
                     icon={Icons.Wallet}
-                    label="Lucro médio por pedido"
-                    value={marketingInsights.averageProfitPerOrder > 0 ? formatMoney(marketingInsights.averageProfitPerOrder) : 'Sem base'}
-                    helper={`${marketingInsights.paidOrderCount} pedido(s) pagos`}
-                    accent={marketingInsights.paidOrderCount > 0 ? formatMoney(marketingInsights.averageRevenuePerOrder) : null}
+                    label="Recebido por pedido"
+                    value={marketingInsights.averageRevenuePerOrder === null ? 'Sem recebimentos' : formatMoney(marketingInsights.averageRevenuePerOrder)}
+                    helper={`${marketingInsights.paidOrderCount} pedido(s) com recebimento`}
                     tone="profit"
                 />
             </div>
@@ -1137,20 +1098,12 @@ const FinanceMarketing = () => {
             <div className="marketing-grid-2" style={{ marginBottom: 24 }}>
                 <div className="glass-card" style={styles.sectionCard}>
                     <div style={styles.sectionHeader}>
-                        <h3 style={styles.sectionTitle}>Escala e leitura inteligente</h3>
+                        <h3 style={styles.sectionTitle}>Planejamento de verba</h3>
                     </div>
 
                     <div style={styles.scenarioGrid}>
                         <ScenarioCard label="Orçamento do recorte" value={formatMoney(marketingInsights.projectedBudget)} helper={`${rangeDays} dia(s) simulados`} tone="#1D4ED8" />
-                        <ScenarioCard label="Empata em" value={breakEvenText} helper="Pedidos para pagar a mídia" tone="#EA580C" />
-                        <ScenarioCard label="Escala confortável" value={comfortText} helper="Faixa com mais folga" tone="#16A34A" />
-                        <ScenarioCard label="Sugestão por dia" value={marketingInsights.suggestedDailyBudget > 0 ? formatMoney(marketingInsights.suggestedDailyBudget) : 'Sem base'} helper="Leitura do histórico" tone="#0F766E" />
-                    </div>
-
-                    <div style={styles.recommendationsGrid}>
-                        {marketingInsights.recommendations.map((item) => (
-                            <RecommendationCard key={item.title} item={item} />
-                        ))}
+                        <ScenarioCard label="Média diária realizada" value={formatMoney(marketingInsights.currentDailyMarketing)} helper="Despesas de marketing pagas no período" tone="#0F766E" />
                     </div>
                 </div>
 
@@ -1233,7 +1186,7 @@ const FinanceMarketing = () => {
 
                 <div className="glass-card" style={styles.sectionCard}>
                     <div style={styles.sectionHeader}>
-                        <h3 style={styles.sectionTitle}>Indicadores do tráfego</h3>
+                        <h3 style={styles.sectionTitle}>Recebimentos e despesas de mídia</h3>
                     </div>
 
                     <div style={{ width: '100%', height: 290, marginBottom: 18 }}>
@@ -1241,7 +1194,6 @@ const FinanceMarketing = () => {
                             <BarChart
                                 data={[
                                     { name: 'Receita paga', value: marketingInsights.orderRevenue },
-                                    { name: 'Custo pedido', value: marketingInsights.orderCost },
                                     { name: 'Marketing', value: marketingInsights.marketingSpend }
                                 ]}
                                 margin={{ top: 10, right: 16, left: 0, bottom: 0 }}
@@ -1252,7 +1204,6 @@ const FinanceMarketing = () => {
                                 <Tooltip formatter={(value) => formatMoney(value)} contentStyle={styles.tooltipCard} />
                                 <Bar dataKey="value" radius={[12, 12, 0, 0]} barSize={44}>
                                     <Cell fill="#2563EB" />
-                                    <Cell fill="#0F766E" />
                                     <Cell fill="#FB923C" />
                                 </Bar>
                             </BarChart>
@@ -1265,17 +1216,15 @@ const FinanceMarketing = () => {
                             <strong style={styles.metricValue}>{formatMoney(marketingInsights.orderRevenue)}</strong>
                         </div>
                         <div style={styles.metricRow}>
-                            <span style={styles.metricLabel}>Lucro sobre mídia</span>
-                            <strong style={{ ...styles.metricValue, color: marketingInsights.estimatedProfitRoas >= 2 ? '#16A34A' : '#EA580C' }}>
-                                {marketingInsights.estimatedProfitRoas > 0 ? `${marketingInsights.estimatedProfitRoas.toFixed(1)}x` : 'Sem base'}
-                            </strong>
+                            <span style={styles.metricLabel}>Pedidos com despesa paga vinculada no período</span>
+                            <strong style={styles.metricValue}>{marketingInsights.ordersWithLinkedExpenses} de {marketingInsights.paidOrderCount}</strong>
                         </div>
                         <div style={styles.metricRow}>
-                            <span style={styles.metricLabel}>Média atual por dia</span>
-                            <strong style={styles.metricValue}>{formatMoney(marketingInsights.currentDailyMarketing)}</strong>
+                            <span style={styles.metricLabel}>ROAS por campanha</span>
+                            <strong style={styles.metricValue}>Sem atribuição de vendas</strong>
                         </div>
                         <div style={styles.metricRow}>
-                            <span style={styles.metricLabel}>Resultado do recorte</span>
+                            <span style={styles.metricLabel}>Variação do caixa</span>
                             <strong style={{ ...styles.metricValue, color: rangeInsights.saldo >= 0 ? '#16A34A' : '#EA580C' }}>
                                 {formatMoney(rangeInsights.saldo)}
                             </strong>
@@ -1800,38 +1749,6 @@ const styles = {
         color: '#64748B',
         fontSize: '0.88rem',
         lineHeight: 1.5
-    },
-    recommendationsGrid: {
-        display: 'grid',
-        gap: '14px'
-    },
-    recommendationCard: {
-        borderRadius: '20px',
-        padding: '16px',
-        display: 'flex',
-        gap: '14px',
-        alignItems: 'flex-start'
-    },
-    recommendationIcon: {
-        width: '42px',
-        height: '42px',
-        borderRadius: '14px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'rgba(255,255,255,0.74)',
-        flexShrink: 0
-    },
-    recommendationTitle: {
-        display: 'block',
-        color: '#0F172A',
-        fontSize: '0.98rem',
-        marginBottom: '6px'
-    },
-    recommendationText: {
-        margin: 0,
-        color: '#334155',
-        lineHeight: 1.58
     },
     pendingList: {
         display: 'grid',

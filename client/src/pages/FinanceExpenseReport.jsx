@@ -3,6 +3,8 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Area, AreaChart } from 'recharts';
 import { useAuth } from '../context/AuthContext';
+import { financeDay } from '../utils/financeEntry';
+import { addDays, formatDateInput, parseDateFromInput } from '../utils/financeIntelligence';
 
 const Icons = {
     Statement: <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 14h6M9 10h6M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>,
@@ -15,9 +17,10 @@ const Icons = {
     ArrowDown: <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
 };
 
-const today = new Date();
-const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
-const todayStr = today.toISOString().slice(0, 10);
+const currentMonth = () => {
+    const today = financeDay();
+    return { start_date: today.slice(0, 8) + '01', end_date: today };
+};
 
 const formatMoney = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
 const formatShortMoney = (value) => {
@@ -39,14 +42,13 @@ const FinanceExpenseReport = () => {
     const [report, setReport] = useState({ summary: {}, categoryData: [], methodData: [], dailyData: [], transactions: [] });
     const [loading, setLoading] = useState(false);
 
-    const [filters, setFilters] = useState({
-        start_date: firstDayOfMonth,
-        end_date: todayStr,
+    const [filters, setFilters] = useState(() => ({
+        ...currentMonth(),
         account_id: 'all',
         status: 'all',
         payment_method: 'all',
         search: ''
-    });
+    }));
 
     const expenseAccounts = useMemo(() => accounts.filter(account => account.type === 'Despesa'), [accounts]);
 
@@ -91,20 +93,20 @@ const FinanceExpenseReport = () => {
     const updateFilter = (key, value) => setFilters(prev => ({ ...prev, [key]: value }));
 
     const setPeriod = (period) => {
-        const base = new Date();
+        const todayStr = financeDay();
         if (period === 'today') {
             setFilters(prev => ({ ...prev, start_date: todayStr, end_date: todayStr }));
             return;
         }
 
         if (period === 'month') {
-            setFilters(prev => ({ ...prev, start_date: firstDayOfMonth, end_date: todayStr }));
+            setFilters(prev => ({ ...prev, ...currentMonth() }));
             return;
         }
 
         if (period === '90') {
-            base.setDate(base.getDate() - 90);
-            setFilters(prev => ({ ...prev, start_date: base.toISOString().slice(0, 10), end_date: todayStr }));
+            const base = addDays(parseDateFromInput(todayStr), -89);
+            setFilters(prev => ({ ...prev, start_date: formatDateInput(base), end_date: todayStr }));
         }
     };
 
@@ -135,7 +137,7 @@ const FinanceExpenseReport = () => {
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.setAttribute('download', `relatorio-saidas-${new Date().toISOString().slice(0, 10)}.csv`);
+        link.setAttribute('download', `relatorio-saidas-${financeDay()}.csv`);
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -156,7 +158,7 @@ const FinanceExpenseReport = () => {
                     <div style={styles.iconBox}>{Icons.Statement}</div>
                     <div>
                         <h1 style={styles.title}>Relatório de Saídas</h1>
-                        <p style={styles.subtitle}>Extrato gerencial por categoria, forma de pagamento e período</p>
+                        <p style={styles.subtitle}>Despesas pagas pela data de baixa e pendentes pelo vencimento. Confira as baixas sem data válida em Lançamentos.</p>
                     </div>
                 </div>
 

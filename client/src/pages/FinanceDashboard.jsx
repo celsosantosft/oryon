@@ -20,7 +20,7 @@ import {
     YAxis
 } from 'recharts';
 import {
-    INITIAL_DRE,
+    INITIAL_CASH_SUMMARY,
     PRESET_OPTIONS,
     buildFinanceGradient,
     buildPresetRange,
@@ -30,7 +30,6 @@ import {
     formatCompactMoney,
     formatMoney,
     formatPercent,
-    getCurrentMonthKey,
     getDaysBetweenInclusive,
     getPeriodLabel,
     getStoredFinanceTheme,
@@ -210,7 +209,7 @@ const FinanceDashboard = () => {
     const customStartDateRef = useRef(null);
     const customEndDateRef = useRef(null);
 
-    const [annualDre, setAnnualDre] = useState(INITIAL_DRE);
+    const [annualCash, setAnnualCash] = useState(INITIAL_CASH_SUMMARY);
     const [transactions, setTransactions] = useState([]);
     const [loadingAnnual, setLoadingAnnual] = useState(true);
     const [loadingTransactions, setLoadingTransactions] = useState(true);
@@ -222,7 +221,7 @@ const FinanceDashboard = () => {
     const [metaYear, setMetaYear] = useState(String(new Date().getFullYear()));
     const [selectedPreset, setSelectedPreset] = useState('current-month');
     const [customRange, setCustomRange] = useState(buildPresetRange('current-month'));
-    const [relativeNow, setRelativeNow] = useState(Date.now());
+    const [relativeNow, setRelativeNow] = useState(Date.now);
     const [theme, setTheme] = useState(() => getStoredFinanceTheme());
     const [themeDraft, setThemeDraft] = useState(() => getStoredFinanceTheme());
     const [showThemePanel, setShowThemePanel] = useState(false);
@@ -236,7 +235,7 @@ const FinanceDashboard = () => {
 
                 if (response.data?.revenue) setMetaMensal(Number(response.data.revenue));
                 if (response.data?.revenue_annual) setMetaAnual(Number(response.data.revenue_annual));
-            } catch (error) {
+            } catch {
                 const savedGoals = localStorage.getItem('production_goals');
                 if (!savedGoals) return;
 
@@ -281,12 +280,12 @@ const FinanceDashboard = () => {
         const fetchAnnual = async () => {
             setLoadingAnnual(true);
             try {
-                const response = await axios.get(`${API_BASE_URL}/api/finance/dre`, {
+                const response = await axios.get(`${API_BASE_URL}/api/finance/cash-summary`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
 
                 if (!cancelled) {
-                    setAnnualDre(response.data || INITIAL_DRE);
+                    setAnnualCash(response.data || INITIAL_CASH_SUMMARY);
                     setAnnualError('');
                 }
             } catch (error) {
@@ -350,7 +349,7 @@ const FinanceDashboard = () => {
 
         try {
             const [annualResponse, transactionsResponse] = await Promise.all([
-                axios.get(`${API_BASE_URL}/api/finance/dre`, {
+                axios.get(`${API_BASE_URL}/api/finance/cash-summary`, {
                     headers: { Authorization: `Bearer ${token}` }
                 }),
                 axios.get(`${API_BASE_URL}/api/finance/transactions`, {
@@ -363,7 +362,7 @@ const FinanceDashboard = () => {
                 })
             ]);
 
-            setAnnualDre(annualResponse.data || INITIAL_DRE);
+            setAnnualCash(annualResponse.data || INITIAL_CASH_SUMMARY);
             setTransactions(transactionsResponse.data || []);
             setAnnualError('');
             setTransactionsError('');
@@ -420,7 +419,7 @@ const FinanceDashboard = () => {
         const currentYear = new Date().getFullYear();
         const years = new Set();
 
-        annualDre.monthlyData.forEach((item) => {
+        annualCash.monthlyData.forEach((item) => {
             if (item?.name) years.add(item.name.slice(0, 4));
         });
 
@@ -429,14 +428,14 @@ const FinanceDashboard = () => {
         }
 
         return Array.from(years).sort();
-    }, [annualDre.monthlyData]);
+    }, [annualCash.monthlyData]);
 
     const annualChartData = useMemo(() => {
         const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         return monthNames.map((monthLabel, index) => {
             const monthNumber = String(index + 1).padStart(2, '0');
             const monthKey = `${metaYear}-${monthNumber}`;
-            const found = annualDre.monthlyData.find((item) => item.name === monthKey);
+            const found = annualCash.monthlyData.find((item) => item.name === monthKey);
             const receitas = normalizeNumber(found?.Receitas);
             const despesas = normalizeNumber(found?.Despesas);
 
@@ -449,7 +448,7 @@ const FinanceDashboard = () => {
                 Meta: metaMensal
             };
         });
-    }, [annualDre.monthlyData, metaMensal, metaYear]);
+    }, [annualCash.monthlyData, metaMensal, metaYear]);
 
     const annualRevenue = useMemo(
         () => annualChartData.reduce((total, item) => total + item.Receitas, 0),
@@ -476,7 +475,7 @@ const FinanceDashboard = () => {
         ]
         : [{ name: 'Sem dados', value: 1 }];
 
-    const loading = (loadingAnnual || loadingTransactions) && annualDre.monthlyData.length === 0 && transactions.length === 0;
+    const loading = (loadingAnnual || loadingTransactions) && annualCash.monthlyData.length === 0 && transactions.length === 0;
     const errorMessage = annualError || transactionsError;
     const topGradient = buildFinanceGradient(theme);
 
@@ -632,6 +631,13 @@ const FinanceDashboard = () => {
             </div>
 
             {errorMessage ? <div style={styles.errorBanner}>{errorMessage}</div> : null}
+            {annualCash.undated?.count > 0 && (
+                <div role="status" style={styles.reconciliationBanner}>
+                    <strong>Baixas sem data válida no histórico</strong>
+                    <div>{annualCash.undated.count} lançamento(s): {formatMoney(annualCash.undated.income)} em entradas e {formatMoney(annualCash.undated.expense)} em saídas aguardam conciliação e ficam fora dos totais de caixa.</div>
+                    <button type="button" style={styles.inlineButton} onClick={() => navigate('/finance/transactions?sem_data=1')}>Conferir lançamentos</button>
+                </div>
+            )}
 
             <div className="liquid-card" style={styles.filterCard}>
                 <div style={styles.filterHeader}>
@@ -724,9 +730,9 @@ const FinanceDashboard = () => {
                 />
                 <GlassStatCard
                     icon={Icons.Balance}
-                    label="Resultado operacional"
+                    label="Variação do caixa"
                     value={formatMoney(rangeInsights.saldo)}
-                    helper={rangeInsights.saldo >= 0 ? 'Caixa positivo no período' : 'Saídas acima das entradas no período'}
+                    helper="Entradas menos saídas no período"
                     tone="result"
                 />
                 <GlassStatCard
@@ -811,8 +817,8 @@ const FinanceDashboard = () => {
                                 </PieChart>
                             </ResponsiveContainer>
                             <div style={styles.donutCenter}>
-                                <span style={styles.donutLabel}>Margem</span>
-                                <strong style={styles.donutValue}>{formatPercent(rangeInsights.margem)}</strong>
+                                <span style={styles.donutLabel}>Variação / entradas</span>
+                                <strong style={styles.donutValue}>{rangeInsights.cashChangePercent === null ? '—' : formatPercent(rangeInsights.cashChangePercent)}</strong>
                             </div>
                         </div>
 
@@ -893,7 +899,7 @@ const FinanceDashboard = () => {
                             <Line type="monotone" dataKey="Meta" stroke={CHART_COLORS.goal} strokeWidth={2} strokeDasharray="6 6" dot={false} />
                             <Line type="monotone" dataKey="Receitas" stroke={CHART_COLORS.income} strokeWidth={3} dot={{ r: 4, fill: CHART_COLORS.income }} />
                             <Line type="monotone" dataKey="Despesas" stroke={CHART_COLORS.expense} strokeWidth={3} dot={{ r: 4, fill: CHART_COLORS.expense }} />
-                            <Line type="monotone" dataKey="Resultado" stroke={CHART_COLORS.result} strokeWidth={3} dot={{ r: 4, fill: CHART_COLORS.result }} />
+                            <Line type="monotone" dataKey="Resultado" name="Variação do caixa" stroke={CHART_COLORS.result} strokeWidth={3} dot={{ r: 4, fill: CHART_COLORS.result }} />
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
@@ -935,7 +941,7 @@ const FinanceDashboard = () => {
                             <div style={{ ...styles.goalFill, width: `${clampPercentage(annualProgress)}%`, background: 'linear-gradient(90deg, #1D4ED8 0%, #38BDF8 100%)' }} />
                         </div>
                         <p style={styles.goalHelper}>
-                            {annualProgress >= 100 ? `Meta anual atingida. Resultado acumulado: ${formatMoney(annualResult)}.` : `Faltam ${formatMoney(remainingAnnual)} para a meta anual.`}
+                            {annualProgress >= 100 ? `Meta anual atingida. Variação de caixa acumulada: ${formatMoney(annualResult)}.` : `Faltam ${formatMoney(remainingAnnual)} para a meta anual.`}
                         </p>
                     </div>
                 </div>
@@ -1096,6 +1102,10 @@ const styles = {
         borderRadius: '999px',
         fontSize: '0.84rem',
         fontWeight: '700'
+    },
+    reconciliationBanner: {
+        background: '#FFFBEB', border: '1px solid #FDE68A', color: '#78350F',
+        borderRadius: 16, padding: '14px 18px', marginBottom: 24, lineHeight: 1.6
     },
     errorBanner: {
         backgroundColor: '#FEF2F2',

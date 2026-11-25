@@ -1,8 +1,10 @@
-export const INITIAL_DRE = {
+import { financeDay } from './financeEntry.js';
+
+export const INITIAL_CASH_SUMMARY = {
     receitas: 0,
     despesas: 0,
-    lucro_operacional: 0,
-    margem: 0,
+    variacao_caixa: 0,
+    undated: { count: 0, income: 0, expense: 0 },
     monthlyData: [],
     categoryData: []
 };
@@ -77,8 +79,7 @@ export const getCurrentMonthKey = (referenceDate = new Date()) => (
 );
 
 export const buildPresetRange = (preset, referenceDate = new Date()) => {
-    const today = new Date(referenceDate);
-    today.setHours(0, 0, 0, 0);
+    const today = parseDateFromInput(financeDay(referenceDate));
 
     let start = new Date(today);
     let end = new Date(today);
@@ -160,7 +161,10 @@ export const getPeriodLabel = (preset, range) => {
     return `${formatLongDate(range.startDate)} até ${formatLongDate(range.endDate)}`;
 };
 
-export const getDisplayDate = (transaction) => transaction.movement_date || transaction.payment_date || transaction.due_date || '';
+export const getDisplayDate = (transaction) => {
+    if ('movement_date' in transaction) return transaction.movement_date || '';
+    return (transaction.status === 'Pago' ? transaction.payment_date : transaction.due_date) || '';
+};
 
 export const groupTransactionsByPeriod = (transactions, rangeDays) => {
     const grouped = {};
@@ -239,7 +243,7 @@ export const calculateRangeInsights = (transactions, rangeDays) => {
         receitas,
         despesas,
         saldo: receitas - despesas,
-        margem: receitas > 0 ? ((receitas - despesas) / receitas) * 100 : (despesas > 0 ? -100 : 0),
+        cashChangePercent: receitas > 0 ? ((receitas - despesas) / receitas) * 100 : null,
         volume: receitas + despesas,
         revenueCount,
         expenseCount,
@@ -267,115 +271,34 @@ export const calculateRangeInsights = (transactions, rangeDays) => {
     };
 };
 
-export const calculateMarketingInsights = (transactions, rangeInsights, rangeDays, dailyBudget) => {
-    const marketingTransactions = transactions.filter((transaction) => {
-        if (transaction.type !== 'Despesa') return false;
-        const haystack = normalizeText(`${transaction.account_name || ''} ${transaction.description || ''} ${transaction.cost_center_name || ''}`);
-        return MARKETING_KEYWORDS.some((keyword) => haystack.includes(normalizeText(keyword)));
-    });
+export const calculateMarketingInsights = (transactions, marketingTransactions, rangeInsights, rangeDays, dailyBudget) => {
+    const marketingSpend = marketingTransactions.reduce((total, row) => total + normalizeNumber(row.amount), 0);
+    const ordersWithReceipts = new Set();
+    const ordersWithExpenses = new Set();
+    let orderRevenue = 0;
 
-    const marketingSpend = marketingTransactions.reduce((total, transaction) => total + normalizeNumber(transaction.amount), 0);
-    const marketingShare = rangeInsights.despesas > 0 ? (marketingSpend / rangeInsights.despesas) * 100 : 0;
-
-    const orderRevenueMap = {};
-    const orderCostMap = {};
-
-    transactions.forEach((transaction) => {
-        if (!transaction.order_id) return;
-
-        if (transaction.type === 'Receita') orderRevenueMap[transaction.order_id] = (orderRevenueMap[transaction.order_id] || 0) + normalizeNumber(transaction.amount);
-        if (transaction.type === 'Despesa') orderCostMap[transaction.order_id] = (orderCostMap[transaction.order_id] || 0) + normalizeNumber(transaction.amount);
-    });
-
-    const paidOrderIds = Object.keys(orderRevenueMap);
-    const paidOrderCount = paidOrderIds.length;
-    const orderRevenue = paidOrderIds.reduce((total, orderId) => total + (orderRevenueMap[orderId] || 0), 0);
-    const orderCost = paidOrderIds.reduce((total, orderId) => total + (orderCostMap[orderId] || 0), 0);
-    const averageRevenuePerOrder = paidOrderCount > 0 ? orderRevenue / paidOrderCount : 0;
-    const averageProfitPerOrder = paidOrderCount > 0 ? (orderRevenue - orderCost) / paidOrderCount : 0;
-    const estimatedRoas = marketingSpend > 0 ? orderRevenue / marketingSpend : 0;
-    const estimatedProfitRoas = marketingSpend > 0 ? (orderRevenue - orderCost) / marketingSpend : 0;
-    const projectedBudget = normalizeNumber(dailyBudget) * rangeDays;
-    const breakEvenOrders = averageProfitPerOrder > 0 ? Math.ceil(projectedBudget / averageProfitPerOrder) : null;
-    const comfortOrders = averageProfitPerOrder > 0 ? Math.ceil((projectedBudget * 1.35) / averageProfitPerOrder) : null;
-
-    let scaleMultiplier = 1;
-    if (estimatedRoas >= 8 && estimatedProfitRoas >= 3) scaleMultiplier = 1.25;
-    else if (estimatedRoas >= 5 && estimatedProfitRoas >= 2) scaleMultiplier = 1.15;
-    else if (estimatedRoas > 0 && estimatedRoas < 3) scaleMultiplier = 0.8;
-
-    const currentDailyMarketing = rangeDays > 0 ? marketingSpend / rangeDays : 0;
-    const baselineDaily = currentDailyMarketing > 0 ? currentDailyMarketing : normalizeNumber(dailyBudget);
-    const suggestedDailyBudget = baselineDaily > 0 ? baselineDaily * scaleMultiplier : 0;
-
-    const recommendations = [];
-
-    if (marketingSpend === 0) {
-        recommendations.push({
-            title: 'Piloto controlado',
-            text: `A categoria Marketing já está pronta. Comece testando entre ${formatMoney(10)} e ${formatMoney(20)} por dia para gerar histórico com segurança.`,
-            tone: 'info'
-        });
+    for (const row of transactions) {
+        if (!row.order_id) continue;
+        if (row.type === 'Receita') {
+            ordersWithReceipts.add(row.order_id);
+            orderRevenue += normalizeNumber(row.amount);
+        } else if (row.type === 'Despesa' && normalizeNumber(row.amount) > 0) {
+            ordersWithExpenses.add(row.order_id);
+        }
     }
 
-    if (marketingSpend > 0 && averageProfitPerOrder <= 0) {
-        recommendations.push({
-            title: 'Segurar escala',
-            text: 'O lucro médio por pedido ainda não absorve mídia com folga. Primeiro ajuste preço, oferta ou custo antes de subir verba.',
-            tone: 'warning'
-        });
-    }
-
-    if (marketingSpend > 0 && estimatedRoas >= 6 && averageProfitPerOrder > 0) {
-        recommendations.push({
-            title: 'Escala favorável',
-            text: `Os resultados suportam aumentar com prudência. Uma faixa saudável agora gira perto de ${formatMoney(suggestedDailyBudget)} por dia.`,
-            tone: 'positive'
-        });
-    }
-
-    if (marketingSpend > 0 && estimatedRoas >= 3 && estimatedRoas < 6) {
-        recommendations.push({
-            title: 'Otimizar antes de acelerar',
-            text: 'Você já tem tração. Mantenha a verba controlada, ajuste criativos e ofertas e só aumente após consistência.',
-            tone: 'info'
-        });
-    }
-
-    if (marketingSpend > 0 && marketingShare > 25 && rangeInsights.margem < 20) {
-        recommendations.push({
-            title: 'Peso alto no caixa',
-            text: 'O marketing já consome uma fatia grande das saídas para a margem atual do período. Vale revisar campanhas antes de escalar.',
-            tone: 'warning'
-        });
-    }
-
-    if (recommendations.length === 0) {
-        recommendations.push({
-            title: 'Base saudável',
-            text: 'Continue registrando marketing no plano de contas e acompanhe pedidos pagos. Quanto mais histórico, mais precisa fica a leitura.',
-            tone: 'info'
-        });
-    }
-
+    const paidOrderCount = ordersWithReceipts.size;
+    const ordersWithLinkedExpenses = [...ordersWithReceipts].filter((id) => ordersWithExpenses.has(id)).length;
     return {
-        marketingTransactions,
         marketingSpend,
-        marketingShare,
+        marketingShare: rangeInsights.despesas > 0 ? marketingSpend / rangeInsights.despesas * 100 : 0,
         paidOrderCount,
+        ordersWithLinkedExpenses,
         orderRevenue,
-        orderCost,
-        averageRevenuePerOrder,
-        averageProfitPerOrder,
-        estimatedRoas,
-        estimatedProfitRoas,
-        currentDailyMarketing,
-        dailyBudget: normalizeNumber(dailyBudget),
-        projectedBudget,
-        breakEvenOrders,
-        comfortOrders,
-        suggestedDailyBudget,
-        recommendations
+        averageRevenuePerOrder: paidOrderCount ? orderRevenue / paidOrderCount : null,
+        receiptsPerMarketingReal: marketingSpend > 0 ? orderRevenue / marketingSpend : null,
+        currentDailyMarketing: rangeDays > 0 ? marketingSpend / rangeDays : 0,
+        projectedBudget: normalizeNumber(dailyBudget) * rangeDays
     };
 };
 
