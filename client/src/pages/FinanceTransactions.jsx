@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { financeDay, seriesRequestId } from '../utils/financeEntry';
+import './FinanceTransactions.css';
 import Modal from '../components/Modal';
 import Swal from 'sweetalert2';
 import { appConfig } from '../config/appConfig';
@@ -55,7 +56,6 @@ const FinanceTransactions = () => {
         description: '',
         type: 'Despesa',
         amount: '',
-        due_date: '',
         chart_of_account_id: '',
         cost_center_id: '',
         status: 'Pendente',
@@ -131,7 +131,7 @@ const FinanceTransactions = () => {
                 type: formData.type,
                 status: formData.status,
                 amount: parseCurrencyInput(formData.amount),
-                due_date: formData.due_date,
+                due_date: new FormData(e.currentTarget).get('due_date'),
                 chart_of_account_id: formData.chart_of_account_id || '',
                 cost_center_id: formData.cost_center_id || ''
             };
@@ -177,14 +177,18 @@ const FinanceTransactions = () => {
 
         const result = await Swal.fire({
             title: transaction?.type === 'Receita' ? 'Registrar recebimento' : 'Registrar pagamento',
+            customClass: { popup: 'finance-settlement-popup' },
             html: `
                 <div style="text-align:left; display:flex; flex-direction:column; gap:12px;">
                     <div style="font-size:0.9rem; color:#475569;">
-                        Valor pendente: <strong>R$ ${pendingAmount.toFixed(2)}</strong>
+                        Valor pendente: <strong>${formatMoney(pendingAmount)}</strong>
                     </div>
-                    <input id="swal-paid-amount" class="swal2-input" type="text" inputmode="decimal" value="${formatCurrencyValueInput(pendingAmount)}" placeholder="Valor da baixa">
+                    <label for="swal-paid-amount">Valor da baixa</label>
+                    <input id="swal-paid-amount" class="swal2-input" type="text" inputmode="decimal" value="${formatCurrencyValueInput(pendingAmount)}">
+                    <label for="swal-payment-date">Data da baixa</label>
                     <input id="swal-payment-date" class="swal2-input" type="date" value="${today}">
-                    <input id="swal-payment-method" class="swal2-input" type="text" value="Dinheiro/PIX" placeholder="Forma de pagamento">
+                    <label for="swal-payment-method">Forma de pagamento</label>
+                    <input id="swal-payment-method" class="swal2-input" type="text" value="Dinheiro/PIX">
                 </div>
             `,
             showCancelButton: true,
@@ -422,6 +426,7 @@ const FinanceTransactions = () => {
         const isReceivable = activeTab === 'A Receber';
         const result = await Swal.fire({
             title: isReceivable ? 'Dar baixa nos recebimentos?' : 'Pagar contas selecionadas?',
+            customClass: { popup: 'finance-settlement-popup' },
             html: `
                 <div style="text-align:left; display:flex; flex-direction:column; gap:12px;">
                     <div style="font-size:0.9rem; color:#475569;">
@@ -429,8 +434,10 @@ const FinanceTransactions = () => {
                         <strong> ${formatMoney(selectedTotal)}</strong>.
                     </div>
                     <div style="font-size:0.82rem; color:#64748B;">A baixa em lote será integral. Para baixa parcial, use o botão individual da conta.</div>
+                    <label for="swal-batch-payment-date">Data da baixa</label>
                     <input id="swal-batch-payment-date" class="swal2-input" type="date" value="${today}">
-                    <input id="swal-batch-payment-method" class="swal2-input" type="text" value="Dinheiro/PIX" placeholder="Forma de pagamento">
+                    <label for="swal-batch-payment-method">Forma de pagamento</label>
+                    <input id="swal-batch-payment-method" class="swal2-input" type="text" value="Dinheiro/PIX">
                 </div>
             `,
             showCancelButton: true,
@@ -485,24 +492,13 @@ const FinanceTransactions = () => {
     };
 
     return (
-        <div style={styles.mainContainer}>
-            <style>{`
-                .premium-input:focus { border-color: #6366F1 !important; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important; outline: none; }
-                .tab-btn { transition: all 0.3s ease; display: flex; alignItems: center; gap: 8px; }
-                .tab-btn:hover { background-color: #F8FAFC; border-radius: 8px; }
-                .tab-active { border-bottom: 3px solid #3B82F6; color: #3B82F6; font-weight: 800; border-radius: 0; }
-                .tab-active:hover { background-color: transparent; border-radius: 0; }
-                .tab-inactive { border-bottom: 3px solid transparent; color: #64748B; font-weight: 600; }
-                .row-hover:hover { background-color: #F8FAFC; cursor: pointer; }
-                .sub-row:hover { background-color: #F1F5F9; }
-            `}</style>
+        <div className="finance-transactions" style={styles.mainContainer}>
 
-            <div style={styles.headerRow}>
+            <div className="finance-entry-header" style={styles.headerRow}>
                 <div style={{display:'flex', alignItems:'center', gap:'15px'}}>
                     <div style={styles.iconBox}>{Icons.Wallet}</div>
                     <div>
                         <h1 style={styles.pageTitle}>Contas e Transações</h1>
-                        <p style={styles.subtitle}>Gerencie suas transações, pendências e fluxo de caixa</p>
                     </div>
                 </div>
                 <button onClick={openNewTransactionModal} style={styles.btnNovo}>
@@ -510,7 +506,7 @@ const FinanceTransactions = () => {
                 </button>
             </div>
 
-            <div style={styles.cardsGrid}>
+            <div className="finance-entry-summary" style={styles.cardsGrid}>
                 <div style={styles.mobillsCard}>
                     <div style={{...styles.cardIconBox, backgroundColor: '#3B82F6'}}>{Icons.Bank}</div>
                     <div style={styles.cardContent}>
@@ -534,23 +530,23 @@ const FinanceTransactions = () => {
                 </div>
             </div>
 
-            <div style={styles.controlsCard}>
-                <div style={styles.tabsContainer}>
-                    <button className={`tab-btn ${activeTab === 'A Receber' ? 'tab-active' : 'tab-inactive'}`} onClick={() => { setActiveTab('A Receber'); setSelectedTransactionIds([]); }} style={styles.tabButton}>
+            <div className="finance-entry-controls" style={styles.controlsCard}>
+                <div className="finance-entry-tabs" role="group" aria-label="Visão de lançamentos" style={styles.tabsContainer}>
+                    <button className="finance-entry-tab" aria-pressed={activeTab === 'A Receber'} onClick={() => { setActiveTab('A Receber'); setSelectedTransactionIds([]); }} style={styles.tabButton}>
                         <span style={{color: activeTab === 'A Receber' ? '#3B82F6' : '#94A3B8'}}>{Icons.ArrowUp}</span> A Receber
                     </button>
-                    <button className={`tab-btn ${activeTab === 'A Pagar' ? 'tab-active' : 'tab-inactive'}`} onClick={() => { setActiveTab('A Pagar'); setSelectedTransactionIds([]); }} style={styles.tabButton}>
+                    <button className="finance-entry-tab" aria-pressed={activeTab === 'A Pagar'} onClick={() => { setActiveTab('A Pagar'); setSelectedTransactionIds([]); }} style={styles.tabButton}>
                         <span style={{color: activeTab === 'A Pagar' ? '#EF4444' : '#94A3B8'}}>{Icons.ArrowDown}</span> A Pagar
                     </button>
-                    <button className={`tab-btn ${activeTab === 'Histórico' ? 'tab-active' : 'tab-inactive'}`} onClick={() => { setActiveTab('Histórico'); setHistoryType('Todas'); setSelectedTransactionIds([]); }} style={styles.tabButton}>
-                        <span style={{color: activeTab === 'Histórico' ? '#8B5CF6' : '#94A3B8'}}>{Icons.History}</span> Histórico (Concluídos)
+                    <button className="finance-entry-tab" aria-pressed={activeTab === 'Histórico'} onClick={() => { setActiveTab('Histórico'); setHistoryType('Todas'); setSelectedTransactionIds([]); }} style={styles.tabButton}>
+                        <span style={{color: activeTab === 'Histórico' ? '#8B5CF6' : '#94A3B8'}}>{Icons.History}</span> Histórico
                     </button>
                 </div>
                 
-                <div style={styles.filtersContainer}>
-                    <div style={styles.searchBox}>
+                <div className="finance-entry-filters" style={styles.filtersContainer}>
+                    <div className="finance-entry-search" style={styles.searchBox}>
                         <span style={{ color: '#94A3B8' }}>{Icons.Search}</span>
-                        <input type="text" placeholder={activeTab === 'A Receber' ? "Buscar Cliente ou Pedido..." : "Buscar descrição..."} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={styles.searchInput} />
+                        <input type="search" aria-label={activeTab === 'A Receber' ? 'Buscar cliente ou pedido' : 'Buscar descrição'} placeholder={activeTab === 'A Receber' ? "Buscar Cliente ou Pedido..." : "Buscar descrição..."} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={styles.searchInput} />
                     </div>
                     
                     {activeTab === 'Histórico' && (
@@ -564,7 +560,7 @@ const FinanceTransactions = () => {
                     {activeTab === 'Histórico' && (
                         <div style={styles.monthFilterBox}>
                             <span style={{ fontSize: '0.85rem', fontWeight: '600', color: '#64748B' }}>Mês:</span>
-                            <input type="month" disabled={onlyUndated} value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', fontWeight: '700', color: '#0F172A', cursor: 'pointer' }} />
+                            <input type="month" aria-label="Mês da baixa" disabled={onlyUndated} value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', fontWeight: '700', color: '#0F172A', cursor: 'pointer' }} />
                         </div>
                     )}
                     {activeTab === 'Histórico' && (onlyUndated || transactions.some(t => t.status === 'Pago' && !t.movement_date)) && (
@@ -573,9 +569,9 @@ const FinanceTransactions = () => {
                 </div>
             </div>
 
-            <div style={styles.tableCard}>
+            <div className="finance-entry-list" style={styles.tableCard}>
                 {activeTab !== 'Histórico' && selectedTransactions.length > 0 && (
-                    <div style={styles.batchBar}>
+                    <div className="finance-entry-batch" style={styles.batchBar}>
                         <div>
                             <strong>{selectedTransactions.length} selecionada(s)</strong>
                             <span style={styles.batchTotal}>Total: {formatMoney(selectedTotal)}</span>
@@ -588,11 +584,11 @@ const FinanceTransactions = () => {
                         </div>
                     </div>
                 )}
-                <table style={styles.table}>
-                    <thead>
+                <table className="finance-entry-table" role="table" aria-label={activeTab} style={styles.table}>
+                    <thead role="rowgroup">
                         {activeTab === 'A Receber' && (
-                            <tr>
-                                <th style={{...styles.th, width: '68px'}}>
+                            <tr role="row">
+                                <th role="columnheader" style={{...styles.th, width: '68px'}}>
                                     <input
                                         type="checkbox"
                                         aria-label="Selecionar todos os recebimentos visíveis"
@@ -601,16 +597,16 @@ const FinanceTransactions = () => {
                                         style={styles.checkbox}
                                     />
                                 </th>
-                                <th style={styles.th}>Cliente / Origem</th>
-                                <th style={styles.th}>Nº Pedido</th>
-                                <th style={styles.th}>Situação</th>
-                                <th style={styles.th}>Progresso do Pgto</th>
-                                <th style={{...styles.th, textAlign: 'right'}}>Valor Total</th>
+                                <th role="columnheader" style={styles.th}>Cliente / Origem</th>
+                                <th role="columnheader" style={styles.th}>Nº Pedido</th>
+                                <th role="columnheader" style={styles.th}>Situação</th>
+                                <th role="columnheader" style={styles.th}>Progresso do Pgto</th>
+                                <th role="columnheader" style={{...styles.th, textAlign: 'right'}}>Valor Total</th>
                             </tr>
                         )}
                         {activeTab === 'A Pagar' && (
-                            <tr>
-                                <th style={{...styles.th, width: '44px'}}>
+                            <tr role="row">
+                                <th role="columnheader" style={{...styles.th, width: '44px'}}>
                                     <input
                                         type="checkbox"
                                         aria-label="Selecionar todas as contas a pagar visíveis"
@@ -619,25 +615,25 @@ const FinanceTransactions = () => {
                                         style={styles.checkbox}
                                     />
                                 </th>
-                                <th style={styles.th}>Descrição (A Pagar)</th>
-                                <th style={styles.th}>Situação</th>
-                                <th style={styles.th}>Categoria</th>
-                                <th style={{...styles.th, textAlign: 'right'}}>Valor</th>
-                                <th style={{...styles.th, textAlign: 'center'}}>Ações</th>
+                                <th role="columnheader" style={styles.th}>Descrição (A Pagar)</th>
+                                <th role="columnheader" style={styles.th}>Situação</th>
+                                <th role="columnheader" style={styles.th}>Categoria</th>
+                                <th role="columnheader" style={{...styles.th, textAlign: 'right'}}>Valor</th>
+                                <th role="columnheader" style={{...styles.th, textAlign: 'center'}}>Ações</th>
                             </tr>
                         )}
                         {activeTab === 'Histórico' && (
-                            <tr>
-                                <th style={styles.th}>Data de Pgto</th>
-                                <th style={styles.th}>Descrição (Concluídos)</th>
-                                <th style={styles.th}>Tipo</th>
-                                <th style={styles.th}>Categoria</th>
-                                <th style={{...styles.th, textAlign: 'right'}}>Valor</th>
-                                <th style={{...styles.th, textAlign: 'center'}}>Ações</th>
+                            <tr role="row">
+                                <th role="columnheader" style={styles.th}>Data de Pgto</th>
+                                <th role="columnheader" style={styles.th}>Descrição (Concluídos)</th>
+                                <th role="columnheader" style={styles.th}>Tipo</th>
+                                <th role="columnheader" style={styles.th}>Categoria</th>
+                                <th role="columnheader" style={{...styles.th, textAlign: 'right'}}>Valor</th>
+                                <th role="columnheader" style={{...styles.th, textAlign: 'center'}}>Ações</th>
                             </tr>
                         )}
                     </thead>
-                    <tbody>
+                    <tbody role="rowgroup">
                         
                         {/* ================= ABA 1: A RECEBER (SANFONA) ================= */}
                         {activeTab === 'A Receber' && processedData.groups.map(group => {
@@ -650,8 +646,8 @@ const FinanceTransactions = () => {
                                 && pendingIds.every((id) => selectedTransactionIds.includes(id));
                             return (
                                 <React.Fragment key={group.orderId}>
-                                    <tr className="row-hover" onClick={() => toggleAccordion(group.orderId)} style={{...styles.tr, backgroundColor: isExpanded ? '#F8FAFC' : 'white'}}>
-                                        <td style={{...styles.td, color: '#94A3B8'}}>
+                                    <tr role="row" className="finance-entry-order row-hover" onClick={() => toggleAccordion(group.orderId)} style={{backgroundColor: isExpanded ? '#F8FAFC' : 'white'}}>
+                                        <td role="cell" style={{...styles.td, color: '#94A3B8'}}>
                                             <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
                                                 <input
                                                     type="checkbox"
@@ -661,26 +657,28 @@ const FinanceTransactions = () => {
                                                     onChange={() => toggleSelection(pendingIds)}
                                                     style={styles.checkbox}
                                                 />
-                                                {isExpanded ? Icons.ChevronUp : Icons.ChevronDown}
+                                                <button type="button" className="finance-entry-expand" aria-label={`Detalhes do pedido ${group.orderId}`} aria-expanded={Boolean(isExpanded)} onClick={(event) => { event.stopPropagation(); toggleAccordion(group.orderId); }}>
+                                                    {isExpanded ? Icons.ChevronUp : Icons.ChevronDown}
+                                                </button>
                                             </div>
                                         </td>
-                                        <td style={{...styles.td, fontWeight: '600', color: '#334155', display:'flex', alignItems:'center', gap:'10px'}}>
-                                            <span style={{color: '#94A3B8', display: 'flex'}}>{Icons.User}</span> {group.clientName.toUpperCase()}
+                                        <td role="cell" style={{...styles.td, fontWeight: '600', color: '#334155', display:'flex', alignItems:'center', gap:'10px'}}>
+                                            <span className="finance-entry-client-icon" style={{color: '#94A3B8', display: 'flex'}}>{Icons.User}</span> {group.clientName}
                                         </td>
-                                        <td style={{...styles.td, fontWeight: '700', color: '#3B82F6'}}>{group.orderId}</td>
-                                        <td style={styles.td}><StatusBadge status={group.overallStatus} /></td>
-                                        <td style={styles.td}>
+                                        <td role="cell" style={{...styles.td, fontWeight: '700', color: '#3B82F6'}}>{group.orderId}</td>
+                                        <td role="cell" style={styles.td}><StatusBadge status={group.overallStatus} /></td>
+                                        <td role="cell" style={styles.td}>
                                             <div style={{width:'130px', backgroundColor:'#E2E8F0', height:'8px', borderRadius:'4px', overflow:'hidden', marginBottom: '4px'}}>
                                                 <div style={{width:`${percent}%`, backgroundColor: percent === 100 ? '#10B981' : '#3B82F6', height:'100%'}}></div>
                                             </div>
                                             <span style={{fontSize:'0.75rem', color:'#64748B', fontWeight:'500'}}>{formatMoney(group.paid)} de {formatMoney(group.total)}</span>
                                         </td>
-                                        <td style={{...styles.td, textAlign: 'right', fontWeight: '700', color: '#0F172A'}}>{formatMoney(group.total)}</td>
+                                        <td role="cell" style={{...styles.td, textAlign: 'right', fontWeight: '700', color: '#0F172A'}}><span className="finance-entry-desktop">{formatMoney(group.total)}</span><span className="finance-entry-mobile">Em aberto <strong>{formatMoney(group.pending)}</strong></span></td>
                                     </tr>
 
                                     {isExpanded && group.transactions.map(t => (
-                                        <tr key={t.id} className="sub-row" style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                                            <td style={{...styles.td, textAlign: 'center'}}>
+                                        <tr role="row" key={t.id} className="finance-entry-installment sub-row" style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                                            <td role="cell" style={{...styles.td, textAlign: 'center'}}>
                                                 {isOpenAccount(t) && (
                                                     <input
                                                         type="checkbox"
@@ -691,14 +689,14 @@ const FinanceTransactions = () => {
                                                     />
                                                 )}
                                             </td>
-                                            <td colSpan="2" style={{padding: '12px 24px', fontSize: '0.85rem', color: '#475569', display:'flex', alignItems:'center'}}>
+                                            <td role="cell" colSpan="2" style={{padding: '12px 24px', fontSize: '0.85rem', color: '#475569', display:'flex', alignItems:'center'}}>
                                                 <div style={{width:'2px', height:'20px', backgroundColor:'#CBD5E1', marginRight:'12px'}}></div>
                                                 {t.description.split('- Pedido')[0].trim()}
                                                 <span style={{marginLeft:'10px', color:'#94A3B8', fontWeight: '500'}}>Venc: {formatDate(t.due_date)}</span>
                                             </td>
-                                            <td style={{padding: '12px 24px'}}><span style={{fontSize: '0.75rem', fontWeight:'700', color: t.status === 'Pago' ? '#10B981' : '#F59E0B'}}>{t.status.toUpperCase()}</span></td>
-                                            <td style={{padding: '12px 24px'}}></td>
-                                            <td style={{padding: '12px 24px', textAlign: 'right'}}>
+                                            <td role="cell" style={{padding: '12px 24px'}}><span style={{fontSize: '0.75rem', fontWeight:'700', color: t.status === 'Pago' ? '#10B981' : '#F59E0B'}}>{t.status.toUpperCase()}</span></td>
+                                            <td role="cell" style={{padding: '12px 24px'}}></td>
+                                            <td role="cell" style={{padding: '12px 24px', textAlign: 'right'}}>
                                                 <div style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:'16px'}}>
                                                     <span style={{fontWeight: '600', color: '#334155'}}>{formatMoney(t.amount)}</span>
                                                     {isOpenAccount(t) && <button onClick={(e) => { e.stopPropagation(); handlePay(t); }} style={{...styles.iconButton, color: '#10B981', backgroundColor: '#ECFDF5', padding: '4px 10px'}} title="Dar Baixa"><span style={{marginRight: '4px', display: 'flex'}}>{Icons.Check}</span> Baixar</button>}
@@ -712,8 +710,8 @@ const FinanceTransactions = () => {
 
                         {/* Receitas Avulsas */}
                         {activeTab === 'A Receber' && processedData.avulsas.map(t => (
-                            <tr key={t.id} style={styles.tr}>
-                                <td style={{...styles.td, textAlign: 'center'}}>
+                            <tr role="row" key={t.id} className="finance-entry-credit">
+                                <td role="cell" style={{...styles.td, textAlign: 'center'}}>
                                     <input
                                         type="checkbox"
                                         aria-label={`Selecionar ${t.description}`}
@@ -722,22 +720,22 @@ const FinanceTransactions = () => {
                                         style={styles.checkbox}
                                     />
                                 </td>
-                                <td colSpan="2" style={{...styles.td, fontWeight: '600', color: '#334155'}}>{t.description} <span style={{fontSize:'0.75rem', color:'#64748B', fontWeight:'500', marginLeft:'8px'}}>{formatDate(t.due_date)}</span></td>
-                                <td style={styles.td}><StatusBadge status={t.status} /></td>
-                                <td style={{...styles.td, textAlign: 'center'}}>
+                                <td role="cell" colSpan="2" style={{...styles.td, fontWeight: '600', color: '#334155'}}>{t.description} <span style={{fontSize:'0.75rem', color:'#64748B', fontWeight:'500', marginLeft:'8px'}}>{formatDate(t.due_date)}</span></td>
+                                <td role="cell" style={styles.td}><StatusBadge status={t.status} /></td>
+                                <td role="cell" style={{...styles.td, textAlign: 'center'}}>
                                     <div style={{display:'flex', gap:'8px', justifyContent:'flex-end'}}>
                                         {isOpenAccount(t) && <button onClick={() => handlePay(t)} style={{...styles.iconButton, color: '#10B981', backgroundColor: '#ECFDF5'}}><span style={{marginRight: '4px', display: 'flex'}}>{Icons.Check}</span> Baixar</button>}
-                                        <button onClick={() => handleDelete(t.id)} style={{...styles.iconButton, color: '#94A3B8'}} onMouseEnter={e=>e.currentTarget.style.color='#EF4444'} onMouseLeave={e=>e.currentTarget.style.color='#94A3B8'}>{Icons.Trash}</button>
+                                        <button onClick={() => handleDelete(t.id)} aria-label={`Excluir ${t.description}`} style={{...styles.iconButton, color: '#94A3B8'}} className="finance-entry-delete">{Icons.Trash}</button>
                                     </div>
                                 </td>
-                                <td style={{...styles.td, textAlign: 'right', fontWeight: '700', color: '#10B981'}}>{formatMoney(t.amount)}</td>
+                                <td role="cell" style={{...styles.td, textAlign: 'right', fontWeight: '700', color: '#10B981'}}>{formatMoney(t.amount)}</td>
                             </tr>
                         ))}
 
                         {/* ================= ABA 2: A PAGAR ================= */}
                         {activeTab === 'A Pagar' && processedData.items.map(t => (
-                            <tr key={t.id} style={styles.tr}>
-                                <td style={{...styles.td, textAlign: 'center'}}>
+                            <tr role="row" key={t.id} className="finance-entry-expense">
+                                <td role="cell" style={{...styles.td, textAlign: 'center'}}>
                                     <input
                                         type="checkbox"
                                         aria-label={`Selecionar ${t.description}`}
@@ -746,14 +744,14 @@ const FinanceTransactions = () => {
                                         style={styles.checkbox}
                                     />
                                 </td>
-                                <td style={{...styles.td, fontWeight: '600', color: '#334155'}}>{t.description} <br/><span style={{fontSize:'0.75rem', color:'#DC2626', fontWeight:'600'}}>Vence: {formatDate(t.due_date)}</span></td>
-                                <td style={styles.td}><StatusBadge status={t.status} /></td>
-                                <td style={styles.td}><span style={{fontSize:'0.85rem', color:'#64748B'}}>{t.account_name || 'Geral'}</span></td>
-                                <td style={{...styles.td, textAlign: 'right', fontWeight: '700', color: '#EF4444'}}>- {formatMoney(t.amount)}</td>
-                                <td style={{...styles.td, textAlign: 'center'}}>
+                                <td role="cell" style={{...styles.td, fontWeight: '600', color: '#334155'}}>{t.description} <br/><span style={{fontSize:'0.75rem', color:'#DC2626', fontWeight:'600'}}>Vence: {formatDate(t.due_date)}</span></td>
+                                <td role="cell" style={styles.td}><StatusBadge status={t.status} /></td>
+                                <td role="cell" style={styles.td}><span style={{fontSize:'0.85rem', color:'#64748B'}}>{t.account_name || 'Geral'}</span></td>
+                                <td role="cell" style={{...styles.td, textAlign: 'right', fontWeight: '700', color: '#EF4444'}}>- {formatMoney(t.amount)}</td>
+                                <td role="cell" style={{...styles.td, textAlign: 'center'}}>
                                     <div style={{display:'flex', gap:'8px', justifyContent:'center'}}>
                                         {isOpenAccount(t) && <button onClick={() => handlePay(t)} style={{...styles.iconButton, color: '#10B981', backgroundColor: '#ECFDF5'}} title="Dar Baixa"><span style={{marginRight: '4px', display: 'flex'}}>{Icons.Check}</span> Pagar</button>}
-                                        <button onClick={() => handleDelete(t.id)} style={{...styles.iconButton, color: '#94A3B8'}} onMouseEnter={e=>e.currentTarget.style.color='#EF4444'} onMouseLeave={e=>e.currentTarget.style.color='#94A3B8'}>{Icons.Trash}</button>
+                                        <button onClick={() => handleDelete(t.id)} aria-label={`Excluir ${t.description}`} style={{...styles.iconButton, color: '#94A3B8'}} className="finance-entry-delete">{Icons.Trash}</button>
                                     </div>
                                 </td>
                             </tr>
@@ -761,53 +759,52 @@ const FinanceTransactions = () => {
 
                         {/* ================= ABA 3: HISTÓRICO ================= */}
                         {activeTab === 'Histórico' && processedData.items.map(t => (
-                            <tr key={t.id} style={styles.tr}>
-                                <td style={{...styles.td, fontWeight: '600', color: '#0F172A'}}>{t.movement_date ? formatDate(t.movement_date) : 'Sem data de baixa válida'}</td>
-                                <td style={{...styles.td, fontWeight: '500', color: '#334155'}}>{t.description}</td>
-                                <td style={styles.td}>
+                            <tr role="row" key={t.id} className="finance-entry-history">
+                                <td role="cell" style={{...styles.td, fontWeight: '600', color: '#0F172A'}}>{t.movement_date ? formatDate(t.movement_date) : 'Sem data de baixa válida'}</td>
+                                <td role="cell" style={{...styles.td, fontWeight: '500', color: '#334155'}}>{t.description}</td>
+                                <td role="cell" style={styles.td}>
                                     <span style={{ color: t.type === 'Receita' ? '#10B981' : '#EF4444', fontWeight: '700', fontSize: '0.85rem' }}>
                                         {t.type === 'Receita' ? '↑ Receita' : '↓ Despesa'}
                                     </span>
                                 </td>
-                                <td style={styles.td}><span style={{fontSize:'0.85rem', color:'#64748B'}}>{t.account_name || 'Geral'}</span></td>
-                                <td style={{...styles.td, textAlign: 'right', fontWeight: '700', color: t.type === 'Receita' ? '#10B981' : '#0F172A'}}>{t.type === 'Despesa' ? '- ' : ''}{formatMoney(t.amount)}</td>
-                                <td style={{...styles.td, textAlign: 'center'}}>
+                                <td role="cell" style={styles.td}><span style={{fontSize:'0.85rem', color:'#64748B'}}>{t.account_name || 'Geral'}</span></td>
+                                <td role="cell" style={{...styles.td, textAlign: 'right', fontWeight: '700', color: t.type === 'Receita' ? '#10B981' : '#0F172A'}}>{t.type === 'Despesa' ? '- ' : ''}{formatMoney(t.amount)}</td>
+                                <td role="cell" style={{...styles.td, textAlign: 'center'}}>
                                     {!t.movement_date && <button onClick={() => reconcilePaymentDate(t.id)} style={styles.iconButton}>Informar data</button>}
-                                    <button onClick={() => handleDelete(t.id)} style={{...styles.iconButton, color: '#94A3B8', margin: '0 auto'}} onMouseEnter={e=>e.currentTarget.style.color='#EF4444'} onMouseLeave={e=>e.currentTarget.style.color='#94A3B8'}>{Icons.Trash}</button>
+                                    <button onClick={() => handleDelete(t.id)} aria-label={`Excluir ${t.description}`} style={{...styles.iconButton, color: '#94A3B8', margin: '0 auto'}} className="finance-entry-delete">{Icons.Trash}</button>
                                 </td>
                             </tr>
                         ))}
 
                         {/* MENSAGENS VAZIAS */}
-                        {activeTab === 'A Receber' && processedData.groups.length === 0 && processedData.avulsas.length === 0 && <tr><td colSpan="6" style={styles.emptyMessage}>Nenhuma pendência de recebimento no momento. 🎉</td></tr>}
-                        {activeTab === 'A Pagar' && processedData.items.length === 0 && <tr><td colSpan="6" style={styles.emptyMessage}>Nenhuma conta a pagar no momento. 🎉</td></tr>}
-                        {activeTab === 'Histórico' && processedData.items.length === 0 && <tr><td colSpan="6" style={styles.emptyMessage}>Nenhuma transação na categoria selecionada.</td></tr>}
+                        {activeTab === 'A Receber' && processedData.groups.length === 0 && processedData.avulsas.length === 0 && <tr role="row"><td role="cell" colSpan="6" style={styles.emptyMessage}>Nenhuma pendência de recebimento no momento.</td></tr>}
+                        {activeTab === 'A Pagar' && processedData.items.length === 0 && <tr role="row"><td role="cell" colSpan="6" style={styles.emptyMessage}>Nenhuma conta a pagar no momento.</td></tr>}
+                        {activeTab === 'Histórico' && processedData.items.length === 0 && <tr role="row"><td role="cell" colSpan="6" style={styles.emptyMessage}>Nenhuma transação na categoria selecionada.</td></tr>}
                     </tbody>
                 </table>
             </div>
 
-            <Modal isOpen={isModalOpen} onClose={() => { if (!saving) setIsModalOpen(false); }} title="Novo Lançamento Avulso">
-                <form onSubmit={handleSubmit} style={styles.form}>
-                    <div style={{backgroundColor: '#EFF6FF', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.85rem', color: '#1E3A8A', border: '1px solid #BFDBFE'}}>
-                        <strong>Aviso:</strong> Para receber de pedidos, use a aba "A Receber". Use este formulário para registrar Despesas operacionais ou Receitas avulsas fora do sistema.
-                    </div>
+            <Modal isOpen={isModalOpen} onClose={() => { if (!saving) setIsModalOpen(false); }} title="Novo lançamento avulso" manageFocus>
+                <form className="finance-entry-form" onSubmit={handleSubmit} style={styles.form}>
+                    <p className="finance-entry-help">Para baixar um recebimento vinculado a um pedido, use a aba A receber.</p>
                     <div style={styles.formGroup}>
-                        <label style={styles.label}>Descrição *</label>
-                        <input className="premium-input" type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} style={styles.input} placeholder="Ex: Conta de Luz, Fio/Linha..." required />
+                        <label htmlFor="finance-entry-description" style={styles.label}>Descrição *</label>
+                        <input id="finance-entry-description" className="premium-input" type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} style={styles.input} placeholder="Ex: Conta de Luz, Fio/Linha..." required />
                     </div>
                     
                     <div style={styles.formGrid}>
                         <div style={styles.formGroup}>
-                            <label style={styles.label}>Tipo *</label>
-                            <select className="premium-input" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value, chart_of_account_id: ''})} style={styles.select}>
+                            <label htmlFor="finance-entry-type" style={styles.label}>Tipo *</label>
+                            <select id="finance-entry-type" className="premium-input" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value, chart_of_account_id: ''})} style={styles.select}>
                                 <option value="Receita">Entrada (Receita)</option>
                                 <option value="Despesa">Saída (Despesa)</option>
                             </select>
                         </div>
                         <div style={styles.formGroup}>
-                            <label style={styles.label}>{Number(formData.repeat_count) > 1 ? 'Valor de cada parcela (R$) *' : 'Valor (R$) *'}</label>
+                            <label htmlFor="finance-entry-amount" style={styles.label}>{Number(formData.repeat_count) > 1 ? 'Valor de cada parcela (R$) *' : 'Valor (R$) *'}</label>
                             <input
                                 className="premium-input"
+                                id="finance-entry-amount"
                                 type="text"
                                 inputMode="decimal"
                                 value={formData.amount}
@@ -821,23 +818,23 @@ const FinanceTransactions = () => {
                     
                     <div style={styles.formGrid}>
                         <div style={styles.formGroup}>
-                            <label style={styles.label}>Situação Inicial *</label>
-                            <select className="premium-input" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} style={styles.select}>
+                            <label htmlFor="finance-entry-status" style={styles.label}>Situação Inicial *</label>
+                            <select id="finance-entry-status" className="premium-input" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} style={styles.select}>
                                 <option value="Pendente">A Pagar / A Receber (Pendente)</option>
                                 <option value="Pago">Já Pago / Recebido</option>
                             </select>
                         </div>
                         <div style={styles.formGroup}>
-                            <label style={styles.label}>Data *</label>
-                            <input className="premium-input" type="date" value={formData.due_date} onChange={e => setFormData({...formData, due_date: e.target.value})} style={styles.input} required />
+                            <label htmlFor="finance-entry-date" style={styles.label}>Data *</label>
+                            <input id="finance-entry-date" name="due_date" className="premium-input" type="date" style={styles.input} required />
                         </div>
                     </div>
 
                     {/* ⭐ CAMPO PLANO DE CONTAS SOZINHO E CENTRALIZADO (SÓ APARECE EM DESPESA) ⭐ */}
                     {formData.type === 'Despesa' && (
                         <div style={styles.formGroup}>
-                            <label style={styles.label}>Plano de Contas / Categoria</label>
-                            <select className="premium-input" value={formData.chart_of_account_id} onChange={e => setFormData({...formData, chart_of_account_id: e.target.value})} style={styles.select}>
+                            <label htmlFor="finance-entry-category" style={styles.label}>Plano de Contas / Categoria</label>
+                            <select id="finance-entry-category" className="premium-input" value={formData.chart_of_account_id} onChange={e => setFormData({...formData, chart_of_account_id: e.target.value})} style={styles.select}>
                                 <option value="">Geral / Sem Categoria</option>
                                 {accounts.filter(a => a.type === 'Despesa').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </select>
@@ -851,6 +848,7 @@ const FinanceTransactions = () => {
                                 <input
                                     className="premium-input"
                                     type="number"
+                                    aria-label="Quantidade de parcelas"
                                     min="1"
                                     max="60"
                                     value={formData.repeat_count}
@@ -861,6 +859,7 @@ const FinanceTransactions = () => {
                             <div>
                                 <select
                                     className="premium-input"
+                                    aria-label="Intervalo entre parcelas"
                                     value={formData.repeat_interval}
                                     onChange={e => setFormData({ ...formData, repeat_interval: e.target.value })}
                                     style={styles.select}
@@ -877,9 +876,11 @@ const FinanceTransactions = () => {
                         )}
                     </div>
 
-                    <button type="submit" disabled={saving} style={{ padding: '16px', backgroundColor: formData.type === 'Receita' ? '#10B981' : '#EF4444', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', marginTop: '10px' }}>
-                        {Number(formData.repeat_count || 1) > 1 ? 'Registrar lançamentos' : 'Registrar lançamento'}
-                    </button>
+                    <div className="finance-entry-form-footer">
+                        <button type="submit" disabled={saving}>
+                            {saving ? 'Registrando…' : Number(formData.repeat_count || 1) > 1 ? 'Registrar lançamentos' : 'Registrar lançamento'}
+                        </button>
+                    </div>
                 </form>
             </Modal>
         </div>
@@ -898,7 +899,6 @@ const styles = {
     mainContainer: { fontFamily: "'Inter', sans-serif", maxWidth: '1400px', margin: '0 auto', paddingBottom: '40px' },
     headerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', gap: '16px', flexWrap: 'wrap' },
     pageTitle: { fontSize: 'clamp(1.35rem, 5vw, 1.8rem)', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '0' },
-    subtitle: { margin: 0, color: '#64748b', fontSize: '0.9rem', fontWeight: '500' },
     iconBox: { padding: '14px', background: '#EFF6FF', borderRadius: '12px', color: '#2563EB', display: 'flex' },
     btnNovo: { backgroundColor: '#6366F1', color: 'white', padding: '12px 20px', borderRadius: '30px', border: 'none', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.4)', minHeight: '44px' },
     
@@ -917,7 +917,7 @@ const styles = {
     searchInput: { border: 'none', outline: 'none', backgroundColor: 'transparent', width: '100%', fontSize: '0.9rem', color: '#0F172A' },
     
     subTabsContainer: { display: 'flex', gap: '4px', backgroundColor: '#F8FAFC', padding: '4px', borderRadius: '8px', border: '1px solid #E2E8F0', overflowX: 'auto', maxWidth: '100%' },
-    subTabBtn: { padding: '8px 12px', border: 'none', borderRadius: '6px', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap' },
+    subTabBtn: { padding: '8px 12px', border: 'none', borderRadius: '6px', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' },
     monthFilterBox: { display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#F8FAFC', padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', maxWidth: '100%' },
 
     tableCard: { backgroundColor: 'white', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #E2E8F0', overflowX: 'auto', WebkitOverflowScrolling: 'touch' },
@@ -929,11 +929,10 @@ const styles = {
     table: { width: '100%', borderCollapse: 'collapse', minWidth: '800px' },
     th: { backgroundColor: '#F8FAFC', padding: '16px 24px', textAlign: 'left', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' },
     td: { padding: '16px 24px', borderBottom: '1px solid #F1F5F9', color: '#334155', fontSize: '0.95rem' },
-    tr: { transition: 'all 0.15s ease' },
     emptyMessage: { padding: '40px', textAlign: 'center', color: '#94A3B8', fontSize: '0.95rem', fontStyle: 'italic' },
     recurrenceGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '16px' },
     formHint: { display: 'block', marginTop: '10px', color: '#64748B', fontSize: '0.8rem', lineHeight: 1.5 },
-    iconButton: { backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 12px', borderRadius: '6px', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', fontSize: '0.85rem' },
+    iconButton: { backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 12px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', fontSize: '0.85rem' },
 
     form: { display: 'flex', flexDirection: 'column', gap: '16px' },
     formGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' },
